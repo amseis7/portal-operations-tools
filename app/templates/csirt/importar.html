@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Importar Histórico CSIRT</h2>
+<p>Sube el archivo CSV exportado desde Google Sheets para poblar la base de datos.</p>
+
+<div class="card p-4">
+    <form action="" method="POST" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label class="form-label">Archivo CSV</label>
+            <input type="file" name="archivo_csv" class="form-control" required accept=".csv">
+        </div>
+        <div class="alert alert-info">
+            <strong>Requisito:</strong> Asegúrate de que las columnas del CSV se llamen: 
+            <code>Nombre Alerta</code>, <code>Ticket</code>, <code>Tipo</code>, <code>Responsable</code>, <code>Fecha</code>.
+        </div>
+        <button type="submit" class="btn btn-success">Importar Datos</button>
+        <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver</a>
+    </form>
+</div>
+{% endblock %}

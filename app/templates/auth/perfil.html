@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-person-badge"></i> Mi Perfil</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    <h6 class="text-primary border-bottom pb-2 mb-3">Información Personal</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nombre de Usuario (Login)</label>
+                            <input type="text" class="form-control" value="{{ current_user.username }}" disabled bg-light>
+                            <div class="form-text">El nombre de usuario no se puede cambiar.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Nombre Completo</label>
+                            <input type="text" name="nombre_completo" class="form-control" value="{{ current_user.nombre_completo or '' }}" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Correo Electrónico</label>
+                        <input type="email" name="email" class="form-control" value="{{ current_user.email or '' }}">
+                    </div>
+
+                    <h6 class="text-primary border-bottom pb-2 mb-3">Seguridad (Dejar en blanco si no desea cambiar)</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Contraseña Actual</label>
+                            <input type="password" name="current_password" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nueva Contraseña</label>
+                            <input type="password" name="new_password" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Confirmar Nueva</label>
+                            <input type="password" name="confirm_password" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary me-md-2">Cancelar</a>
+                        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

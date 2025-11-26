@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Gestión del Ticket: <span class="text-primary">{{ ticket }}</span></h3>
+        
+        <div>
+            <form action="{{ url_for('csirt.actualizar_iocs', ticket_id=ticket) }}" method="POST" class="d-inline">
+                <button type="submit" class="btn btn-warning me-2" title="Buscar IoCs para alertas vacías">
+                    <i class="bi bi-cloud-download"></i> Recuperar IoCs Faltantes
+                </button>
+            </form>
+
+            <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-light">Alertas detectadas en esta gestión</div>
+        <div class="card-body p-0">
+            <table class="table mb-0 align-middle">
+                <thead>
+                    <tr>
+                        <th>ID Alerta</th>
+                        <th>Tipo</th>
+                        <th>Fecha</th>
+                        <th class="text-center">IoCs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alerta in alertas %}
+                    <tr>
+                        <td><strong>{{ alerta.nombre_alerta }}</strong></td>
+                        <td>
+                            <span class="badge {% if 'AIA' in alerta.tipo_alerta %}bg-danger{% elif 'ACF' in alerta.tipo_alerta %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                                {{ alerta.tipo_alerta }}
+                            </span>
+                        </td>
+                        <td>{{ alerta.fecha_realizacion.strftime('%d/%m/%Y') }}</td>
+                        
+                        <td class="text-center">
+                            {% if 'AVC' in alerta.tipo_alerta %}
+                                <span class="text-muted small">N/A</span>
+                            {% else %}
+                                <a href="{{ url_for('csirt.ver_iocs_alerta', alerta_id=alerta.id) }}" class="btn btn-sm btn-outline-info">
+                                    <i class="bi bi-list-check"></i> Ver IoCs
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

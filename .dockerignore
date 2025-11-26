@@ -1,0 +1,7 @@
+venv/
+instance/
+__pycache__/
+*.pyc
+.git/
+.idea/
+ayuda_linea_codigo.txt

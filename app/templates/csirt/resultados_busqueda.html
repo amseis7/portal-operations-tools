@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="mb-4">
+        <h3>Resultados de búsqueda para: <span class="text-primary">"{{ query }}"</span></h3>
+        <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary btn-sm mt-2">Volver al Inicio</a>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover table-striped mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>IoC Encontrado</th>
+                        <th>Tipo</th>
+                        <th>Alerta Origen</th>
+                        <th>Ticket Gestión</th>
+                        <th>Fecha</th>
+                        <th>Responsable</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ioc in resultados %}
+                    <tr>
+                        <td class="font-monospace fw-bold text-danger">{{ ioc.valor }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
+                        <td>{{ ioc.alerta.nombre_alerta }}</td>
+                        <td>
+                            <a href="{{ url_for('csirt.ver_gestion', ticket_id=ioc.alerta.ticket) }}" class="text-decoration-none">
+                                {{ ioc.alerta.ticket }} <i class="bi bi-box-arrow-up-right small"></i>
+                            </a>
+                        </td>
+                        <td>{{ ioc.alerta.fecha_realizacion.strftime('%d/%m/%Y') }}</td>
+                        <td>{{ ioc.alerta.responsable }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-5">
+                            <h4 class="text-muted">No se encontraron coincidencias.</h4>
+                            <p class="text-muted">Ese indicador no está en nuestra base de datos histórica.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

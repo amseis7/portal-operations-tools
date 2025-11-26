@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  portal_csirt:
+    # Asegúrate que este nombre coincida con la imagen que cargaste con 'docker load'
+    image: portal-operations-tools:v1
+    container_name: portal_prod
+    restart: unless-stopped
+    
+    # Mapeo de Puertos (Windows:Contenedor)
+    # Si quieres que en Windows salga por el puerto 80, cambia a "80:8080"
+    ports:
+      - "8080:8080"
+    
+    # Persistencia de Datos (El volumen mágico)
+    volumes:
+      - portal_db:/app/instance
+    
+    # Configuración de entorno (opcional, ya que tu script lo maneja automático)
+    # environment:
+    #   - ADMIN_USER=admin_inicial
+
+# Definición del volumen
+volumes:
+  portal_db:
+    external: true # Usa el volumen si ya existe, o da error si no.
+    # Si es una instalación nueva y quieres que lo cree solo, borra la línea "external: true"

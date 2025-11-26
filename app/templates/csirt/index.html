@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Bitácora de Tickets CSIRT</h2>
+        <div class="d-flex gap-2">
+        
+            {% if current_user.is_admin %}
+            <div class="dropdown">
+                <button class="btn btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-gear-fill me-1"></i> Mantenimiento
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('csirt.importar_historico') }}">
+                            <i class="bi bi-upload me-2"></i> Importar CSV
+                        </a>
+                    </li>
+                
+                    <li><hr class="dropdown-divider"></li>
+                
+                    <li>
+                        <button class="dropdown-item text-warning" onclick="iniciarActualizacionMasiva()">
+                            <i class="bi bi-arrow-repeat me-2"></i> Actualizar Todo (IoCs)
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="dropdown">
+                <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-lightning-charge-fill me-1"></i> Operaciones
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                        <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#modalScraping">
+                            <i class="bi bi-search me-2"></i> Verificar Nuevas Alertas
+                        </button>
+                    </li>
+                
+                    <li><hr class="dropdown-divider"></li>
+                
+                    <li>
+                        <button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#modalReporte">
+                            <i class="bi bi-table me-2"></i> Generar Reporte Semanal
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0 align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Ticket Gestión</th>
+                            <th>Responsable</th>
+                            <th>Fecha Última Gestión</th>
+                            <th class="text-center">Cant. Alertas</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if tickets %}
+                            {% for t in tickets %}
+                            <tr>
+                                <td><strong>{{ t.ticket }}</strong></td>
+                                <td>{{ t.responsable }}</td>
+                                <td>{{ t.ultima_fecha.strftime('%d/%m/%Y') }}</td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary rounded-pill">{{ t.total_alertas }}</span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <a href="{{ url_for('csirt.ver_gestion', ticket_id=t.ticket) }}" class="btn btn-sm btn-primary text-nowrap">
+                                            <i class="bi bi-eye"></i> Ver Gestión
+                                        </a>
+                                        
+                                        <a href="{{ url_for('csirt.descargar_iocs_csv', ticket_id=t.ticket) }}" class="btn btn-sm btn-success text-white text-nowrap">
+                                            <i class="bi bi-file-earmark-spreadsheet"></i> Descargar IoCs
+                                        </a>
+
+                                        {% if current_user.is_admin %}
+                                        <form action="{{ url_for('csirt.eliminar_ticket', ticket_id=t.ticket) }}" method="POST" onsubmit="return confirm('¿Estás seguro de borrar TODO el historial del ticket {{ t.ticket }}? Esta acción no se puede deshacer.');">
+                                            <button type="submit" class="btn btn-sm btn-danger text-nowrap">
+                                                <i class="bi bi-trash"></i> Eliminar
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="5" class="text-center py-4">No hay tickets registrados.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalReporte" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Generar Reporte de Gestión</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('csirt.generar_reporte') }}" method="POST">
+          <div class="modal-body">
+            
+            <p class="mb-3">Selecciona el rango para el Excel:</p>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="fecha_inicio" class="form-label fw-bold">Fecha Inicio:</label>
+                    <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" required onchange="actualizarTextoCorreo()">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="fecha_fin" class="form-label fw-bold">Fecha Fin:</label>
+                    <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" required onchange="actualizarTextoCorreo()">
+                </div>
+            </div>
+
+            <hr>
+
+            <h6 class="fw-bold text-success"><i class="bi bi-envelope"></i> Datos para el Correo</h6>
+            <p class="small text-muted">Copia y pega esto en tu cliente de correo:</p>
+
+            <div class="mb-3">
+                <label class="small fw-bold">Asunto:</label>
+                <div class="input-group">
+                    <input type="text" class="form-control form-control-sm bg-light" id="emailAsunto" readonly>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailAsunto', this)">
+                        <i class="bi bi-clipboard"></i> Copiar
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="small fw-bold">Cuerpo:</label>
+                <div class="input-group">
+                    <textarea class="form-control form-control-sm bg-light" id="emailCuerpo" rows="3" readonly>Hago entrega de las alertas CSIRT procesadas en la última semana. Gestión realizada por Sonda al día de hoy.</textarea>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailCuerpo', this)">
+                        <i class="bi bi-clipboard"></i> Copiar
+                    </button>
+                </div>
+            </div>
+
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            <button type="submit" class="btn btn-success">
+                <i class="bi bi-download"></i> Descargar Excel
+            </button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalScraping" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Iniciar Revisión de Alertas</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('csirt.procesar') }}" method="POST" id="formScraping">
+          <div class="modal-body">
+            <p class="small text-muted">
+                El sistema buscará alertas nuevas comparando con los últimos registros de la base de datos.
+            </p>
+            <div class="mb-3">
+                <label for="ticket" class="form-label">Ingrese N° de Ticket (RF) para esta gestión:</label>
+                <input type="text" 
+                    class="form-control" 
+                    id="ticket" 
+                    name="ticket" 
+                    placeholder="Ej: RF-20259999" 
+                    pattern="^RF-\d+$"
+                    title="El formato debe ser RF- seguido de números (Ej: RF-123456)"
+                    oninput="this.value = this.value.toUpperCase()"
+                    required>
+            </div>
+
+            <div class="mb-3 p-3 bg-light border rounded">
+                <div class="form-check">
+                    <input type="checkbox" class="form-check-input" id="modo_prueba" name="modo_prueba">
+                    <label class="form-check-label text-warning fw-bold" for="modo_prueba">
+                        Activar Modo Prueba (Simulación)
+                    </label>
+                </div>
+                <div class="form-text mt-2">
+                    Si activas esto, el sistema buscará alertas pero <strong>NO guardará nada</strong> en la base de datos.
+                </div>
+            </div>
+
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btnBuscar">
+                <i class="bi bi-search"></i> Iniciar Búsqueda
+            </button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalConsola" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content bg-dark text-light">
+      <div class="modal-header border-secondary">
+        <h5 class="modal-title font-monospace">
+            <i class="bi bi-terminal-fill me-2"></i>Terminal de Actualización
+        </h5>
+        <button type="button" class="btn-close btn-close-white d-none" id="btnCloseConsola" data-bs-dismiss="modal" onclick="location.reload()"></button>
+      </div>
+      <div class="modal-body p-0">
+        <pre id="consolaOutput" class="p-3 m-0 text-success font-monospace" style="height: 400px; overflow-y: auto; white-space: pre-wrap;">Inicializando sistema...</pre>
+      </div>
+      <div class="modal-footer border-secondary">
+        <span id="statusSpinner" class="spinner-border spinner-border-sm text-light me-2" role="status"></span>
+        <span id="statusText" class="text-muted small">Procesando en tiempo real...</span>
+        <button type="button" class="btn btn-success d-none" id="btnFinalizar" onclick="location.reload()">Finalizar y Recargar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    // --- Lógica del Spinner de Carga ---
+    document.addEventListener("DOMContentLoaded", function() {
+        const form = document.getElementById('formScraping');
+        const btn = document.getElementById('btnBuscar');
+
+        if(form && btn) {
+            form.addEventListener('submit', function() {
+                btn.disabled = true;
+                btn.innerHTML = `
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Analizando Web...
+                `;
+            });
+        }
+        const formMasivo = document.getElementById('formMasivo');
+        const btnMasivo = document.getElementById('btnMasivo');
+        if(formMasivo && btnMasivo) {
+            formMasivo.addEventListener('submit', function() {
+                // Solo activamos el spinner si el usuario confirmó el alert del navegador
+                // (El evento submit continúa)
+                btnMasivo.disabled = true;
+                btnMasivo.innerHTML = `<span class="spinner-border spinner-border-sm"></span> Procesando...`;
+            });
+        }
+    });
+
+    // --- Lógica del Reporte (Correo) ---
+    function formatearFecha(fechaString) {
+        if (!fechaString) return "DD-MM-YYYY";
+        const partes = fechaString.split('-'); 
+        return `${partes[2]}-${partes[1]}-${partes[0]}`;
+    }
+
+    function actualizarTextoCorreo() {
+        const inicio = document.getElementById('fecha_inicio').value;
+        const fin = document.getElementById('fecha_fin').value;
+        const inputAsunto = document.getElementById('emailAsunto');
+        
+        const inicioFmt = formatearFecha(inicio);
+        const finFmt = formatearFecha(fin);
+
+        inputAsunto.value = `REPORTE SEGURIDAD SEMANA ${inicioFmt} al ${finFmt}`;
+    }
+
+    function copiarTexto(elementId, btnElement) {
+        const copyText = document.getElementById(elementId);
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); 
+        navigator.clipboard.writeText(copyText.value);
+        
+        // Efecto visual en el botón
+        const originalBtnText = btnElement.innerHTML;
+        btnElement.innerHTML = '<i class="bi bi-check"></i> Copiado';
+        btnElement.classList.remove('btn-outline-secondary');
+        btnElement.classList.add('btn-success');
+        
+        setTimeout(() => {
+            btnElement.innerHTML = originalBtnText;
+            btnElement.classList.remove('btn-success');
+            btnElement.classList.add('btn-outline-secondary');
+        }, 1500);
+    }
+
+    // Función para manejar el Streaming
+    async function iniciarActualizacionMasiva() {
+        if (!confirm('¿Estás seguro? Esto revisará el historial completo. Puede tardar.')) return;
+
+        // 1. Abrir el modal
+        const modal = new bootstrap.Modal(document.getElementById('modalConsola'));
+        modal.show();
+        
+        const output = document.getElementById('consolaOutput');
+        const btnClose = document.getElementById('btnCloseConsola');
+        const btnFin = document.getElementById('btnFinalizar');
+        const spinner = document.getElementById('statusSpinner');
+        const status = document.getElementById('statusText');
+
+        output.textContent = "Conectando con el servidor...\n";
+
+        try {
+            // 2. Conectar con la ruta de streaming
+            const response = await fetch("{{ url_for('csirt.stream_actualizacion') }}");
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            // 3. Leer el flujo de datos
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                
+                const text = decoder.decode(value);
+                output.textContent += text;
+                
+                // Auto-scroll hacia abajo
+                output.scrollTop = output.scrollHeight;
+            }
+
+            // 4. Finalización
+            output.textContent += "\n>>> PROCESO COMPLETADO.";
+            spinner.classList.add('d-none');
+            status.textContent = "Tarea finalizada.";
+            btnClose.classList.remove('d-none'); // Mostrar X
+            btnFin.classList.remove('d-none');   // Mostrar botón verde
+
+        } catch (error) {
+            output.textContent += `\n\n!!! ERROR DE CONEXIÓN: ${error}`;
+            spinner.classList.add('d-none');
+        }
+    }
+</script>
+{% endblock %}

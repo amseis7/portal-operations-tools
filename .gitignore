@@ -1,0 +1,22 @@
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Entorno Virtual ---
+venv/
+env/
+
+# --- Base de Datos y Archivos Sensibles ---
+instance/
+*.db
+*.sqlite3
+
+# --- IDEs (Configuraciones de tu editor) ---
+.idea/
+.vscode/
+
+# --- Docker ---
+*.tar
+
+# --- Logs ---
+*.log
