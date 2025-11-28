@@ -12,6 +12,7 @@ class User(UserMixin, db.Model):
     authorized_tools = db.Column(db.String(200), default="")
     nombre_completo = db.Column(db.String(100))
     email = db.Column(db.String(120))
+    must_change_password = db.Column(db.Boolean, default=True)
 
     def set_password(self, password):
         """Cifra la contrasela y la guarda"""

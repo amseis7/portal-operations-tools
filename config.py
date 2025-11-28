@@ -1,13 +1,22 @@
 import os
-
-basedir = os.path.abspath(os.path.dirname(__file__))
+import sys
 
 class Config:
-    # Clave secreta para firmar cookies y sesiones (Cambiar en produccion)
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'clave-super-secreta-desarrollo'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'tu-clave-secreta-super-segura'
+    
+    # --- LÓGICA HÍBRIDA (La magia) ---
+    # Preguntamos: ¿Estamos empaquetados en un EXE?
+    if getattr(sys, 'frozen', False):
+        # SÍ: Estamos en un EXE. La ruta base es donde está el ejecutable.
+        _base_dir = os.path.dirname(sys.executable)
+    else:
+        # NO: Estamos en Docker o PyCharm. La ruta base es donde está este archivo.
+        _base_dir = os.path.abspath(os.path.dirname(__file__))
+        
+    # Definimos la carpeta instance basada en la decisión anterior
+    _instance_path = os.path.join(_base_dir, 'instance')
+    # ---------------------------------
 
-    INSTANCE_PATH = os.path.join(basedir, 'instance')
-
-    # Configuracion de la base de datos sQLite
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(INSTANCE_PATH, 'app.db')
+    # Configuraciones Generales
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(_instance_path, 'app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False

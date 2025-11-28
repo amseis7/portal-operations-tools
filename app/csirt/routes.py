@@ -89,6 +89,47 @@ def actualizar_iocs(ticket_id):
     # Volvemos a la misma página de gestión
     return redirect(url_for('csirt.ver_gestion', ticket_id=ticket_id))
 
+# En app/csirt/routes.py
+
+@bp.route('/admin/exportar_todo_csv')
+@login_required
+def exportar_todo_csv():
+    # 1. Seguridad: Solo admin
+    if not current_user.is_admin:
+        flash('Acceso denegado.', 'danger')
+        return redirect(url_for('csirt.index'))
+
+    # 2. Consultar TODAS las alertas
+    alertas = Alerta.query.order_by(Alerta.fecha_realizacion.desc()).all()
+
+    # 3. Crear CSV en memoria
+    si = StringIO()
+    # Usamos punto y coma (;) para compatibilidad con tu importador
+    cw = csv.writer(si, delimiter=';') 
+    
+    # Encabezados (Deben coincidir con lo que espera tu importador)
+    cw.writerow(['Nombre Alerta', 'Tipo', 'Ticket', 'Responsable', 'Fecha'])
+
+    # 4. Escribir datos
+    for alerta in alertas:
+        cw.writerow([
+            alerta.nombre_alerta,
+            alerta.tipo_alerta,
+            alerta.ticket,
+            alerta.responsable,
+            alerta.fecha_realizacion.strftime('%d-%m-%Y') # Formato dd-mm-yyyy
+        ])
+
+    # 5. Descargar
+    output = si.getvalue()
+    fecha_hoy = datetime.now().strftime('%Y%m%d')
+    
+    return Response(
+        output,
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename=Respaldo_Total_CSIRT_{fecha_hoy}.csv"}
+    )
+
 @bp.route('/importar_historico', methods=['GET', 'POST'])
 @login_required
 @admin_required

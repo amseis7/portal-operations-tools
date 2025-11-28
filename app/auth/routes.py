@@ -25,7 +25,8 @@ def setup():
             nombre_completo=nombre,
             email=email,
             is_admin=True,         # ¡Importante!
-            authorized_tools='all' # Full acceso
+            authorized_tools='all', # Full acceso
+            must_change_password = False
         )
         admin.set_password(password)
         
@@ -36,6 +37,49 @@ def setup():
         return redirect(url_for('auth.login'))
 
     return render_template('auth/setup.html')
+
+@bp.before_app_request
+def check_password_change_needed():
+    # Si el usuario está logueado
+    if current_user.is_authenticated:
+        # Y tiene la bandera activada
+        if current_user.must_change_password:
+            # Lista de rutas permitidas (Para que no entre en bucle infinito)
+            # Debe poder ver: la página de cambio, el logout y archivos estáticos (css/js)
+            allowed_endpoints = ['auth.cambiar_password_inicial', 'auth.logout', 'static']
+            
+            if request.endpoint not in allowed_endpoints:
+                flash('Por seguridad, debes cambiar tu contraseña inicial antes de continuar.', 'warning')
+                return redirect(url_for('auth.cambiar_password_inicial'))
+
+
+@bp.route('/cambiar_password_inicial', methods=['GET', 'POST'])
+@login_required
+def cambiar_password_inicial():
+    if request.method == 'POST':
+        new_pass = request.form.get('new_password')
+        confirm_pass = request.form.get('confirm_password')
+
+        if new_pass != confirm_pass:
+            flash('Las contraseñas no coinciden.', 'danger')
+            return redirect(url_for('auth.cambiar_password_inicial'))
+        
+        if len(new_pass) < 6:
+            flash('La contraseña es muy corta.', 'danger')
+            return redirect(url_for('auth.cambiar_password_inicial'))
+
+        # 1. Cambiar contraseña
+        current_user.set_password(new_pass)
+        
+        # 2. APAGAR LA BANDERA (Liberar al usuario)
+        current_user.must_change_password = False 
+        
+        db.session.commit()
+        
+        flash('¡Contraseña actualizada! Bienvenido al sistema.', 'success')
+        return redirect(url_for('main.dashboard'))
+
+    return render_template('auth/cambiar_inicial.html')
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -143,7 +187,7 @@ def crear_usuario():
     return redirect(url_for('auth.admin_usuarios'))
 
 # --- ACCIÓN EDITAR USUARIO ---
-@bp.route('admin/usuarios/editar/<int:user_id>', methods=['POST'])
+@bp.route('/admin/usuarios/editar/<int:user_id>', methods=['POST'])
 @login_required
 @admin_required
 def editar_usuarios(user_id):

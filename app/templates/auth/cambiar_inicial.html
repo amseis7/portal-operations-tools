@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cambio de Contraseña Requerido</title>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
+
+    <style>
+        body { background-color: #f8f9fa; display: flex; align-items: center; min-height: 100vh; }
+        .card-change { max-width: 450px; margin: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card card-change shadow-lg border-warning">
+            <div class="card-header bg-warning text-dark text-center fw-bold">
+                <i class="bi bi-shield-lock-fill"></i> Acción Requerida
+            </div>
+            <div class="card-body p-4">
+                <h5 class="text-center mb-3">Hola, {{ current_user.username }}</h5>
+                <p class="text-muted small text-center mb-4">
+                    Es tu primer inicio de sesión (o un administrador reseteó tu cuenta). 
+                    Por seguridad, debes configurar una nueva contraseña personal.
+                </p>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                  {% if messages %}
+                    {% for category, message in messages %}
+                      <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                  {% endif %}
+                {% endwith %}
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Nueva Contraseña</label>
+                        <input type="password" name="new_password" class="form-control" required minlength="6" autofocus>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Confirmar Nueva Contraseña</label>
+                        <input type="password" name="confirm_password" class="form-control" required minlength="6">
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-dark">Guardar y Entrar</button>
+                        <a href="{{ url_for('auth.logout') }}" class="btn btn-link text-muted">Cancelar y Salir</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+</body>
+</html>
