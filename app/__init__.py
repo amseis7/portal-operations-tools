@@ -55,6 +55,9 @@ def create_app(config_class=Config, instance_path=None):
     from app.csirt import bp as csirt_bp
     app.register_blueprint(csirt_bp, url_prefix='/csirt')
 
+    from app.virustotal import bp as vt_bp
+    app.register_blueprint(vt_bp, url_prefix='/virustotal')
+
     # El Portero (Redirección a Setup)
     from flask import request, redirect, url_for
     from app.models import User

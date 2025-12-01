@@ -117,31 +117,50 @@ def login():
 @login_required
 def perfil():
     if request.method == 'POST':
-        # 1. Actualizar Datos Básicos
-        current_user.nombre_completo = request.form.get('nombre_completo')
-        current_user.email = request.form.get('email')
-        
-        # 2. Lógica de Cambio de Contraseña (Solo si escribieron algo)
-        current_pass = request.form.get('current_password')
-        new_pass = request.form.get('new_password')
-        confirm_pass = request.form.get('confirm_password')
+        try:
+            # --- BLOQUE 1: DATOS BÁSICOS (Siempre se guardan) ---
+            nombre = request.form.get('nombre_completo')
+            email = request.form.get('email')
+            vt_key = request.form.get('vt_key')
 
-        if current_pass or new_pass:
-            if not current_user.check_password(current_pass):
-                flash('Error: La contraseña actual no es correcta. No se guardaron los cambios.', 'danger')
-                return redirect(url_for('auth.perfil'))
+            current_user.nombre_completo = nombre
+            current_user.email = email
             
-            if new_pass and (new_pass != confirm_pass):
-                flash('Error: Las nuevas contraseñas no coinciden.', 'warning')
-                return redirect(url_for('auth.perfil'))
-            
-            if new_pass:
-                current_user.set_password(new_pass)
-                flash('Contraseña actualizada.', 'success')
+            if vt_key and "****" not in vt_key: # Evitamos guardar los asteriscos si el usuario no la cambió
+                current_user.set_vt_key(vt_key.strip()) # <--- Usamos el método seguro
+                print(f"--- [DEBUG] Key encriptada y guardada ---")
 
-        db.session.commit()
-        flash('Perfil actualizado correctamente.', 'success')
-        return redirect(url_for('main.dashboard'))
+            # Guardamos los cambios básicos INMEDIATAMENTE
+            db.session.add(current_user)
+            db.session.commit()
+            flash('Información de perfil actualizada.', 'success')
+
+            # --- BLOQUE 2: CONTRASEÑA (Opcional) ---
+            current_pass = request.form.get('current_password')
+            new_pass = request.form.get('new_password')
+            confirm_pass = request.form.get('confirm_password')
+
+            # Solo entramos aquí si el usuario intentó escribir algo
+            if (current_pass and current_pass.strip()) or (new_pass and new_pass.strip()):
+                
+                if not current_user.check_password(current_pass):
+                    flash('Error: La contraseña actual no es correcta. No se cambió la contraseña.', 'danger')
+                    # No hacemos return, dejamos que recargue la página
+                
+                elif new_pass != confirm_pass:
+                    flash('Error: Las nuevas contraseñas no coinciden.', 'warning')
+                
+                else:
+                    current_user.set_password(new_pass)
+                    db.session.commit() # Segundo commit solo para pass
+                    flash('Contraseña actualizada correctamente.', 'success')
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error guardando perfil: {e}")
+            flash(f'Error interno al guardar: {e}', 'danger')
+
+        return redirect(url_for('auth.perfil'))
 
     return render_template('auth/perfil.html')
 

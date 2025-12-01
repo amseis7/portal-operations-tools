@@ -3,34 +3,112 @@
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>IoCs de: <span class="text-info">{{ titulo }}</span></h3>
+        <h3>IoCs del Ticket: <span class="text-info">{{ id_volver }}</span></h3>
         
-        {% if volver == 'gestion' %}
-            <a href="{{ url_for('csirt.ver_gestion', ticket_id=id_volver) }}" class="btn btn-secondary">Volver a Gestión</a>
-        {% else %}
-            <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver</a>
-        {% endif %}
+        <div>
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-shield-check"></i> Analizar en VT
+                </button>
+                <ul class="dropdown-menu">
+                    
+                    {% if contexto == 'alerta' %}
+                        {% set ruta_analisis = 'virustotal.analizar_alerta' %}
+                        {% set arg_id = {'alerta_id': id_contexto} %}
+                    {% else %}
+                        {% set ruta_analisis = 'virustotal.analizar_ticket' %}
+                        {% set arg_id = {'ticket_id': id_contexto} %}
+                    {% endif %}
+
+                    <li>
+                        <form action="{{ url_for(ruta_analisis, **arg_id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Todo (Completo)</button>
+                        </form>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form action="{{ url_for(ruta_analisis, tipo='ip', **arg_id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo IPs</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form action="{{ url_for(ruta_analisis, tipo='url', **arg_id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo URLs / Dominios</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form action="{{ url_for(ruta_analisis, tipo='hash', **arg_id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo Hashes (Archivos)</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+
+            {% if volver == 'gestion' %}
+                <a href="{{ url_for('csirt.ver_gestion', ticket_id=id_volver) }}" class="btn btn-secondary">Volver a Gestión</a>
+            {% else %}
+                <a href="{{ url_for('csirt.ver_gestion', ticket_id=id_volver) }}" class="btn btn-secondary">Volver</a>
+            {% endif %}
+        </div>
+        
     </div>
 
-    <div class="card">
+    <div class="card shadow-sm">
         <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0">
-                <thead class="table-dark">
+            <table class="table table-sm table-hover mb-0 align-middle">
+                <thead class="table-dark text-nowrap">
                     <tr>
                         <th>Tipo</th>
                         <th>Valor</th>
                         <th>Alerta Origen</th>
+                        <th class="text-center">VT Score</th>
+                        <th class="text-center">Reputación</th>
+                        <th class="text-center">Reporte</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for ioc in iocs %}
                     <tr>
                         <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
-                        <td class="font-monospace">{{ ioc.valor }}</td>
+                        <td class="font-monospace small text-truncate" style="max-width: 300px;" title="{{ ioc.valor }}">{{ ioc.valor }}</td>
                         <td><small>{{ ioc.alerta.nombre_alerta }}</small></td>
+                        
+                        <td class="text-center">
+                            {% if ioc.vt_reputation is not none %}
+                                {% if ioc.vt_reputation < 0 %}
+                                    <span class="badge bg-danger">{{ ioc.vt_reputation }}</span>
+                                {% elif ioc.vt_reputation == 0 %}
+                                    <span class="badge bg-secondary">0</span>
+                                {% else %}
+                                    <span class="badge bg-success">+{{ ioc.vt_reputation }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted small">-</span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                           {% if ioc.vt_last_check %}
+                                {% if ioc.vt_reputation < 0 %}
+                                    <i class="bi bi-bug-fill text-danger" title="Malicioso"></i>
+                                {% else %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Limpio/Desconocido"></i>
+                                {% endif %}
+                           {% else %}
+                                <span class="badge bg-light text-dark">Pendiente</span>
+                           {% endif %}
+                        </td>
+
+                        <td class="text-center">
+                            {% if ioc.vt_permalink %}
+                                <a href="{{ ioc.vt_permalink }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver en VirusTotal">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="3" class="text-center py-3">No hay IoCs registrados.</td></tr>
+                    <tr><td colspan="6" class="text-center py-3">No hay IoCs registrados.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

@@ -3,6 +3,12 @@ import sys
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'tu-clave-secreta-super-segura'
+
+    VIRUSTOTAL_API_KEY = os.environ.get('VT_QPI_KEY') or 'TU_API_KEY'
+    VT_MOTORES_INTERES = [
+        'TrendMicro', 'McAfee', 'Symantec', 'CrowdStrike',
+        'Kaspersky', 'Sophos', 'Microsoft', 'Google'
+    ]
     
     # --- LÓGICA HÍBRIDA (La magia) ---
     # Preguntamos: ¿Estamos empaquetados en un EXE?

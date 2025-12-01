@@ -28,6 +28,30 @@
                         <input type="email" name="email" class="form-control" value="{{ current_user.email or '' }}">
                     </div>
 
+                    <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">Integraciones Externas</h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">VirusTotal API Key</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-key"></i></span>
+                            <input type="text" name="vt_key" class="form-control font-monospace" 
+                                   placeholder="Pega tu API Key nueva aquí" 
+                                   value="{% if current_user.virustotal_api_key %}********************************{% endif %}">
+                        </div>
+                        <div class="form-text">
+                            {% if current_user.virustotal_api_key %}
+                                <span class="text-success"><i class="bi bi-check-circle"></i> Tienes una API Key configurada y segura.</span>
+                                Para cambiarla, borra los asteriscos y pega la nueva.
+                            {% else %}
+                                No tienes API Key configurada.
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-text">
+                            Necesaria para analizar IoCs. Puedes obtener una gratis en <a href="https://www.virustotal.com/" target="_blank">virustotal.com</a>.
+                        </div>
+                    </div>
+
                     <h6 class="text-primary border-bottom pb-2 mb-3">Seguridad (Dejar en blanco si no desea cambiar)</h6>
                     
                     <div class="row mb-3">

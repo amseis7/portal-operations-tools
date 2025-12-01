@@ -46,8 +46,9 @@ def ver_gestion(ticket_id):
 @login_required
 def ver_iocs(ticket_id):
     # Hacemos un JOIN para obtener los IoCs de las alertas de este ticket
+    print(ticket_id)
     iocs = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id).all()
-    return render_template('csirt/detalle_iocs.html', iocs=iocs, ticket=ticket_id)
+    return render_template('csirt/detalle_iocs.html', iocs=iocs, id_volver=ticket_id)
 
 @bp.route('/procesar', methods=['POST'])
 @login_required

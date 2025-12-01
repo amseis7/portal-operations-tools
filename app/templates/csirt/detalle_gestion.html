@@ -12,6 +12,35 @@
                 </button>
             </form>
 
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-shield-check"></i> Analizar Ticket en VT
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <form action="{{ url_for('virustotal.analizar_ticket', ticket_id=ticket) }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Todo (Completo)</button>
+                        </form>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form action="{{ url_for('virustotal.analizar_ticket', ticket_id=ticket, tipo='ip') }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo IPs</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form action="{{ url_for('virustotal.analizar_ticket', ticket_id=ticket, tipo='url') }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo URLs / Dominios</button>
+                        </form>
+                    </li>
+                    <li>
+                        <form action="{{ url_for('virustotal.analizar_ticket', ticket_id=ticket, tipo='hash') }}" method="POST" class="d-inline">
+                            <button type="submit" class="dropdown-item">Solo Hashes (Archivos)</button>
+                        </form>
+                    </li>
+                </ul>
+            </div>
+
             <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver</a>
         </div>
     </div>
