@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-virus2 text-danger"></i> Investigaciones VirusTotal</h2>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoCaso">
+            <i class="bi bi-plus-lg"></i> Nuevo Caso
+        </button>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre del Caso</th>
+                        <th>Descripción</th>
+                        <th>Creado por</th>
+                        <th>Fecha</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ticket in tickets %}
+                    <tr>
+                        <td>#{{ ticket.id }}</td>
+                        <td><strong>{{ ticket.nombre }}</strong></td>
+                        <td>{{ ticket.descripcion }}</td>
+                        <td>{{ ticket.creador.username }}</td>
+                        <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y') }}</td>
+                        <td>
+                            <a href="{{ url_for('virustotal.ver_caso', caso_id=ticket.id) }}" class="btn btn-sm btn-primary">
+                                Gestionar
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-4">No hay investigaciones creadas.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalNuevoCaso" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-dark text-white">
+        <h5 class="modal-title">Crear Nueva Investigación</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ url_for('virustotal.crear_caso') }}" method="POST">
+          <div class="modal-body">
+            <div class="mb-3">
+                <label class="form-label fw-bold">Nombre del Caso</label>
+                <input type="text" name="nombre" class="form-control" placeholder="Ej: Analisis Malware Finanzas" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Descripción (Opcional)</label>
+                <textarea name="descripcion" class="form-control" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="submit" class="btn btn-success">Crear</button>
+          </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

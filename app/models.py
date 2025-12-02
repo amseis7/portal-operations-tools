@@ -78,6 +78,30 @@ class Alerta(db.Model):
     def __repr__(self):
         return f'<Alerta {self.ticket}>'
     
+class ManualCheck(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Datos del IoC
+    valor = db.Column(db.Text)
+    tipo = db.Column(db.String(50)) # hash, ip, dominio
+    
+    # Resultados VT
+    vt_score = db.Column(db.String(20)) # Ej: "5/88"
+    vt_permalink = db.Column(db.String(255))
+    vt_motores_json = db.Column(db.Text) # El detalle de motores
+
+    # Relación con usuario (para saber quién analizó)
+    usuario = db.relationship('User', backref='analisis_manuales')
+
+    def set_motores(self, datos_dict):
+        self.vt_motores_json = json.dumps(datos_dict)
+
+    def get_motores(self):
+        if not self.vt_motores_json: return {}
+        return json.loads(self.vt_motores_json)
+
 class Ioc(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tipo = db.Column(db.String(50))   # hash, url, ip, dominio, email
@@ -119,3 +143,41 @@ class Notification(db.Model):
 
     def __repr__(self):
         return f'Notif {self.message}'
+
+class VtTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(200), nullable=False) # Ej: "Investigación Phishing RRHH"
+    descripcion = db.Column(db.Text)
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    
+    # Relación con el usuario creador
+    creador = db.relationship('User', backref='vt_tickets')
+    
+    # Relación con los IoCs
+    iocs = db.relationship('VtIoc', backref='ticket', lazy=True, cascade="all, delete-orphan")
+
+class VtIoc(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('vt_ticket.id'), nullable=False)
+    
+    tipo = db.Column(db.String(50)) # ip, hash, domain
+    valor = db.Column(db.Text)
+    
+    # Datos de VT (Reutilizamos la estructura que ya conoces)
+    vt_last_check = db.Column(db.DateTime)
+    vt_reputation = db.Column(db.Integer)
+    vt_permalink = db.Column(db.String(255))
+    vt_md5 = db.Column(db.String(32))
+    vt_sha1 = db.Column(db.String(40))
+    vt_sha256 = db.Column(db.String(64))
+    vt_motores_json = db.Column(db.Text)
+
+    def set_motores(self, datos_dict):
+        import json
+        self.vt_motores_json = json.dumps(datos_dict)
+
+    def get_motores(self):
+        import json
+        if not self.vt_motores_json: return {}
+        return json.loads(self.vt_motores_json)

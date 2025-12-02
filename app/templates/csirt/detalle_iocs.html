@@ -41,6 +41,15 @@
                             <button type="submit" class="dropdown-item">Solo Hashes (Archivos)</button>
                         </form>
                     </li>
+                    
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <form action="{{ url_for(ruta_analisis, force='true', **arg_id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Estás seguro? Esto ignorará la caché y consumirá cuota de API por CADA IoC.');">
+                            <button type="submit" class="dropdown-item text-danger">
+                                <i class="bi bi-radioactive"></i> Forzar Re-análisis Completo
+                            </button>
+                        </form>
+                    </li>
                 </ul>
             </div>
 
@@ -50,8 +59,27 @@
                 <a href="{{ url_for('csirt.ver_gestion', ticket_id=id_volver) }}" class="btn btn-secondary">Volver</a>
             {% endif %}
         </div>
-        
+
     </div>
+
+    {% if filtro_activo %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center py-2">
+        <span>
+            <i class="bi bi-funnel-fill"></i> 
+            Mostrando solo: <strong>{{ filtro_activo|upper }}</strong>
+        </span>
+        
+        {% if contexto == 'alerta' %}
+            <a href="{{ url_for('csirt.ver_iocs_alerta', alerta_id=id_contexto) }}" class="btn btn-sm btn-outline-primary bg-white">
+                Ver Todo
+            </a>
+        {% else %}
+            <a href="{{ url_for('csirt.ver_iocs', ticket_id=id_contexto) }}" class="btn btn-sm btn-outline-primary bg-white">
+                Ver Todo
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <div class="card shadow-sm">
         <div class="card-body p-0">

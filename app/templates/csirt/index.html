@@ -56,6 +56,14 @@
                             <i class="bi bi-table me-2"></i> Generar Reporte Semanal
                         </button>
                     </li>
+
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                        <a class="dropdown-item" href="{{ url_for('virustotal.analisis_manual') }}">
+                            <i class="bi bi-virus2 me-2"></i> Analizador Manual VT
+                        </a>
+                    </li>
+
                 </ul>
             </div>
 
@@ -200,6 +208,7 @@
                     required>
             </div>
 
+            {% if current_user.is_admin %}
             <div class="mb-3 p-3 bg-light border rounded">
                 <div class="form-check">
                     <input type="checkbox" class="form-check-input" id="modo_prueba" name="modo_prueba">
@@ -211,6 +220,7 @@
                     Si activas esto, el sistema buscará alertas pero <strong>NO guardará nada</strong> en la base de datos.
                 </div>
             </div>
+            {% endif %}
 
           </div>
           <div class="modal-footer">

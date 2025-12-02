@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>Caso #{{ caso.id }}: <span class="text-primary">{{ caso.nombre }}</span></h3>
+        
+        <div>
+            <form action="{{ url_for('virustotal.analizar_caso', caso_id=caso.id) }}" method="POST" class="d-inline">
+                <button type="submit" class="btn btn-warning me-2" onclick="return confirm('¿Analizar todos los IoCs?')">
+                    <i class="bi bi-play-fill"></i> Ejecutar Análisis VT
+                </button>
+            </form>
+            
+            <a href="{{ url_for('virustotal.index') }}" class="btn btn-secondary">Volver</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-light fw-bold">Agregar IoCs</div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-2">
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="tipo_ioc" id="add_hash" value="hash" checked>
+                                <label class="btn btn-outline-secondary btn-sm" for="add_hash">Hash</label>
+                                <input type="radio" class="btn-check" name="tipo_ioc" id="add_ip" value="ip">
+                                <label class="btn btn-outline-secondary btn-sm" for="add_ip">IP</label>
+                                <input type="radio" class="btn-check" name="tipo_ioc" id="add_dom" value="dominio">
+                                <label class="btn btn-outline-secondary btn-sm" for="add_dom">Dom</label>
+                            </div>
+                        </div>
+                        <textarea class="form-control font-monospace mb-2" name="hashes_input" rows="5" placeholder="Pegar lista..." required></textarea>
+                        <button type="submit" class="btn btn-primary w-100 btn-sm">Agregar a la Lista</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table class="table table-sm table-hover mb-0 align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Valor</th>
+                                <th class="text-center">Score</th>
+                                <th class="text-center">Estado</th>
+                                <th class="text-center">Link</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ioc in caso.iocs %}
+                            <tr>
+                                <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
+                                <td class="font-monospace small text-truncate" style="max-width: 200px;" title="{{ ioc.valor }}">{{ ioc.valor }}</td>
+                                
+                                <td class="text-center">
+                                    {% if ioc.vt_reputation is not none %}
+                                        <span class="badge {% if ioc.vt_reputation < 0 %}bg-danger{% else %}bg-success{% endif %}">{{ ioc.vt_reputation }}</span>
+                                    {% else %}-{% endif %}
+                                </td>
+                                
+                                <td class="text-center">
+                                    {% if ioc.vt_last_check %}
+                                        {% if ioc.vt_reputation < 0 %}
+                                            <i class="bi bi-bug-fill text-danger"></i>
+                                        {% else %}
+                                            <i class="bi bi-check-circle-fill text-success"></i>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">Pendiente</span>
+                                    {% endif %}
+                                </td>
+                                
+                                <td class="text-center">
+                                    {% if ioc.vt_permalink %}
+                                    <a href="{{ ioc.vt_permalink }}" target="_blank" class="text-secondary"><i class="bi bi-box-arrow-up-right"></i></a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-3 text-muted">Lista vacía. Agrega IoCs para comenzar.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

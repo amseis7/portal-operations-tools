@@ -45,10 +45,31 @@ def ver_gestion(ticket_id):
 @bp.route('/iocs/<ticket_id>')
 @login_required
 def ver_iocs(ticket_id):
-    # Hacemos un JOIN para obtener los IoCs de las alertas de este ticket
-    print(ticket_id)
-    iocs = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id).all()
-    return render_template('csirt/detalle_iocs.html', iocs=iocs, id_volver=ticket_id)
+    # 1. Query Base
+    query = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id)
+    
+    # 2. Filtro Visual (Si viene en la URL)
+    tipo_filtro = request.args.get('tipo')
+    
+    if tipo_filtro:
+        if tipo_filtro == 'hash':
+            query = query.filter(Ioc.tipo.in_(['hash', 'md5', 'sha1', 'sha256']))
+        elif tipo_filtro == 'url':
+            query = query.filter(Ioc.tipo.in_(['url', 'dominio'])) # Agrupamos URL y Dominio
+        else:
+            query = query.filter(Ioc.tipo == tipo_filtro)
+            
+    iocs = query.all()
+    
+    return render_template(
+        'csirt/detalle_iocs.html', 
+        iocs=iocs, 
+        ticket=ticket_id, 
+        titulo=f"Ticket {ticket_id}",
+        contexto='ticket', 
+        id_contexto=ticket_id,
+        filtro_activo=tipo_filtro # <--- Pasamos esto para saber si mostrar botón "Borrar filtro"
+    )
 
 @bp.route('/procesar', methods=['POST'])
 @login_required
@@ -242,12 +263,36 @@ def descargar_iocs_csv(ticket_id):
 @bp.route('/iocs_alerta/<int:alerta_id>')
 @login_required
 def ver_iocs_alerta(alerta_id):
-    # Buscamos la alerta para tener el nombre
     alerta = Alerta.query.get_or_404(alerta_id)
-    # Buscamos sus IoCs
-    iocs = alerta.iocs # Gracias a la relación de SQLAlchemy es directo
     
-    return render_template('csirt/detalle_iocs.html', iocs=iocs, titulo=f"Alerta {alerta.nombre_alerta}", volver='gestion', id_volver=alerta.ticket)
+    # Query Base sobre los IoCs de esta alerta
+    # Nota: Usamos alerta.iocs (lista) o construimos query si queremos filtrar
+    query = Ioc.query.filter_by(alerta_id=alerta_id)
+    
+    # Filtro Visual
+    tipo_filtro = request.args.get('tipo')
+    
+    if tipo_filtro:
+        if tipo_filtro == 'hash':
+            query = query.filter(Ioc.tipo.in_(['hash', 'md5', 'sha1', 'sha256']))
+        elif tipo_filtro == 'url':
+            query = query.filter(Ioc.tipo.in_(['url', 'dominio']))
+        else:
+            query = query.filter(Ioc.tipo == tipo_filtro)
+            
+    iocs = query.all()
+
+    return render_template(
+        'csirt/detalle_iocs.html', 
+        iocs=iocs, 
+        ticket=alerta.ticket,
+        titulo=f"Alerta {alerta.nombre_alerta}", 
+        volver='gestion', 
+        id_volver=alerta.ticket,
+        contexto='alerta', 
+        id_contexto=alerta.id,
+        filtro_activo=tipo_filtro # <--- Nuevo
+    )
 
 @bp.route('/eliminar_ticket/<ticket_id>', methods=['POST'])
 @login_required
