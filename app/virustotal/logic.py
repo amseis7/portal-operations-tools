@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import current_app
 from flask_login import current_user
 from app.extensions import db
-from app.models import Ioc, ManualCheck, VtIoc
+from app.models import Ioc, ManualCheck, VtIoc, User
 
 logger = logging.getLogger(__name__)
 
