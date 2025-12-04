@@ -33,14 +33,108 @@ def buscar_resultado_previo(valor_hash):
     return existente
 
 def consultar_virustotal_ioc(ioc_obj, forzar=False):
-    # ... (Mismo código de antes, asegúrate de copiar la versión FINAL que te di con vt_positives y stats) ...
-    # ... (Si ya lo tienes bien, no hace falta cambiarlo, solo enfócate en la función de exportación abajo) ...
-    # Para no hacer el mensaje eterno, asumo que esta parte ya la tienes correcta.
-    # Si necesitas el archivo COMPLETO de nuevo dímelo.
+    """Consulta VT para un objeto (Ioc o VtIoc)."""
     
-    # REEMPLAZO RÁPIDO: Aquí va la lógica de consultar VT que ya funcionaba bien.
-    # ...
-    pass # (Placeholder para no repetir 200 líneas)
+    # 1. CACHÉ
+    if not forzar and ioc_obj.vt_last_check:
+        tiempo = datetime.now() - ioc_obj.vt_last_check
+        if tiempo.days < 7:
+            return True
+
+    # 2. API KEY
+    api_key = current_user.get_vt_key()
+    if not api_key: return False
+    
+    motores_interes = current_app.config['VT_MOTORES_INTERES']
+    headers = {"x-apikey": api_key}
+    base_url = "https://www.virustotal.com/api/v3"
+    
+    tipo_db = ioc_obj.tipo.lower()
+    valor_original = ioc_obj.valor.strip()
+    endpoint = ""
+
+    # 3. ENDPOINTS
+    if tipo_db in ['hash', 'md5', 'sha1', 'sha256']:
+        endpoint = f"{base_url}/files/{valor_original}"
+    elif tipo_db == 'ip':
+        endpoint = f"{base_url}/ip_addresses/{valor_original}"
+    elif tipo_db == 'dominio':
+        valor_limpio = valor_original.replace("https://", "").replace("http://", "").split("/")[0]
+        endpoint = f"{base_url}/domains/{valor_limpio}"
+    elif tipo_db == 'url':
+        try:
+            url_id = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
+            endpoint = f"{base_url}/urls/{url_id}"
+        except: return False
+    else:
+        return False 
+
+    # 4. EJECUCIÓN
+    try:
+        for _ in range(3):
+            response = requests.get(endpoint, headers=headers, timeout=15)
+            
+            if response.status_code == 429:
+                time.sleep(60)
+                continue
+            
+            if response.status_code == 200:
+                data = response.json()
+                attrs = data.get("data", {}).get("attributes", {})
+                last_analysis = attrs.get("last_analysis_results", {})
+                stats = attrs.get("last_analysis_stats", {})
+
+                # Estadísticas
+                malicious = stats.get("malicious", 0)
+                suspicious = stats.get("suspicious", 0)
+                ioc_obj.vt_positives = malicious + suspicious
+                ioc_obj.vt_total = sum(stats.values())
+                
+                # Datos Generales
+                ioc_obj.vt_last_check = datetime.now()
+                ioc_obj.vt_reputation = attrs.get("reputation", 0)
+                ioc_obj.vt_md5 = attrs.get("md5")
+                ioc_obj.vt_sha1 = attrs.get("sha1")
+                ioc_obj.vt_sha256 = attrs.get("sha256")
+                
+                # Permalink
+                type_link = 'file' 
+                id_ref = valor_original
+                if tipo_db == 'url': 
+                    type_link = 'url'
+                    id_ref = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
+                elif tipo_db == 'dominio': type_link = 'domain'; id_ref = endpoint.split('/')[-1]
+                elif tipo_db == 'ip': type_link = 'ip-address'
+
+                ioc_obj.vt_permalink = f"https://www.virustotal.com/gui/{type_link}/{id_ref}"
+
+                # Motores
+                resultados_motores = {}
+                for motor_name, motor_data in last_analysis.items():
+                    resultados_motores[motor_name] = motor_data.get("category", "unknown")
+                
+                resultados_motores["filename"] = attrs.get("meaningful_name", attrs.get("title", "-"))
+                ioc_obj.set_motores(resultados_motores)
+                
+                db.session.commit()
+                return True
+
+            elif response.status_code == 404:
+                ioc_obj.vt_last_check = datetime.now()
+                ioc_obj.vt_reputation = 0
+                ioc_obj.vt_positives = 0
+                ioc_obj.set_motores({"ERROR": "Not Found in VirusTotal"})
+                ioc_obj.vt_permalink = f"https://www.virustotal.com/gui/search/{valor_original}"
+                db.session.commit()
+                return True
+            
+            else:
+                return False
+
+    except Exception as e:
+        logger.error(f"Excepción VT: {e}")
+        return False
+    return False
 
 def consultar_vt_y_guardar(valor, tipo, user_id):
     # ... (Mismo código de antes) ...

@@ -16,7 +16,7 @@
                         {% set ruta_analisis = 'virustotal.analizar_alerta' %}
                         {% set arg_id = {'alerta_id': id_contexto} %}
                     {% else %}
-                        {% set ruta_analisis = 'virustotal.analizar_ticket' %}
+                        {% set ruta_analisis = 'virustotal.analizar_ticket_csirt' %}
                         {% set arg_id = {'ticket_id': id_contexto} %}
                     {% endif %}
 
