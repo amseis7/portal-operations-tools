@@ -6,7 +6,7 @@ class Config:
 
     VIRUSTOTAL_API_KEY = os.environ.get('VT_QPI_KEY') or 'TU_API_KEY'
     VT_MOTORES_INTERES = [
-        'TrendMicro', 'McAfee', 'Symantec', 'CrowdStrike',
+        'TrendMicro', 'Trellix ENS', 'Symantec', 'CrowdStrike',
         'Kaspersky', 'Sophos', 'Microsoft', 'Google'
     ]
     

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-file-earmark-code text-dark"></i> Plantillas de Exportación</h2>
+        <a href="{{ url_for('virustotal.index') }}" class="btn btn-secondary">Volver</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white fw-bold">Nueva Plantilla</div>
+                <div class="card-body">
+                    <form method="POST">
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Nombre Plataforma</label>
+                            <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Ej: TrendMicro CSV" required>
+                        </div>
+                        
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Motor en VirusTotal</label>
+                            <input type="text" name="vt_engine" class="form-control form-control-sm" placeholder="Ej: TrendMicro" required>
+                            <div class="form-text small">Debe coincidir exacto con VT.</div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Extensión</label>
+                            <select name="extension" class="form-select form-select-sm">
+                                <option value="csv">CSV</option>
+                                <option value="txt">TXT</option>
+                                <option value="xml">XML</option>
+                                <option value="json">JSON</option>
+                            </select>
+                        </div>
+
+                        <hr class="my-2">
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Cabecera (Header)</label>
+                            <textarea name="header" class="form-control form-control-sm font-monospace" rows="2" placeholder="Ej: IP,Categoria,Accion"></textarea>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Plantilla Fila (Row)</label>
+                            <textarea name="row_template" class="form-control form-control-sm font-monospace" rows="2" placeholder="Ej: {valor},Malware,Block" required></textarea>
+                            <div class="form-text small">Variables: {valor}, {tipo}, {md5}, {positives}, {estado_motor}</div>
+                        </div>
+
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold">Hashes Soportados</label>
+                            <input type="text" name="supported_hashes" class="form-control form-control-sm" 
+                                   placeholder="md5,sha1,sha256" value="md5,sha1,sha256">
+                            <div class="form-text small">Separados por coma. Ej: "sha1" para TrendMicro.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">Pie (Footer)</label>
+                            <textarea name="footer" class="form-control form-control-sm font-monospace" rows="1" placeholder="Ej: </root> (Solo XML/JSON)"></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-success w-100">Guardar Plantilla</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Plataforma</th>
+                                <th>Motor VT</th>
+                                <th>Ext</th>
+                                <th>Ejemplo Fila</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                       <tbody>
+                            {% for t in templates %}
+                            <tr>
+                                <td><strong>{{ t.nombre_plataforma }}</strong></td>
+                                <td><span class="badge bg-info text-dark">{{ t.vt_engine_name }}</span></td>
+                                <td>.{{ t.file_extension }}</td>
+                                <td><code class="small text-truncate d-inline-block" style="max-width: 200px;">{{ t.row_template }}</code></td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <button class="btn btn-sm btn-outline-primary border-0" data-bs-toggle="modal" data-bs-target="#modalEditar{{ t.id }}" title="Editar">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+
+                                        <form action="{{ url_for('virustotal.eliminar_template', id=t.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de borrar la plantilla {{ t.nombre_plataforma }}?');">
+                                            <button class="btn btn-sm btn-outline-danger border-0" title="Eliminar"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+
+                                    <div class="modal fade" id="modalEditar{{ t.id }}" tabindex="-1">
+                                        <div class="modal-dialog modal-lg">
+                                            <div class="modal-content">
+                                                <div class="modal-header bg-primary text-white">
+                                                    <h5 class="modal-title">Editar Plantilla: {{ t.nombre_plataforma }}</h5>
+                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <form action="{{ url_for('virustotal.editar_template', id=t.id) }}" method="POST">
+                                                    <div class="modal-body text-start">
+                                                        
+                                                        <div class="row mb-3">
+                                                            <div class="col-md-6">
+                                                                <label class="form-label small fw-bold">Nombre Plataforma</label>
+                                                                <input type="text" name="nombre" class="form-control" value="{{ t.nombre_plataforma }}" required>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <label class="form-label small fw-bold">Motor VT (Exacto)</label>
+                                                                <input type="text" name="vt_engine" class="form-control" value="{{ t.vt_engine_name }}" required>
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="row mb-3">
+                                                            <div class="col-md-4">
+                                                                <label class="form-label small fw-bold">Extensión</label>
+                                                                <select name="extension" class="form-select">
+                                                                    <option value="csv" {% if t.file_extension == 'csv' %}selected{% endif %}>CSV</option>
+                                                                    <option value="txt" {% if t.file_extension == 'txt' %}selected{% endif %}>TXT</option>
+                                                                    <option value="xml" {% if t.file_extension == 'xml' %}selected{% endif %}>XML</option>
+                                                                    <option value="json" {% if t.file_extension == 'json' %}selected{% endif %}>JSON</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-8">
+                                                                <label class="form-label small fw-bold">Hashes Soportados</label>
+                                                                <input type="text" name="supported_hashes" class="form-control" value="{{ t.supported_hashes or 'md5,sha1,sha256' }}">
+                                                                <div class="form-text small">Ej: md5,sha1</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <hr>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label small fw-bold">Cabecera</label>
+                                                            <textarea name="header" class="form-control font-monospace small" rows="2">{{ t.header_content }}</textarea>
+                                                        </div>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label small fw-bold">Fila (Row Template)</label>
+                                                            <textarea name="row_template" class="form-control font-monospace small" rows="2" required>{{ t.row_template }}</textarea>
+                                                        </div>
+
+                                                        <div class="mb-3">
+                                                            <label class="form-label small fw-bold">Pie</label>
+                                                            <textarea name="footer" class="form-control font-monospace small" rows="2">{{ t.footer_content }}</textarea>
+                                                        </div>
+
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                                                    </div>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-4 text-muted">No hay plantillas configuradas.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

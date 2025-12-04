@@ -111,6 +111,8 @@ class Ioc(db.Model):
     # --- CAMPOS VIRUSTOTAL ---
     vt_last_check = db.Column(db.DateTime)
     vt_reputation = db.Column(db.Integer) # Score general (-10 a 100)
+    vt_positives = db.Column(db.Integer, default=0)
+    vt_total = db.Column(db.Integer, default=0)
     vt_permalink = db.Column(db.String(255))
 
     # Hashes (Siempre es útil tenerlos a mano)
@@ -167,6 +169,8 @@ class VtIoc(db.Model):
     # Datos de VT (Reutilizamos la estructura que ya conoces)
     vt_last_check = db.Column(db.DateTime)
     vt_reputation = db.Column(db.Integer)
+    vt_positives = db.Column(db.Integer, default=0)
+    vt_total = db.Column(db.Integer, default=0)
     vt_permalink = db.Column(db.String(255))
     vt_md5 = db.Column(db.String(32))
     vt_sha1 = db.Column(db.String(40))
@@ -181,3 +185,20 @@ class VtIoc(db.Model):
         import json
         if not self.vt_motores_json: return {}
         return json.loads(self.vt_motores_json)
+    
+class ExportTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre_plataforma = db.Column(db.String(100), nullable=False) # Ej: "TrendMicro Apex"
+    vt_engine_name = db.Column(db.String(100), nullable=False)    # Ej: "TrendMicro" (Nombre exacto en VT)
+    
+    supported_hashes = db.Column(db.String(100), default="md5,sha1,sha256")
+
+    file_extension = db.Column(db.String(10), default="csv")      # csv, xml, txt
+    
+    # Estructura del archivo
+    header_content = db.Column(db.Text, default="") # Cabecera (Ej: "IP,Category,Action")
+    row_template = db.Column(db.Text, nullable=False) # Plantilla por fila (Ej: "{valor},Malware,Block")
+    footer_content = db.Column(db.Text, default="") # Pie de página (Para XML/JSON)
+
+    def __repr__(self):
+        return f'<Template {self.nombre_plataforma}>'

@@ -1,10 +1,16 @@
 {% extends "base.html" %}
+
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-virus2 text-danger"></i> Investigaciones VirusTotal</h2>
+        <h2><i class="bi bi-journal-text text-primary"></i> Bitácora de Investigaciones</h2>
+        {% if current_user.is_admin %}
+            <a href="{{ url_for('virustotal.admin_templates') }}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-gear-fill"></i> Configurar Plantillas
+            </a>
+        {% endif %}
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoCaso">
-            <i class="bi bi-plus-lg"></i> Nuevo Caso
+            <i class="bi bi-plus-lg"></i> Crear Nuevo Caso
         </button>
     </div>
 
@@ -18,7 +24,7 @@
                         <th>Descripción</th>
                         <th>Creado por</th>
                         <th>Fecha</th>
-                        <th>Acción</th>
+                        <th class="text-center">Acción</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -29,14 +35,24 @@
                         <td>{{ ticket.descripcion }}</td>
                         <td>{{ ticket.creador.username }}</td>
                         <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y') }}</td>
-                        <td>
-                            <a href="{{ url_for('virustotal.ver_caso', caso_id=ticket.id) }}" class="btn btn-sm btn-primary">
-                                Gestionar
-                            </a>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+                                <a href="{{ url_for('virustotal.ver_caso', caso_id=ticket.id) }}" class="btn btn-sm btn-primary" title="Abrir Investigación">
+                                    <i class="bi bi-folder2-open"></i> Abrir
+                                </a>
+                                
+                                {% if current_user.is_admin or current_user.id == ticket.usuario_id %}
+                                <form action="{{ url_for('virustotal.eliminar_caso', caso_id=ticket.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de eliminar el caso &quot;{{ ticket.nombre }}&quot;?\nEsta acción borrará todos los IoCs y análisis asociados.');">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Eliminar Caso">
+                                        <i class="bi bi-trash"></i> Eliminar
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-center py-4">No hay investigaciones creadas.</td></tr>
+                    <tr><td colspan="6" class="text-center py-5 text-muted">No hay investigaciones registradas.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -47,23 +63,24 @@
 <div class="modal fade" id="modalNuevoCaso" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <div class="modal-header bg-dark text-white">
-        <h5 class="modal-title">Crear Nueva Investigación</h5>
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title">Nueva Investigación</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form action="{{ url_for('virustotal.crear_caso') }}" method="POST">
           <div class="modal-body">
             <div class="mb-3">
-                <label class="form-label fw-bold">Nombre del Caso</label>
-                <input type="text" name="nombre" class="form-control" placeholder="Ej: Analisis Malware Finanzas" required>
+                <label class="form-label fw-bold">Nombre del Caso / Ticket</label>
+                <input type="text" name="nombre" class="form-control" placeholder="Ej: INC-2025-001 - Malware Contabilidad" required>
             </div>
             <div class="mb-3">
                 <label class="form-label">Descripción (Opcional)</label>
-                <textarea name="descripcion" class="form-control" rows="2"></textarea>
+                <textarea name="descripcion" class="form-control" rows="3" placeholder="Detalles breves..."></textarea>
             </div>
           </div>
           <div class="modal-footer">
-            <button type="submit" class="btn btn-success">Crear</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-success">Crear Caso</button>
           </div>
       </form>
     </div>
