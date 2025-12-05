@@ -2,7 +2,7 @@ from sqlalchemy import func
 from flask import render_template, request, flash, redirect, url_for, send_file, stream_with_context
 from flask_login import login_required, current_user
 from app.csirt import bp
-from app.models import Alerta, Ioc
+from app.models import Alerta, Ioc, VtIoc, VtTicket
 from app.extensions import db
 import csv
 import re
@@ -60,6 +60,17 @@ def ver_iocs(ticket_id):
             query = query.filter(Ioc.tipo == tipo_filtro)
             
     iocs = query.all()
+
+    valores_en_pantalla = [ioc.valor for ioc in iocs]
+
+    mapa_recurrencia = {}
+
+    if valores_en_pantalla:
+        stats = db.session.query(Ioc.valor, func.count(Ioc.id))\
+            .filter(Ioc.valor.in_(valores_en_pantalla))\
+            .group_by(Ioc.valor).all()
+        
+        mapa_recurrencia = {item[0]: item[1] for item in stats}
     
     return render_template(
         'csirt/detalle_iocs.html', 
@@ -68,7 +79,8 @@ def ver_iocs(ticket_id):
         titulo=f"Ticket {ticket_id}",
         contexto='ticket', 
         id_contexto=ticket_id,
-        filtro_activo=tipo_filtro # <--- Pasamos esto para saber si mostrar botón "Borrar filtro"
+        filtro_activo=tipo_filtro, # <--- Pasamos esto para saber si mostrar botón "Borrar filtro"
+        mapa_recurrencia=mapa_recurrencia
     )
 
 @bp.route('/procesar', methods=['POST'])
@@ -282,6 +294,15 @@ def ver_iocs_alerta(alerta_id):
             
     iocs = query.all()
 
+    valores_en_pantalla = [ioc.valor for ioc in iocs]
+    mapa_recurrencia = {}
+    
+    if valores_en_pantalla:
+        stats = db.session.query(Ioc.valor, func.count(Ioc.id))\
+            .filter(Ioc.valor.in_(valores_en_pantalla))\
+            .group_by(Ioc.valor).all()
+        mapa_recurrencia = {item[0]: item[1] for item in stats}
+
     return render_template(
         'csirt/detalle_iocs.html', 
         iocs=iocs, 
@@ -291,7 +312,8 @@ def ver_iocs_alerta(alerta_id):
         id_volver=alerta.ticket,
         contexto='alerta', 
         id_contexto=alerta.id,
-        filtro_activo=tipo_filtro # <--- Nuevo
+        filtro_activo=tipo_filtro, # <--- Nuevo
+        mapa_recurrencia=mapa_recurrencia
     )
 
 @bp.route('/eliminar_ticket/<ticket_id>', methods=['POST'])
@@ -473,11 +495,30 @@ def stream_actualizacion():
 @bp.route('/buscar', methods=['GET'])
 @login_required
 def buscar_ioc():
-    query = request.args.get('q', '').strip()
+    query_str = request.args.get('q', '').strip()
 
-    if not query:
+    if not query_str:
         flash('Por favor ingrese un termino de busqueda.', 'warning')
         return redirect(url_for('csirt.index'))
     
-    resultados = db.session.query(Ioc).join(Alerta).filter(Ioc.valor.contains(query)).order_by(Alerta.fecha_realizacion.desc()).all()
-    return render_template('csirt/resultados_busqueda.html', resultados=resultados, query=query)
+    # 1. Búsqueda en CSIRT (Histórico de Tickets/Alertas)
+    resultados_csirt = db.session.query(Ioc)\
+        .join(Alerta)\
+        .filter(Ioc.valor.contains(query_str))\
+        .order_by(Alerta.fecha_realizacion.desc())\
+        .all()
+
+    # 2. Búsqueda en Casos VT (Investigaciones)
+    resultados_vt = db.session.query(VtIoc)\
+        .join(VtTicket)\
+        .filter(VtIoc.valor.contains(query_str))\
+        .order_by(VtTicket.fecha_creacion.desc())\
+        .all()
+    
+    # Enviamos ambas listas a la plantilla
+    return render_template(
+        'csirt/resultados_busqueda.html', 
+        resultados_csirt=resultados_csirt, 
+        resultados_vt=resultados_vt, 
+        query=query_str
+    )

@@ -4,7 +4,7 @@ from datetime import datetime
 from app.extensions import db
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.virustotal import bp
-from app.virustotal.logic import consultar_virustotal_ioc, generar_exportacion_multiformato
+from app.virustotal.logic import consultar_virustotal_ioc, generar_exportacion_multiformato, procesar_importacion_csirt
 import re
 
 # --- RUTAS DE GESTIÓN DE CASOS ---
@@ -78,13 +78,11 @@ def ver_caso(caso_id):
 @bp.route('/analizar_caso/<int:caso_id>', methods=['POST'])
 @login_required
 def analizar_caso(caso_id):
-    # ... (Tu código existente para analizar un caso VT manual) ...
-    # Asegúrate de mantener este endpoint porque lo usas dentro de ver_caso
     if not current_user.virustotal_api_key:
         flash('Error: Configura tu API Key primero.', 'danger')
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
-    caso = VtTicket.query.get_or_404(caso_id)
+    caso_id = VtTicket.query.get_or_404(caso_id)
     tipo_filtro = request.args.get('tipo')
     
     query = VtIoc.query.filter_by(ticket_id=caso_id)
@@ -99,81 +97,21 @@ def analizar_caso(caso_id):
         flash('No hay IoCs para analizar.', 'warning')
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
+    source = request.args.get('source')
+    origin_id = request.args.get('origin_id')
+
     cont_exito = 0
     force = request.args.get('force') == 'true'
     for ioc in iocs:
         if consultar_virustotal_ioc(ioc, forzar=force):
             cont_exito += 1
-            
+
     flash(f'Análisis finalizado. {cont_exito}/{len(iocs)} actualizados.', 'success')
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id))
 
 # ==============================================================================
 #  NUEVAS RUTAS DE INTEGRACIÓN CSIRT -> VT (IMPORTACIÓN AUTOMÁTICA)
-# ==============================================================================
-
-def _procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
-    """
-    Función auxiliar que:
-    1. Busca/Crea un Caso VT con el nombre del ticket CSIRT.
-    2. Copia los IoCs de CSIRT a ese Caso VT (si no existen).
-    3. Ejecuta el análisis en VT para los IoCs del Caso.
-    4. Retorna el ID del caso VT para redirección.
-    """
-    # 1. Buscar o Crear el Caso
-    nombre_caso = f"CSIRT: {nombre_ticket_csirt}"
-    caso_vt = VtTicket.query.filter_by(nombre=nombre_caso).first()
-    
-    if not caso_vt:
-        caso_vt = VtTicket(
-            nombre=nombre_caso,
-            descripcion=f"Caso generado automáticamente desde el Ticket CSIRT {nombre_ticket_csirt}",
-            usuario_id=current_user.id
-        )
-        db.session.add(caso_vt)
-        db.session.commit()
-        flash(f'Se creó un nuevo Caso de Investigación: {nombre_caso}', 'info')
-
-    # 2. Migrar IoCs (Append)
-    nuevos = 0
-    # Lista de objetos VtIoc que vamos a analizar (ya sean nuevos o existentes)
-    vt_iocs_a_analizar = []
-
-    for ioc_c in iocs_origen:
-        # Verificar duplicados en el destino
-        existe = VtIoc.query.filter_by(ticket_id=caso_vt.id, valor=ioc_c.valor).first()
-        
-        if not existe:
-            nuevo_vt_ioc = VtIoc(
-                ticket_id=caso_vt.id,
-                tipo=ioc_c.tipo,
-                valor=ioc_c.valor
-                # Nota: No copiamos el resultado anterior para forzar una validación fresca 
-                # o dejar que consultar_virustotal_ioc use su caché de fecha.
-            )
-            db.session.add(nuevo_vt_ioc)
-            vt_iocs_a_analizar.append(nuevo_vt_ioc)
-            nuevos += 1
-        else:
-            vt_iocs_a_analizar.append(existe)
-    
-    db.session.commit()
-    
-    # 3. Analizar
-    if not current_user.virustotal_api_key:
-        flash('IoCs importados, pero NO analizados. Configura tu API Key.', 'warning')
-        return caso_vt.id
-
-    cont_exito = 0
-    force = request.args.get('force') == 'true'
-    
-    for ioc_vt in vt_iocs_a_analizar:
-        if consultar_virustotal_ioc(ioc_vt, forzar=force):
-            cont_exito += 1
-            
-    flash(f'Proceso completado. {nuevos} IoCs importados. {cont_exito} analizados en VT.', 'success')
-    return caso_vt.id
-
+# =============================================================================
 
 @bp.route('/analizar_ticket_csirt/<ticket_id>', methods=['POST'])
 @login_required
@@ -201,10 +139,10 @@ def analizar_ticket_csirt(ticket_id):
         return redirect(url_for('csirt.ver_gestion', ticket_id=ticket_id))
 
     # 2. Procesar (Importar -> Analizar)
-    caso_vt_id = _procesar_importacion_csirt(ticket_id, iocs_csirt)
+    caso_vt_id = procesar_importacion_csirt(ticket_id, iocs_csirt)
 
     # 3. Redirigir al CASO VT (Nueva pantalla)
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id))
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id))
 
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
@@ -237,10 +175,10 @@ def analizar_alerta(alerta_id):
         return redirect(url_for('csirt.ver_iocs_alerta', alerta_id=alerta_id))
 
     # 3. Procesar (Usamos el ticket del padre para agrupar todo en el mismo caso)
-    caso_vt_id = _procesar_importacion_csirt(ticket_padre, iocs_csirt)
+    caso_vt_id = procesar_importacion_csirt(ticket_padre, iocs_csirt)
 
     # 4. Redirigir al CASO VT
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id))
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre))
 
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
 @bp.route('/eliminar_caso/<int:caso_id>', methods=['POST'])

@@ -4,14 +4,14 @@ import logging
 import base64
 import csv
 import zipfile
-import re # <--- NUEVO IMPORT NECESARIO
-from io import StringIO, BytesIO
-from datetime import datetime, timedelta
-from flask import current_app
+import re
+from io import BytesIO
+from datetime import datetime
+from flask import flash, request, current_app
 from flask_login import current_user
 from sqlalchemy import func, or_
 from app.extensions import db
-from app.models import Ioc, ManualCheck, VtIoc, User, Alerta, ExportTemplate, VtTicket
+from app.models import Ioc, VtIoc, Alerta, ExportTemplate, VtTicket
 
 logger = logging.getLogger(__name__)
 
@@ -136,19 +136,114 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False):
         return False
     return False
 
-def consultar_vt_y_guardar(valor, tipo, user_id):
-    # ... (Mismo código de antes) ...
-    pass
+def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
+    """
+    Función auxiliar que:
+    1. Busca/Crea un Caso VT con el nombre del ticket CSIRT.
+    2. Copia los IoCs de CSIRT a ese Caso VT (si no existen).
+    3. Ejecuta el análisis en VT para los IoCs del Caso.
+    4. Retorna el ID del caso VT para redirección.
+    """
+    # 1. Buscar o Crear el Caso
+    nombre_caso = f"CSIRT: {nombre_ticket_csirt}"
+    caso_vt = VtTicket.query.filter_by(nombre=nombre_caso).first()
+    
+    if not caso_vt:
+        caso_vt = VtTicket(
+            nombre=nombre_caso,
+            descripcion=f"Caso generado automáticamente desde el Ticket CSIRT {nombre_ticket_csirt}",
+            usuario_id=current_user.id
+        )
+        db.session.add(caso_vt)
+        db.session.commit()
+        flash(f'Se creó un nuevo Caso de Investigación: {nombre_caso}', 'info')
 
-def analizar_vt_ioc_objeto(ioc_obj):
-    # ... (Mismo código de antes) ...
-    pass
+    # 2. Migrar IoCs (Append)
+    nuevos = 0
+    # Lista de objetos VtIoc que vamos a analizar (ya sean nuevos o existentes)
+    vt_iocs_a_analizar = []
 
-def generar_blacklist_caso(id_origen, motor_objetivo, origen='caso'):
-    # ... (Mismo código de antes) ...
-    pass
+    for ioc_c in iocs_origen:
+        # Verificar duplicados en el destino
+        existe = VtIoc.query.filter_by(ticket_id=caso_vt.id, valor=ioc_c.valor).first()
+        
+        if not existe:
+            nuevo_vt_ioc = VtIoc(
+                ticket_id=caso_vt.id,
+                tipo=ioc_c.tipo,
+                valor=ioc_c.valor
+                # Nota: No copiamos el resultado anterior para forzar una validación fresca 
+                # o dejar que consultar_virustotal_ioc use su caché de fecha.
+            )
+            db.session.add(nuevo_vt_ioc)
+            vt_iocs_a_analizar.append(nuevo_vt_ioc)
+            nuevos += 1
+        else:
+            vt_iocs_a_analizar.append(existe)
+    
+    db.session.commit()
 
-# --- AQUÍ ESTÁ LA CORRECCIÓN IMPORTANTE ---
+def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
+    """
+    Función auxiliar que:
+    1. Busca/Crea un Caso VT con el nombre del ticket CSIRT.
+    2. Copia los IoCs de CSIRT a ese Caso VT (si no existen).
+    3. Ejecuta el análisis en VT para los IoCs del Caso.
+    4. Retorna el ID del caso VT para redirección.
+    """
+    # 1. Buscar o Crear el Caso
+    nombre_caso = f"CSIRT: {nombre_ticket_csirt}"
+    caso_vt = VtTicket.query.filter_by(nombre=nombre_caso).first()
+    
+    if not caso_vt:
+        caso_vt = VtTicket(
+            nombre=nombre_caso,
+            descripcion=f"Caso generado automáticamente desde el Ticket CSIRT {nombre_ticket_csirt}",
+            usuario_id=current_user.id
+        )
+        db.session.add(caso_vt)
+        db.session.commit()
+        flash(f'Se creó un nuevo Caso de Investigación: {nombre_caso}', 'info')
+
+    # 2. Migrar IoCs (Append)
+    nuevos = 0
+    # Lista de objetos VtIoc que vamos a analizar (ya sean nuevos o existentes)
+    vt_iocs_a_analizar = []
+
+    for ioc_c in iocs_origen:
+        # Verificar duplicados en el destino
+        existe = VtIoc.query.filter_by(ticket_id=caso_vt.id, valor=ioc_c.valor).first()
+        
+        if not existe:
+            nuevo_vt_ioc = VtIoc(
+                ticket_id=caso_vt.id,
+                tipo=ioc_c.tipo,
+                valor=ioc_c.valor
+                # Nota: No copiamos el resultado anterior para forzar una validación fresca 
+                # o dejar que consultar_virustotal_ioc use su caché de fecha.
+            )
+            db.session.add(nuevo_vt_ioc)
+            vt_iocs_a_analizar.append(nuevo_vt_ioc)
+            nuevos += 1
+        else:
+            vt_iocs_a_analizar.append(existe)
+    
+    db.session.commit()
+    
+    # 3. Analizar
+    if not current_user.virustotal_api_key:
+        flash('IoCs importados, pero NO analizados. Configura tu API Key.', 'warning')
+        return caso_vt.id
+
+    cont_exito = 0
+    force = request.args.get('force') == 'true'
+    
+    for ioc_vt in vt_iocs_a_analizar:
+        if consultar_virustotal_ioc(ioc_vt, forzar=force):
+            cont_exito += 1
+            
+    flash(f'Proceso completado. {nuevos} IoCs importados. {cont_exito} analizados en VT.', 'success')
+    return caso_vt.id
 
 def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='caso'):
     """Genera ZIP inteligente con limpieza de etiquetas XML vacías."""

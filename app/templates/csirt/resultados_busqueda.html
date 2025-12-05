@@ -2,43 +2,49 @@
 
 {% block content %}
 <div class="container">
-    <div class="mb-4">
-        <h3>Resultados de búsqueda para: <span class="text-primary">"{{ query }}"</span></h3>
-        <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary btn-sm mt-2">Volver al Inicio</a>
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+            <h3>Resultados para: <span class="text-primary">"{{ query }}"</span></h3>
+            <p class="text-muted mb-0">Se encontraron coincidencias en {{ resultados_csirt|length }} registros CSIRT y {{ resultados_vt|length }} casos VT.</p>
+        </div>
+        <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver al Inicio</a>
     </div>
 
-    <div class="card shadow-sm">
+    <div class="card shadow-sm mb-5">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-lock-fill me-2"></i> Base de Datos CSIRT (Tickets y Alertas)</span>
+            <span class="badge bg-light text-dark">{{ resultados_csirt|length }}</span>
+        </div>
         <div class="card-body p-0">
-            <table class="table table-hover table-striped mb-0">
-                <thead class="table-dark">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-light">
                     <tr>
-                        <th>IoC Encontrado</th>
+                        <th>IoC</th>
                         <th>Tipo</th>
                         <th>Alerta Origen</th>
-                        <th>Ticket Gestión</th>
+                        <th>Ticket</th>
                         <th>Fecha</th>
                         <th>Responsable</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for ioc in resultados %}
+                    {% for ioc in resultados_csirt %}
                     <tr>
                         <td class="font-monospace fw-bold text-danger">{{ ioc.valor }}</td>
-                        <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
+                        <td><span class="badge bg-white text-dark border">{{ ioc.tipo }}</span></td>
                         <td>{{ ioc.alerta.nombre_alerta }}</td>
                         <td>
-                            <a href="{{ url_for('csirt.ver_gestion', ticket_id=ioc.alerta.ticket) }}" class="text-decoration-none">
-                                {{ ioc.alerta.ticket }} <i class="bi bi-box-arrow-up-right small"></i>
+                            <a href="{{ url_for('csirt.ver_gestion', ticket_id=ioc.alerta.ticket) }}" class="text-decoration-none fw-bold">
+                                {{ ioc.alerta.ticket }}
                             </a>
                         </td>
                         <td>{{ ioc.alerta.fecha_realizacion.strftime('%d/%m/%Y') }}</td>
-                        <td>{{ ioc.alerta.responsable }}</td>
+                        <td><small>{{ ioc.alerta.responsable }}</small></td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="6" class="text-center py-5">
-                            <h4 class="text-muted">No se encontraron coincidencias.</h4>
-                            <p class="text-muted">Ese indicador no está en nuestra base de datos histórica.</p>
+                        <td colspan="6" class="text-center py-3 text-muted">
+                            No se encontró este indicador en los tickets del CSIRT.
                         </td>
                     </tr>
                     {% endfor %}
@@ -46,5 +52,66 @@
             </table>
         </div>
     </div>
+
+    <div class="card shadow-sm border-info">
+        <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-search me-2"></i> Investigaciones y Análisis VT</span>
+            <span class="badge bg-white text-dark">{{ resultados_vt|length }}</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>IoC</th>
+                        <th>Tipo</th>
+                        <th>Nombre del Caso</th>
+                        <th>Creado por</th>
+                        <th>Fecha Caso</th>
+                        <th>VT Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ioc in resultados_vt %}
+                    <tr>
+                        <td class="font-monospace fw-bold text-danger">{{ ioc.valor }}</td>
+                        <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
+                        <td>
+                            <a href="{{ url_for('virustotal.ver_caso', caso_id=ioc.ticket.id) }}" class="text-decoration-none fw-bold">
+                                {{ ioc.ticket.nombre }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if ioc.ticket.creador %}
+                                {{ ioc.ticket.creador.username }}
+                            {% else %}
+                                <span class="text-muted">Desconocido</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ ioc.ticket.fecha_creacion.strftime('%d/%m/%Y') }}</td>
+                        
+                        <td>
+                            {% if ioc.vt_last_check %}
+                                {% if ioc.vt_positives > 0 %}
+                                    <span class="badge bg-danger">{{ ioc.vt_positives }}/{{ ioc.vt_total }}</span>
+                                {% else %}
+                                    <span class="badge bg-success">Limpio</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">Pendiente</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-3 text-muted">
+                            No se encontró este indicador en los casos de investigación VT.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 {% endblock %}

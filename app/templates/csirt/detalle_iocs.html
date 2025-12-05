@@ -98,22 +98,24 @@
                     {% for ioc in iocs %}
                     <tr>
                         <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
-                        <td class="font-monospace small text-truncate" style="max-width: 300px;" title="{{ ioc.valor }}">{{ ioc.valor }}</td>
-                        <td><small>{{ ioc.alerta.nombre_alerta }}</small></td>
-                        
-                        <!--<td class="text-center">
-                            {% if ioc.vt_reputation is not none %}
-                                {% if ioc.vt_reputation < 0 %}
-                                    <span class="badge bg-danger">{{ ioc.vt_reputation }}</span>
-                                {% elif ioc.vt_reputation == 0 %}
-                                    <span class="badge bg-secondary">0</span>
-                                {% else %}
-                                    <span class="badge bg-success">+{{ ioc.vt_reputation }}</span>
+                        <td class="font-monospace small">
+                            <div class="d-flex align-items-center">
+                                <span class="text-truncate" style="max-width: 300px;" title="{{ ioc.valor }}">
+                                    {{ ioc.valor }}
+                                </span>
+
+                                {% set repeticiones = mapa_recurrencia.get(ioc.valor, 1) %}
+                                
+                                {% if repeticiones > 1 %}
+                                    <a href="{{ url_for('csirt.buscar_ioc', q=ioc.valor) }}" 
+                                    class="ms-2 badge rounded-pill bg-warning text-dark text-decoration-none border border-warning" 
+                                    title="Este IoC aparece en {{ repeticiones }} registros históricos. Clic para ver cronología.">
+                                        <i class="bi bi-clock-history"></i> {{ repeticiones }}
+                                    </a>
                                 {% endif %}
-                            {% else %}
-                                <span class="text-muted small">-</span>
-                            {% endif %}
-                        </td>-->
+                            </div>
+                        </td>
+                        <td><small>{{ ioc.alerta.nombre_alerta }}</small></td>
 
                         <td class="text-center">
                             {% if ioc.vt_last_check %}

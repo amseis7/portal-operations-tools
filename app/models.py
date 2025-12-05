@@ -105,7 +105,7 @@ class ManualCheck(db.Model):
 class Ioc(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     tipo = db.Column(db.String(50))   # hash, url, ip, dominio, email
-    valor = db.Column(db.Text)        # El valor en sí (Text por si es una URL larga)
+    valor = db.Column(db.String(255), index=True)        # El valor en sí (Text por si es una URL larga)
     alerta_id = db.Column(db.Integer, db.ForeignKey('alerta.id'), nullable=False) # Llave foránea que conecta con la tabla Alerta
 
     # --- CAMPOS VIRUSTOTAL ---
