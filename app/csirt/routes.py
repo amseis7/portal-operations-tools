@@ -14,11 +14,9 @@ import pandas as pd
 from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 
-from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva
+from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva, obtener_mapa_recurrencia
 from app.utils import admin_required
 
-# Aquí importaremos tu lógica de scraping más adelante
-# from app.csirt.logic import ejecutar_scraping 
 
 @bp.route('/')
 @login_required
@@ -63,7 +61,7 @@ def ver_iocs(ticket_id):
 
     valores_en_pantalla = [ioc.valor for ioc in iocs]
 
-    mapa_recurrencia = {}
+    mapa_recurrencia = obtener_mapa_recurrencia
 
     if valores_en_pantalla:
         stats = db.session.query(Ioc.valor, func.count(Ioc.id))\
@@ -294,14 +292,7 @@ def ver_iocs_alerta(alerta_id):
             
     iocs = query.all()
 
-    valores_en_pantalla = [ioc.valor for ioc in iocs]
-    mapa_recurrencia = {}
-    
-    if valores_en_pantalla:
-        stats = db.session.query(Ioc.valor, func.count(Ioc.id))\
-            .filter(Ioc.valor.in_(valores_en_pantalla))\
-            .group_by(Ioc.valor).all()
-        mapa_recurrencia = {item[0]: item[1] for item in stats}
+    mapa_recurrencia =obtener_mapa_recurrencia(iocs)
 
     return render_template(
         'csirt/detalle_iocs.html', 

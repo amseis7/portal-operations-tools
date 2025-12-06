@@ -22,22 +22,26 @@
 
                     <li>
                         <form action="{{ url_for(ruta_analisis, **arg_id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Todo (Completo)</button>
                         </form>
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <form action="{{ url_for(ruta_analisis, tipo='ip', **arg_id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo IPs</button>
                         </form>
                     </li>
                     <li>
                         <form action="{{ url_for(ruta_analisis, tipo='url', **arg_id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo URLs / Dominios</button>
                         </form>
                     </li>
                     <li>
                         <form action="{{ url_for(ruta_analisis, tipo='hash', **arg_id) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo Hashes (Archivos)</button>
                         </form>
                     </li>
@@ -45,6 +49,7 @@
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <form action="{{ url_for(ruta_analisis, force='true', **arg_id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Estás seguro? Esto ignorará la caché y consumirá cuota de API por CADA IoC.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item text-danger">
                                 <i class="bi bi-radioactive"></i> Forzar Re-análisis Completo
                             </button>

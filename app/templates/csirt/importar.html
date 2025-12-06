@@ -6,6 +6,7 @@
 
 <div class="card p-4">
     <form action="" method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
         <div class="mb-3">
             <label class="form-label">Archivo CSV</label>
             <input type="file" name="archivo_csv" class="form-control" required accept=".csv">

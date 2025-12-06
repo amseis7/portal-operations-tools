@@ -13,6 +13,7 @@
                 <div class="card-header bg-success text-white fw-bold">Nueva Plantilla</div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                         <div class="mb-2">
                             <label class="form-label small fw-bold">Nombre Plataforma</label>
                             <input type="text" name="nombre" class="form-control form-control-sm" placeholder="Ej: TrendMicro CSV" required>
@@ -92,6 +93,7 @@
                                         </button>
 
                                         <form action="{{ url_for('virustotal.eliminar_template', id=t.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de borrar la plantilla {{ t.nombre_plataforma }}?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button class="btn btn-sm btn-outline-danger border-0" title="Eliminar"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
@@ -104,6 +106,7 @@
                                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                                 </div>
                                                 <form action="{{ url_for('virustotal.editar_template', id=t.id) }}" method="POST">
+                                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                                     <div class="modal-body text-start">
                                                         
                                                         <div class="row mb-3">

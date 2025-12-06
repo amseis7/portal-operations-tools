@@ -19,22 +19,26 @@
                 <ul class="dropdown-menu">
                     <li>
                         <form action="{{ url_for('virustotal.analizar_ticket_csirt', ticket_id=ticket) }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Todo (Completo)</button>
                         </form>
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
                         <form action="{{ url_for('virustotal.analizar_ticket_csirt', ticket_id=ticket, tipo='ip') }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo IPs</button>
                         </form>
                     </li>
                     <li>
                         <form action="{{ url_for('virustotal.analizar_ticket_csirt', ticket_id=ticket, tipo='url') }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo URLs / Dominios</button>
                         </form>
                     </li>
                     <li>
                         <form action="{{ url_for('virustotal.analizar_ticket_csirt', ticket_id=ticket, tipo='hash') }}" method="POST" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <button type="submit" class="dropdown-item">Solo Hashes (Archivos)</button>
                         </form>
                     </li>

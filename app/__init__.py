@@ -2,7 +2,7 @@ from flask import Flask, request, redirect, url_for
 import os
 from app.models import User
 from config import Config
-from app.extensions import db, login_manager
+from app.extensions import db, login_manager, csrf
 from flask_apscheduler import APScheduler
 
 # Aceptamos instance_path como opcional (None por defecto)
@@ -29,6 +29,7 @@ def create_app(config_class=Config, instance_path=None):
     login_manager.login_view = 'auth.login'  # <--- "Si no está logueado, mándalo aquí"
     login_manager.login_message = "Por favor inicia sesión para acceder."
     login_manager.login_message_category = "warning"
+    csrf.init_app(app)
     
     # Scheduler
     scheduler = APScheduler()

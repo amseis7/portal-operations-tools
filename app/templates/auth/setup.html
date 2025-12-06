@@ -22,6 +22,7 @@
                 <p class="text-muted mb-4">No se han detectado usuarios. Por favor, crea la cuenta del <strong>Administrador Principal</strong>.</p>
                 
                 <form method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Nombre Completo</label>
                         <input type="text" name="nombre" class="form-control" placeholder="Ej: Administrador del Sistema" required>

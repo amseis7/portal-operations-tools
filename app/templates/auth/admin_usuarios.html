@@ -43,6 +43,7 @@
                                     </button>
 
                                     <form action="{{ url_for('auth.eliminar_usuario', user_id=u.id) }}" method="POST" onsubmit="return confirm('¿Eliminar a {{ u.username }}?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" class="btn btn-outline-danger">
                                             <i class="bi bi-trash"></i> Eliminar
                                         </button>
@@ -60,6 +61,7 @@
                                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                     </div>
                                     <form action="{{ url_for('auth.editar_usuarios', user_id=u.id) }}" method="POST">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <div class="modal-body">
                                             
                                             <div class="mb-3">
@@ -135,6 +137,7 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form action="{{ url_for('auth.crear_usuario') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="modal-body">
             
             <div class="row mb-3">

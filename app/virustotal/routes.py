@@ -5,6 +5,7 @@ from app.extensions import db
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.virustotal import bp
 from app.virustotal.logic import consultar_virustotal_ioc, generar_exportacion_multiformato, procesar_importacion_csirt
+from markupsafe import Markup
 import re
 
 # --- RUTAS DE GESTIÓN DE CASOS ---
@@ -73,16 +74,18 @@ def ver_caso(caso_id):
             return redirect(url_for('virustotal.ver_caso', caso_id=caso.id))
 
     templates_export = ExportTemplate.query.all()
-    return render_template('virustotal/detalle_caso.html', caso=caso, titulo_navbar=f"Caso #{caso.id}", templates_export=templates_export)
+    return render_template('virustotal/detalle_caso.html', caso=caso, titulo_navbar=f"Investigaciones VT", templates_export=templates_export)
 
 @bp.route('/analizar_caso/<int:caso_id>', methods=['POST'])
 @login_required
 def analizar_caso(caso_id):
     if not current_user.virustotal_api_key:
-        flash('Error: Configura tu API Key primero.', 'danger')
+        link = url_for('auth.perfil')
+        mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{link}" class="alert-link">Perfil de Usuario</a>.')
+        flash(mensaje, 'danger')
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
-    caso_id = VtTicket.query.get_or_404(caso_id)
+    caso = VtTicket.query.get_or_404(caso_id)
     tipo_filtro = request.args.get('tipo')
     
     query = VtIoc.query.filter_by(ticket_id=caso_id)
@@ -106,12 +109,8 @@ def analizar_caso(caso_id):
         if consultar_virustotal_ioc(ioc, forzar=force):
             cont_exito += 1
 
-    flash(f'Análisis finalizado. {cont_exito}/{len(iocs)} actualizados.', 'success')
+    flash(f'Análisis finalizado para {caso.nombre}. {cont_exito}/{len(iocs)} actualizados.', 'success')
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id))
-
-# ==============================================================================
-#  NUEVAS RUTAS DE INTEGRACIÓN CSIRT -> VT (IMPORTACIÓN AUTOMÁTICA)
-# =============================================================================
 
 @bp.route('/analizar_ticket_csirt/<ticket_id>', methods=['POST'])
 @login_required
@@ -143,7 +142,6 @@ def analizar_ticket_csirt(ticket_id):
 
     # 3. Redirigir al CASO VT (Nueva pantalla)
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id))
-
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
 @login_required
@@ -208,6 +206,7 @@ def exportar_zip(caso_id):
     zip_file = generar_exportacion_multiformato(caso_id, selected)
     fecha = datetime.now().strftime('%Y%m%d')
     return Response(zip_file, mimetype="application/zip", headers={"Content-disposition": f"attachment; filename=Pack_{caso_id}_{fecha}.zip"})
+
 @bp.route('/admin/templates', methods=['GET', 'POST'])
 @login_required
 def admin_templates():

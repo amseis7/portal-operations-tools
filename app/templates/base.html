@@ -71,6 +71,7 @@
                                         <small class="text-muted" style="font-size: 0.75rem;">{{ notif.timestamp.strftime('%H:%M') }}</small>
                                     </div>
                                     <form action="{{ url_for('main.marcar_leida', notif_id=notif.id) }}" method="POST" class="ms-2">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                         <button type="submit" class="btn btn-link p-0 text-secondary" title="Marcar leída" onclick="event.stopPropagation();">
                                             <i class="bi bi-x-lg"></i>
                                         </button>

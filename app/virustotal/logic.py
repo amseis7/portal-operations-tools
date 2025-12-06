@@ -183,59 +183,12 @@ def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
     
     db.session.commit()
 
-def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
-    """
-    Función auxiliar que:
-    1. Busca/Crea un Caso VT con el nombre del ticket CSIRT.
-    2. Copia los IoCs de CSIRT a ese Caso VT (si no existen).
-    3. Ejecuta el análisis en VT para los IoCs del Caso.
-    4. Retorna el ID del caso VT para redirección.
-    """
-    # 1. Buscar o Crear el Caso
-    nombre_caso = f"CSIRT: {nombre_ticket_csirt}"
-    caso_vt = VtTicket.query.filter_by(nombre=nombre_caso).first()
-    
-    if not caso_vt:
-        caso_vt = VtTicket(
-            nombre=nombre_caso,
-            descripcion=f"Caso generado automáticamente desde el Ticket CSIRT {nombre_ticket_csirt}",
-            usuario_id=current_user.id
-        )
-        db.session.add(caso_vt)
-        db.session.commit()
-        flash(f'Se creó un nuevo Caso de Investigación: {nombre_caso}', 'info')
-
-    # 2. Migrar IoCs (Append)
-    nuevos = 0
-    # Lista de objetos VtIoc que vamos a analizar (ya sean nuevos o existentes)
-    vt_iocs_a_analizar = []
-
-    for ioc_c in iocs_origen:
-        # Verificar duplicados en el destino
-        existe = VtIoc.query.filter_by(ticket_id=caso_vt.id, valor=ioc_c.valor).first()
-        
-        if not existe:
-            nuevo_vt_ioc = VtIoc(
-                ticket_id=caso_vt.id,
-                tipo=ioc_c.tipo,
-                valor=ioc_c.valor
-                # Nota: No copiamos el resultado anterior para forzar una validación fresca 
-                # o dejar que consultar_virustotal_ioc use su caché de fecha.
-            )
-            db.session.add(nuevo_vt_ioc)
-            vt_iocs_a_analizar.append(nuevo_vt_ioc)
-            nuevos += 1
-        else:
-            vt_iocs_a_analizar.append(existe)
-    
-    db.session.commit()
-    
-    # 3. Analizar
     if not current_user.virustotal_api_key:
         flash('IoCs importados, pero NO analizados. Configura tu API Key.', 'warning')
-        return caso_vt.id
+        return caso_vt.id  # <--- IMPORTANTE: Retornar ID
 
     cont_exito = 0
+    # Obtenemos 'force' del request global de Flask
     force = request.args.get('force') == 'true'
     
     for ioc_vt in vt_iocs_a_analizar:
@@ -243,6 +196,7 @@ def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
             cont_exito += 1
             
     flash(f'Proceso completado. {nuevos} IoCs importados. {cont_exito} analizados en VT.', 'success')
+    
     return caso_vt.id
 
 def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='caso'):

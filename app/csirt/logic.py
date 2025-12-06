@@ -20,8 +20,6 @@ except:
     except:
         logger.warning("No se pudo configurar locale es_ES. El parseo de fechas podría fallar si están en texto.")
 
-# --- FUNCIONES AUXILIARES (TUS HERRAMIENTAS) ---
-
 def decrypt_cfemail(cfemail):
     """Tu función original para desencriptar emails de Cloudflare"""
     try:
@@ -58,8 +56,6 @@ def obtener_ultimos_ids_db():
     ).group_by(Alerta.tipo_alerta).all()
 
     return {tipo: nombre for tipo, nombre in resultados if tipo and nombre}
-
-# --- FASE 1: ESCANEO ---
 
 def escanear_y_guardar_alertas(ticket_gestion, responsable, simulacion=False):
     """
@@ -180,8 +176,6 @@ def escanear_y_guardar_alertas(ticket_gestion, responsable, simulacion=False):
 
     return alertas_nuevas_guardadas
 
-# --- FASE 2: DESCARGA DE IOCS ---
-
 def descargar_iocs_para_alerta(alerta_obj, url_suffix, simulacion=False):
     """
     Recibe un objeto Alerta (ya guardado) y su URL parcial.
@@ -261,8 +255,6 @@ def descargar_iocs_para_alerta(alerta_obj, url_suffix, simulacion=False):
     
     return count_iocs
 
-# --- FUNCIÓN PRINCIPAL (ORQUESTADOR) ---
-
 def ejecutar_proceso_csirt(ticket_rf, responsable, simulacion=False):
     """
     Esta es la función que llamará la Ruta.
@@ -299,8 +291,6 @@ def ejecutar_proceso_csirt(ticket_rf, responsable, simulacion=False):
         "msg": f"Se encontraron {len(lista_nuevas)} alertas nuevas y {total_iocs} IOCs.",
         "alertas": [a[0].nombre_alerta for a in lista_nuevas]
     }
-
-# En app/csirt/logic.py
 
 def actualizar_iocs_faltantes(ticket_id):
     """
@@ -483,3 +473,16 @@ def vigilar_nuevas_alertas(app):
 
         except Exception as e:
             print(f"[VIGILANTE] ERROR CRÍTICO: {e}")
+
+def obtener_mapa_recurrencia(lista_iocs):
+    if not lista_iocs:
+        return {}
+
+    valores_en_pantalla = [ioc.valor for ioc in lista_iocs]
+    
+    # Consulta agrupada optimizada
+    stats = db.session.query(Ioc.valor, func.count(Ioc.id))\
+        .filter(Ioc.valor.in_(valores_en_pantalla))\
+        .group_by(Ioc.valor).all()
+    
+    return {item[0]: item[1] for item in stats}

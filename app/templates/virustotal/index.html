@@ -43,6 +43,7 @@
                                 
                                 {% if current_user.is_admin or current_user.id == ticket.usuario_id %}
                                 <form action="{{ url_for('virustotal.eliminar_caso', caso_id=ticket.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de eliminar el caso &quot;{{ ticket.nombre }}&quot;?\nEsta acción borrará todos los IoCs y análisis asociados.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="btn btn-sm btn-danger" title="Eliminar Caso">
                                         <i class="bi bi-trash"></i> Eliminar
                                     </button>
@@ -68,6 +69,7 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form action="{{ url_for('virustotal.crear_caso') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="modal-body">
             <div class="mb-3">
                 <label class="form-label fw-bold">Nombre del Caso / Ticket</label>

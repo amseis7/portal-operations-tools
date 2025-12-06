@@ -105,6 +105,7 @@
 
                                         {% if current_user.is_admin %}
                                         <form action="{{ url_for('csirt.eliminar_ticket', ticket_id=t.ticket) }}" method="POST" onsubmit="return confirm('¿Estás seguro de borrar TODO el historial del ticket {{ t.ticket }}? Esta acción no se puede deshacer.');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button type="submit" class="btn btn-sm btn-danger text-nowrap">
                                                 <i class="bi bi-trash"></i> Eliminar
                                             </button>
@@ -132,6 +133,7 @@
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form action="{{ url_for('csirt.generar_reporte') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="modal-body">
             
             <p class="mb-3">Selecciona el rango para el Excel:</p>
@@ -191,6 +193,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <form action="{{ url_for('csirt.procesar') }}" method="POST" id="formScraping">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
           <div class="modal-body">
             <p class="small text-muted">
                 El sistema buscará alertas nuevas comparando con los últimos registros de la base de datos.

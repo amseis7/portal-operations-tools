@@ -77,30 +77,6 @@ class Alerta(db.Model):
 
     def __repr__(self):
         return f'<Alerta {self.ticket}>'
-    
-class ManualCheck(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    fecha = db.Column(db.DateTime, default=datetime.utcnow)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    
-    # Datos del IoC
-    valor = db.Column(db.Text)
-    tipo = db.Column(db.String(50)) # hash, ip, dominio
-    
-    # Resultados VT
-    vt_score = db.Column(db.String(20)) # Ej: "5/88"
-    vt_permalink = db.Column(db.String(255))
-    vt_motores_json = db.Column(db.Text) # El detalle de motores
-
-    # Relación con usuario (para saber quién analizó)
-    usuario = db.relationship('User', backref='analisis_manuales')
-
-    def set_motores(self, datos_dict):
-        self.vt_motores_json = json.dumps(datos_dict)
-
-    def get_motores(self):
-        if not self.vt_motores_json: return {}
-        return json.loads(self.vt_motores_json)
 
 class Ioc(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -164,7 +140,7 @@ class VtIoc(db.Model):
     ticket_id = db.Column(db.Integer, db.ForeignKey('vt_ticket.id'), nullable=False)
     
     tipo = db.Column(db.String(50)) # ip, hash, domain
-    valor = db.Column(db.Text)
+    valor = db.Column(db.String(255), index=True)
     
     # Datos de VT (Reutilizamos la estructura que ya conoces)
     vt_last_check = db.Column(db.DateTime)
