@@ -1,8 +1,32 @@
 from flask import render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, current_user, login_required
 from app.models import User, db
+from app.virustotal.logic import obtener_uso_api
 from app.auth import bp
 from app.utils import admin_required
+import re
+
+def validar_complejidad_password(password):
+    """
+    Verifica que la contreaseña cumpla con los estándares de seguridad:
+    - Mínimo 8 caracteres
+    - Al menos 1 número
+    - Al menos 1 mayúscula
+    - Al menos 1 símbolo especial
+    """
+    if len(password) < 8:
+        return False, "La contraseña es muy corta. Debe tener al menos 8 caracteres."
+    
+    if not re.search(r"\d", password):
+        return False, "La contraseña debe incluir al menos un número."
+    
+    if not re.search(r"[A-Z]", password):
+        return False, "La contraseña debe incluir al menos un alerta mayúscula."
+    
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "La contraseña debe incluir al menos un simbolo especial (ej: !@#$).)"
+    
+    return True, ""
 
 @bp.route('/setup', methods=['GET', 'POST'])
 def setup():
@@ -52,7 +76,6 @@ def check_password_change_needed():
                 flash('Por seguridad, debes cambiar tu contraseña inicial antes de continuar.', 'warning')
                 return redirect(url_for('auth.cambiar_password_inicial'))
 
-
 @bp.route('/cambiar_password_inicial', methods=['GET', 'POST'])
 @login_required
 def cambiar_password_inicial():
@@ -64,8 +87,9 @@ def cambiar_password_inicial():
             flash('Las contraseñas no coinciden.', 'danger')
             return redirect(url_for('auth.cambiar_password_inicial'))
         
-        if len(new_pass) < 6:
-            flash('La contraseña es muy corta.', 'danger')
+        es_valida, mensaje_error = validar_complejidad_password(new_pass)
+        if not es_valida:
+            flash(mensaje_error, 'danger')
             return redirect(url_for('auth.cambiar_password_inicial'))
 
         # 1. Cambiar contraseña
@@ -116,6 +140,7 @@ def login():
 @bp.route('/perfil', methods=['GET', 'POST'])
 @login_required
 def perfil():
+    datos_cuota = None
     if request.method == 'POST':
         try:
             # --- BLOQUE 1: DATOS BÁSICOS (Siempre se guardan) ---
@@ -128,7 +153,6 @@ def perfil():
             
             if vt_key and "****" not in vt_key: # Evitamos guardar los asteriscos si el usuario no la cambió
                 current_user.set_vt_key(vt_key.strip()) # <--- Usamos el método seguro
-                print(f"--- [DEBUG] Key encriptada y guardada ---")
 
             # Guardamos los cambios básicos INMEDIATAMENTE
             db.session.add(current_user)
@@ -144,13 +168,20 @@ def perfil():
             if (current_pass and current_pass.strip()) or (new_pass and new_pass.strip()):
                 
                 if not current_user.check_password(current_pass):
-                    flash('Error: La contraseña actual no es correcta. No se cambió la contraseña.', 'danger')
-                    # No hacemos return, dejamos que recargue la página
+                    flash('Error: La contraseña actual no es correcta.', 'danger')
+                    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
                 
                 elif new_pass != confirm_pass:
                     flash('Error: Las nuevas contraseñas no coinciden.', 'warning')
-                
+                    # CAMBIO: Renderizamos directamente
+                    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+                    
                 else:
+                    es_valida, mensaje_error = validar_complejidad_password(new_pass)
+                    if not es_valida:
+                        flash(mensaje_error, 'danger')
+                        return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+                    
                     current_user.set_password(new_pass)
                     db.session.commit() # Segundo commit solo para pass
                     flash('Contraseña actualizada correctamente.', 'success')
@@ -161,8 +192,18 @@ def perfil():
             flash(f'Error interno al guardar: {e}', 'danger')
 
         return redirect(url_for('auth.perfil'))
+    
+    # Solo consultamos si viene el parámetro ?ver_cuota=1 en la URL
+    if request.args.get('ver_cuota') == '1' and current_user.virustotal_api_key:
+        api_key_real = current_user.get_vt_key()
+        if api_key_real:
+            datos_cuota = obtener_uso_api(api_key_real)
+            if not datos_cuota:
+                flash('No se pudo obtener la cuota. Verifica tu API Key.', 'warning')
+            else:
+                flash('Cuota actualizada correctamente.', 'success')
 
-    return render_template('auth/perfil.html')
+    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
 
 @bp.route('/admin/usuarios')
 @login_required
@@ -178,8 +219,8 @@ def admin_usuarios():
 def crear_usuario():
     username = request.form.get('username')
     password = request.form.get('password')
-    nombre_completo = request.form.get('nombre_completo') # Nuevo
-    email = request.form.get('email')                     # Nuevo
+    nombre_completo = request.form.get('nombre_completo')
+    email = request.form.get('email')
     is_admin = request.form.get('is_admin') == 'on'
     lista_herramientas = request.form.getlist('tools')
 
@@ -189,11 +230,17 @@ def crear_usuario():
         flash(f'El usuario {username} ya existe.', 'warning')
         return redirect(url_for('auth.admin_usuarios'))
 
+    es_valida, mensaje_error = validar_complejidad_password(password)
+    if not es_valida:
+        flash(f'Error al crear usuario: {mensaje_error}', 'danger')
+        usuarios = User.query.all()
+        return render_template('auth/admin_usuarios.html', usuarios=usuarios)
+
     # Creamos usuario con todos los datos
     nuevo_user = User(
         username=username, 
-        nombre_completo=nombre_completo, # Guardamos nombre
-        email=email,                     # Guardamos email
+        nombre_completo=nombre_completo,
+        email=email,
         is_admin=is_admin, 
         authorized_tools=tools_string
     )

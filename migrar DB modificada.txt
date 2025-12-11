@@ -68,23 +68,16 @@ Ahora tienes dos escenarios, elige el que corresponda a donde estás trabajando:
 Escenario A: Estás en tu PC Local (PyCharm)
 Simplemente ejecuta el script desde la terminal de PyCharm:
 
-Bash
-
 python migrar_vt.py
 Si todo sale bien, verás varios ✅ Columna agregada.
 
 Escenario B: Estás en Docker (Servidor)
-Si quieres aplicar esto a tu servidor en producción sin borrar el volumen, debes hacer que el contenedor ejecute este script.
-
-Asegúrate de que el archivo migrar_vt.py esté en tu carpeta del proyecto.
-
-Reconstruye la imagen (para que el archivo migrar_vt.py se meta dentro del contenedor):
-
-Bash
 
 docker build -t portal-operations-tools:vt_beta .
 Ejecuta el script dentro de un contenedor efímero (conectado a tus datos):
 
-Bash
-
 docker run --rm -v portal_db:/app/instance portal-operations-tools:vt_beta python migrar_vt.py
+
+pyinstaller --name "Portal-Operations-Tools" --onefile --add-data "app/templates;app/templates" --add-data "app/static;app/static" --add-data "migrations;migrations" server.py
+
+C0.P$/r*4r#6

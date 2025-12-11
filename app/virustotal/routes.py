@@ -1,10 +1,11 @@
-from flask import render_template, redirect, url_for, flash, request, Response
+from flask import render_template, redirect, url_for, flash, request, Response, jsonify
 from flask_login import login_required, current_user
+from app.virustotal.background import lanzar_analisis_background
 from datetime import datetime
 from app.extensions import db
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.virustotal import bp
-from app.virustotal.logic import consultar_virustotal_ioc, generar_exportacion_multiformato, procesar_importacion_csirt
+from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
 from markupsafe import Markup
 import re
 
@@ -105,12 +106,15 @@ def analizar_caso(caso_id):
 
     cont_exito = 0
     force = request.args.get('force') == 'true'
-    for ioc in iocs:
-        if consultar_virustotal_ioc(ioc, forzar=force):
-            cont_exito += 1
 
-    flash(f'Análisis finalizado para {caso.nombre}. {cont_exito}/{len(iocs)} actualizados.', 'success')
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id))
+    """for ioc in iocs:
+        if consultar_virustotal_ioc(ioc, forzar=force):
+            cont_exito += 1"""
+
+    lanzar_analisis_background(caso.id, current_user.id, force)
+    
+    flash(f'Análisis en ejecucion, cargar la pagina para ver los datos actualizados', 'success')
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id, analyzing=1))
 
 @bp.route('/analizar_ticket_csirt/<ticket_id>', methods=['POST'])
 @login_required
@@ -141,7 +145,7 @@ def analizar_ticket_csirt(ticket_id):
     caso_vt_id = procesar_importacion_csirt(ticket_id, iocs_csirt)
 
     # 3. Redirigir al CASO VT (Nueva pantalla)
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id))
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id, analyzing=1))
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
 @login_required
@@ -176,7 +180,7 @@ def analizar_alerta(alerta_id):
     caso_vt_id = procesar_importacion_csirt(ticket_padre, iocs_csirt)
 
     # 4. Redirigir al CASO VT
-    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre))
+    return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre, analyzing=1))
 
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
 @bp.route('/eliminar_caso/<int:caso_id>', methods=['POST'])
@@ -196,16 +200,16 @@ def eliminar_caso(caso_id):
         flash(f'Error: {e}', 'danger')
     return redirect(url_for('virustotal.index'))
 
-@bp.route('/exportar_zip/<int:caso_id>', methods=['POST'])
+@bp.route('/exportar_zip/<int:caso_id>/<caso_nombre>', methods=['POST'])
 @login_required
-def exportar_zip(caso_id):
+def exportar_zip(caso_id, caso_nombre):
     # (Mantén tu código de exportación aquí)
     selected = request.form.getlist('templates_seleccionados')
     if not selected:
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
     zip_file = generar_exportacion_multiformato(caso_id, selected)
     fecha = datetime.now().strftime('%Y%m%d')
-    return Response(zip_file, mimetype="application/zip", headers={"Content-disposition": f"attachment; filename=Pack_{caso_id}_{fecha}.zip"})
+    return Response(zip_file, mimetype="application/zip", headers={"Content-disposition": f"attachment; filename=Pack_{caso_nombre}_{fecha}.zip"})
 
 @bp.route('/admin/templates', methods=['GET', 'POST'])
 @login_required
@@ -265,3 +269,34 @@ def editar_template(id):
         flash(f'Error al actualizar: {e}', 'danger')
         
     return redirect(url_for('virustotal.admin_templates'))
+
+@bp.route('/api/estado_caso/<int:caso_id>')
+@login_required
+def estado_caso(caso_id):
+    """
+    Ruta API para que la barra de progreso consulte el estado.
+    """
+    try:
+        # Total de IoCs en el caso
+        total = VtIoc.query.filter_by(ticket_id=caso_id).count()
+        
+        # Procesados: Los que tienen fecha de check O tienen error registrado
+        procesados = VtIoc.query.filter_by(ticket_id=caso_id).filter(
+            (VtIoc.vt_last_check != None) | (VtIoc.vt_motores_json.like('%"ERROR":%'))
+        ).count()
+        
+        porcentaje = 0
+        if total > 0:
+            porcentaje = int((procesados / total) * 100)
+        
+        # Estado simple para el front
+        estado = "completado" if porcentaje >= 100 else "procesando"
+        
+        return jsonify({
+            "total": total,
+            "procesados": procesados,
+            "porcentaje": porcentaje,
+            "estado": estado
+        })
+    except Exception as e:
+        return jsonify({"error": str(e), "porcentaje": 0, "estado": "error"}), 500

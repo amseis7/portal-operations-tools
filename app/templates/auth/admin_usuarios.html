@@ -143,7 +143,7 @@
             <div class="row mb-3">
                 <div class="col-6">
                     <label class="form-label fw-bold">Usuario (Login)</label>
-                    <input type="text" name="username" class="form-control" required placeholder="ej: fernando.garrido">
+                    <input type="text" name="username" class="form-control" required placeholder="ej: fgarridoc" value="{{ request.form.get('username', '') }}">
                 </div>
                 <div class="col-6">
                     <label class="form-label fw-bold">Contraseña</label>
@@ -153,12 +153,12 @@
 
             <div class="mb-3">
                 <label class="form-label">Nombre Completo (Responsable)</label>
-                <input type="text" name="nombre_completo" class="form-control" required placeholder="ej: Fernando Garrido">
+                <input type="text" name="nombre_completo" class="form-control" required placeholder="ej: Fernando Garrido" value="{{ request.form.get('nombre_completo', '') }}">
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Correo Electrónico</label>
-                <input type="email" name="email" class="form-control" placeholder="ej: alexis@empresa.com">
+                <input type="email" name="email" class="form-control" placeholder="ej: usuario@empresa.com" value="{{ request.form.get('email', '') }}">
             </div>
 
             <div class="mb-3 p-3 bg-light p-2 border rounded">
@@ -179,15 +179,15 @@
                     
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="tools" value="csirt" id="tool_csirt" checked>
-                        <label class="form-check-label" for="tool_csirt">
+                        <label class="form-check-label text-muted" for="tool_csirt">
                             Gestión CSIRT
                         </label>
                     </div>
 
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" name="tools" value="virustotal" id="tool_vt">
-                        <label class="form-check-label text-muted" for="tool_vt">
-                            VirusTotal <small>(Próximamente)</small>
+                        <label class="form-check-label" for="tool_vt">
+                            VirusTotal
                         </label>
                     </div>
 
@@ -202,4 +202,15 @@
     </div>
   </div>
 </div>
+
+{% if request.method == 'POST' and request.endpoint == 'auth.crear_usuario' %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Reemplaza '#modalCrearUsuario' con el ID real de tu modal
+        var myModal = new bootstrap.Modal(document.getElementById('modalCrearUsuario'));
+        myModal.show();
+    });
+</script>
+{% endif %}
+
 {% endblock %}

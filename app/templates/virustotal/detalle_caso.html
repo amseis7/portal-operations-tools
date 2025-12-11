@@ -7,6 +7,24 @@
             <h3 class="mb-0">Caso #{{ caso.id }}: <span class="text-primary">{{ caso.nombre }}</span></h3>
             <small class="text-muted">{{ caso.descripcion }}</small>
         </div>
+
+        <div id="zona-progreso" class="card mb-3 border-info d-none">
+            <div class="card-body">
+                <h5 class="card-title text-info">
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                    Analizando en segundo plano...
+                </h5>
+                <div class="progress mt-2" style="height: 25px;">
+                    <div id="barra-progreso" class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
+                        role="progressbar" style="width: 0%;">
+                        0%
+                    </div>
+                </div>
+                <div class="text-muted small mt-1">
+                    Procesados: <span id="contador-progreso">0/0</span>
+                </div>
+            </div>
+        </div>
         
         <div>
             <form action="{{ url_for('virustotal.analizar_caso', caso_id=caso.id, source=request.args.get('source'), origin_id=request.args.get('origin_id')) }}" method="POST" class="d-inline">
@@ -27,7 +45,7 @@
                             <h5 class="modal-title">Generar Archivos de Bloqueo</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
-                        <form action="{{ url_for('virustotal.exportar_zip', caso_id=caso.id) }}" method="POST">
+                        <form action="{{ url_for('virustotal.exportar_zip', caso_id=caso.id, caso_nombre=caso.nombre) }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <div class="modal-body">
                                 <p class="small text-muted">Activa las plataformas para las que deseas generar archivos. Se incluirán solo los IoCs que dicha plataforma <strong>NO detectó</strong>.</p>
@@ -179,7 +197,14 @@
                                         {% endif %}
 
                                     {% else %}
-                                        <span class="badge bg-light text-dark border">Pendiente</span>
+                                        {% set motores = ioc.get_motores() %}
+                                        {% if motores.get('ERROR') %}
+                                            <span class="badge bg-danger" title="{{ motores['ERROR'] }}">
+                                                <i class="bi bi-exclamation-triangle"></i> Error
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Pendiente</span>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 
@@ -244,5 +269,65 @@
             btn.disabled = false;
         }
     }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        // Obtenemos el ID sin comillas que den error en el editor
+        var casoId = "{{ caso.id }}";
+        
+        var zonaProgreso = document.getElementById('zona-progreso');
+        var barra = document.getElementById('barra-progreso');
+        var contador = document.getElementById('contador-progreso');
+        var intervalo = null;
+
+        function consultarEstado() {
+            fetch('/virustotal/api/estado_caso/' + casoId)
+                .then(function(response) { return response.json(); })
+                .then(function(data) {
+                    var pct = data.porcentaje;
+                    barra.style.width = pct + "%";
+                    barra.innerText = pct + "%";
+                    contador.innerText = data.procesados + " / " + data.total;
+
+                    // Si sigue procesando, mostramos (por si estaba oculto)
+                    if (data.estado === 'procesando') {
+                        zonaProgreso.classList.remove('d-none');
+                    } else if (data.estado === 'completado' && pct >= 100) {
+                        if (!zonaProgreso.classList.contains('d-none')) {
+                            barra.classList.remove('bg-info');
+                            barra.classList.add('bg-success');
+                            barra.innerText = "¡Finalizado!";
+                            // Recargar la página limpia (sin el parámetro analyzing)
+                            setTimeout(function() { 
+                                // Quitamos el parámetro analyzing de la URL antes de recargar
+                                var url = new URL(window.location.href);
+                                url.searchParams.delete('analyzing');
+                                window.location.href = url.toString();
+                            }, 1500);
+                        }
+                    }
+                })
+                .catch(function(err) { console.error("Error polling:", err); });
+        }
+
+        // --- LÓGICA CLAVE: ¿DEBO MOSTRAR LA BARRA? ---
+        var urlParams = new URLSearchParams(window.location.search);
+        var vieneDeBoton = urlParams.has('analyzing');
+
+        fetch('/virustotal/api/estado_caso/' + casoId)
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                // CONDICIÓN: Mostramos la barra SOLO SI:
+                // 1. Acabamos de pulsar el botón (vieneDeBoton)
+                // 2. O SI ya hay progreso real (>0) pero no ha terminado (<100)
+                // Esto evita que salga en casos nuevos con 0 procesados.
+                
+                var enProgresoReal = (d.procesados > 0 && d.porcentaje < 100);
+
+                if (vieneDeBoton || enProgresoReal) {
+                    zonaProgreso.classList.remove('d-none');
+                    intervalo = setInterval(consultarEstado, 3000); // Iniciar Polling
+                }
+            });
+    });
 </script>
 {% endblock %}

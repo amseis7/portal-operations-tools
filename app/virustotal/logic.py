@@ -7,16 +7,13 @@ import zipfile
 import re
 from io import BytesIO
 from datetime import datetime
-from flask import flash, request, current_app
+from flask import flash, request
 from flask_login import current_user
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from app.extensions import db
 from app.models import Ioc, VtIoc, Alerta, ExportTemplate, VtTicket
 
 logger = logging.getLogger(__name__)
-
-# ... (Las funciones buscar_resultado_previo, consultar_virustotal_ioc, etc. SIGUEN IGUAL, no las borres) ...
-# (Por brevedad, aquí pongo solo la función que cambia, pero tú mantén el resto del archivo)
 
 def buscar_resultado_previo(valor_hash):
     # ... (Mismo código de antes) ...
@@ -32,20 +29,22 @@ def buscar_resultado_previo(valor_hash):
         ).order_by(VtIoc.vt_last_check.desc()).first()
     return existente
 
-def consultar_virustotal_ioc(ioc_obj, forzar=False):
+def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     """Consulta VT para un objeto (Ioc o VtIoc)."""
     
-    # 1. CACHÉ
     if not forzar and ioc_obj.vt_last_check:
         tiempo = datetime.now() - ioc_obj.vt_last_check
         if tiempo.days < 7:
             return True
-
-    # 2. API KEY
-    api_key = current_user.get_vt_key()
+        
+    if not api_key:
+        try:
+            if current_user.is_authenticated:
+                api_key = current_user.get_vt_key()
+        except:
+            pass
     if not api_key: return False
     
-    motores_interes = current_app.config['VT_MOTORES_INTERES']
     headers = {"x-apikey": api_key}
     base_url = "https://www.virustotal.com/api/v3"
     
@@ -75,6 +74,19 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False):
             response = requests.get(endpoint, headers=headers, timeout=15)
             
             if response.status_code == 429:
+                print(f"[VT LIMIT] Cuota excedida (429) para {valor_original}. Verificando cuota real...") # <--- DIAGNÓSTICO
+                cuota = obtener_uso_api(api_key)
+
+                if cuota:
+                    usado = cuota.get('diario_usado', 0)
+                    limite = cuota.get('diario_limite', 0)
+
+                if isinstance(limite, int) and usado >= limite:
+                    print(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
+                    # Lanzamos una excepción específica para detener el bucle en background
+                    raise Exception("VT_QUOTA_EXCEEDED")
+
+                print(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
                 time.sleep(60)
                 continue
             
@@ -116,6 +128,18 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False):
                 resultados_motores["filename"] = attrs.get("meaningful_name", attrs.get("title", "-"))
                 ioc_obj.set_motores(resultados_motores)
                 
+                if isinstance(ioc_obj, VtIoc):
+                    # Buscamos si existe este mismo valor en la tabla Ioc de CSIRT
+                    iocs_csirt = Ioc.query.filter_by(valor=valor_original).all()
+                    for ioc_original in iocs_csirt:
+                        # Copiamos los resultados frescos al original
+                        ioc_original.vt_last_check = ioc_obj.vt_last_check
+                        ioc_original.vt_positives = ioc_obj.vt_positives
+                        ioc_original.vt_total = ioc_obj.vt_total
+                        ioc_original.vt_reputation = ioc_obj.vt_reputation
+                        ioc_original.vt_permalink = ioc_obj.vt_permalink
+                        ioc_original.set_motores(resultados_motores)
+                
                 db.session.commit()
                 return True
 
@@ -129,21 +153,18 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False):
                 return True
             
             else:
+                print(f"[VT ERROR] Fallo con código {response.status_code}: {response.text}")
                 return False
 
     except Exception as e:
+        if "VT_QUOTA_EXCEEDED" in str(e):
+            raise e
+        
         logger.error(f"Excepción VT: {e}")
         return False
     return False
 
 def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
-    """
-    Función auxiliar que:
-    1. Busca/Crea un Caso VT con el nombre del ticket CSIRT.
-    2. Copia los IoCs de CSIRT a ese Caso VT (si no existen).
-    3. Ejecuta el análisis en VT para los IoCs del Caso.
-    4. Retorna el ID del caso VT para redirección.
-    """
     # 1. Buscar o Crear el Caso
     nombre_caso = f"CSIRT: {nombre_ticket_csirt}"
     caso_vt = VtTicket.query.filter_by(nombre=nombre_caso).first()
@@ -183,7 +204,7 @@ def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
     
     db.session.commit()
 
-    if not current_user.virustotal_api_key:
+    """if not current_user.virustotal_api_key:
         flash('IoCs importados, pero NO analizados. Configura tu API Key.', 'warning')
         return caso_vt.id  # <--- IMPORTANTE: Retornar ID
 
@@ -195,7 +216,7 @@ def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
         if consultar_virustotal_ioc(ioc_vt, forzar=force):
             cont_exito += 1
             
-    flash(f'Proceso completado. {nuevos} IoCs importados. {cont_exito} analizados en VT.', 'success')
+    flash(f'Proceso completado. {nuevos} IoCs importados. {cont_exito} analizados en VT.', 'success')"""
     
     return caso_vt.id
 
@@ -286,13 +307,8 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
                 try:
                     linea = template.row_template.format(**variables)
                     
-                    # --- LIMPIEZA AUTOMÁTICA PARA XML (NUEVO) ---
-                    # Si la plantilla generó algo como <SHA1Hash>0x</SHA1Hash> (vacío), lo borramos.
-                    # La regex busca: <Etiqueta>0x</Etiqueta> y lo reemplaza por nada.
                     linea = re.sub(r'<([a-zA-Z0-9]+)>0x</\1>\s*', '', linea)
-                    # --------------------------------------------
 
-                    # Solo agregamos la línea si no quedó vacía después de la limpieza
                     if linea.strip():
                         contenido_archivo.append(linea)
                         count_agregados += 1
@@ -310,3 +326,36 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
 
     zip_buffer.seek(0)
     return zip_buffer
+
+def obtener_uso_api(api_key):
+    """
+    Consulta directa al endpoint de Usuario para obtener las cuotas oficiales.
+    """
+    # En VT API v3, puedes usar tu propia API Key como ID de usuario para ver tus datos
+    url = f"https://www.virustotal.com/api/v3/users/{api_key}"
+    headers = {"x-apikey": api_key}
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json().get("data", {}).get("attributes", {})
+            quotas = data.get("quotas", {}).get("api_requests_daily", {})
+            quotas_hourly = data.get("quotas", {}).get("api_requests_hourly", {})
+            quotas_monthly = data.get("quotas", {}).get("api_requests_monthly", {})
+
+            return {
+                "diario_usado": quotas.get("used", 0),
+                "diario_limite": quotas.get("allowed", "N/A"),
+                "hora_usado": quotas_hourly.get("used", 0),
+                "hora_limite": quotas_hourly.get("allowed", "N/A"),
+                "mensual_usado": quotas_monthly.get("used", 0),
+                "mensual_limite": quotas_monthly.get("allowed", "N/A")
+            }
+        else:
+            logger.error(f"Error VT Quota: {response.status_code} - {response.text}")
+            return None
+
+    except Exception as e:
+        logger.error(f"Excepción consultando cuota VT: {e}")
+        return None

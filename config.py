@@ -2,7 +2,7 @@ import os
 import sys
 
 class Config:
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'tu-clave-secreta-super-segura'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or '-pjY4,Ni>66W,Kdi^:XaTxxe=}X_6@w672ZF+qy'
 
     VIRUSTOTAL_API_KEY = os.environ.get('VT_QPI_KEY') or 'TU_API_KEY'
     VT_MOTORES_INTERES = [

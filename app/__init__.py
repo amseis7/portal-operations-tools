@@ -1,14 +1,12 @@
-from flask import Flask, request, redirect, url_for
-import os
-from app.models import User
+from flask import Flask
+import os, sys, logging
 from config import Config
-from app.extensions import db, login_manager, csrf
+from app.extensions import db, login_manager, csrf, migrate
+from sqlalchemy import text, inspect
 from flask_apscheduler import APScheduler
 
 # Aceptamos instance_path como opcional (None por defecto)
 def create_app(config_class=Config, instance_path=None):
-    
-    # Si nos pasan una ruta específica (PyInstaller), la usamos.
     if instance_path:
         app = Flask(__name__, instance_path=instance_path)
     else:
@@ -30,6 +28,22 @@ def create_app(config_class=Config, instance_path=None):
     login_manager.login_message = "Por favor inicia sesión para acceder."
     login_manager.login_message_category = "warning"
     csrf.init_app(app)
+    
+    if getattr(sys, 'frozen', False):
+        # Si estamos corriendo desde el .exe, buscamos en la carpeta temporal
+        migration_dir = os.path.join(sys._MEIPASS, 'migrations')
+    else:
+        # Si estamos en desarrollo, usamos la carpeta normal
+        migration_dir = 'migrations'
+
+    try:
+        migrate.init_app(app, db, directory=migration_dir)
+
+        with app.app_context():
+            db.create_all()
+
+    except Exception as e:
+        print(f"Advertencia: No se pudo iniciar Flask-Migrate: {e}")
     
     # Scheduler
     scheduler = APScheduler()
