@@ -36,16 +36,30 @@
 
                 <form method="POST">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    
                     <div class="mb-3">
                         <label class="form-label fw-bold">Nueva Contraseña</label>
-                        <input type="password" name="new_password" class="form-control" required minlength="6" autofocus>
+                        <input type="password" name="new_password" id="newPass" class="form-control" required autofocus onkeyup="verificarPassword()">
+                        
+                        <div id="passFeedback" class="small mt-2 p-2 bg-light border rounded d-none">
+                            <strong class="d-block text-muted mb-1">Requisitos:</strong>
+                            <ul class="list-unstyled mb-0" style="font-size: 0.85rem;">
+                                <li id="req-len" class="text-danger"><i class="bi bi-circle"></i> Mínimo 8 caracteres</li>
+                                <li id="req-num" class="text-danger"><i class="bi bi-circle"></i> Al menos un número</li>
+                                <li id="req-cap" class="text-danger"><i class="bi bi-circle"></i> Una mayúscula</li>
+                                <li id="req-sym" class="text-danger"><i class="bi bi-circle"></i> Un símbolo (!@#$...)</li>
+                            </ul>
+                        </div>
                     </div>
+
                     <div class="mb-4">
                         <label class="form-label fw-bold">Confirmar Nueva Contraseña</label>
-                        <input type="password" name="confirm_password" class="form-control" required minlength="6">
+                        <input type="password" name="confirm_password" id="confirmPass" class="form-control" required onkeyup="verificarCoincidencia()">
+                        <div id="matchFeedback" class="small mt-1"></div>
                     </div>
+
                     <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-dark">Guardar y Entrar</button>
+                        <button type="submit" class="btn btn-dark" id="btnSubmit">Guardar y Entrar</button>
                         <a href="{{ url_for('auth.logout') }}" class="btn btn-link text-muted">Cancelar y Salir</a>
                     </div>
                 </form>
@@ -54,5 +68,74 @@
     </div>
     
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+
+    <script>
+        function verificarPassword() {
+            const pass = document.getElementById('newPass').value;
+            const feedback = document.getElementById('passFeedback');
+            
+            if (pass.length > 0) feedback.classList.remove('d-none');
+            else feedback.classList.add('d-none');
+
+            const hasLen = pass.length >= 8;
+            const hasNum = /\d/.test(pass);
+            const hasCap = /[A-Z]/.test(pass);
+            const hasSym = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
+
+            if (hasLen && hasNum && hasCap && hasSym) {
+                feedback.classList.add('d-none')
+            } else {
+                feedback.classList.remove('d-none')
+            }
+
+            updateItem('req-len', hasLen);
+            updateItem('req-num', hasNum);
+            updateItem('req-cap', hasCap);
+            updateItem('req-sym', hasSym);
+
+            const input = document.getElementById('newPass');
+            if (hasLen && hasNum && hasCap && hasSym) {
+                input.classList.add('is-valid');
+                input.classList.remove('is-invalid');
+            } else {
+                input.classList.remove('is-valid');
+            }
+            verificarCoincidencia();
+        }
+
+        function updateItem(id, isValid) {
+            const el = document.getElementById(id);
+            if (isValid) {
+                el.className = 'text-success fw-bold';
+                el.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + el.innerText;
+            } else {
+                el.className = 'text-danger';
+                el.innerHTML = '<i class="bi bi-circle"></i> ' + el.innerText.replace('✓ ', '');
+            }
+        }
+
+        function verificarCoincidencia() {
+            const pass = document.getElementById('newPass').value;
+            const confirm = document.getElementById('confirmPass').value;
+            const feedback = document.getElementById('matchFeedback');
+            const inputConf = document.getElementById('confirmPass');
+
+            if (confirm.length === 0) {
+                inputConf.classList.remove('is-valid', 'is-invalid');
+                feedback.innerHTML = "";
+                return;
+            }
+
+            if (pass === confirm && pass.length > 0) {
+                inputConf.classList.add('is-valid');
+                inputConf.classList.remove('is-invalid');
+                feedback.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-lg"></i> Coinciden</span>';
+            } else {
+                inputConf.classList.add('is-invalid');
+                inputConf.classList.remove('is-valid');
+                feedback.innerHTML = '<span class="text-danger">No coinciden</span>';
+            }
+        }
+    </script>
 </body>
 </html>

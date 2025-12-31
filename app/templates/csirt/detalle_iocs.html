@@ -64,7 +64,6 @@
                 <a href="{{ url_for('csirt.ver_gestion', ticket_id=id_volver) }}" class="btn btn-secondary">Volver</a>
             {% endif %}
         </div>
-
     </div>
 
     {% if filtro_activo %}
@@ -94,9 +93,6 @@
                         <th>Tipo</th>
                         <th>Valor</th>
                         <th>Alerta Origen</th>
-                        <!--<th class="text-center">VT Score</th>
-                        <th class="text-center">Reputación</th>
-                        <th class="text-center">Reporte</th>-->
                         <th class="text-center">Detecciones</th>
                         <th class="text-center">Estado</th>
                         <th class="text-center">Reporte</th>
@@ -163,79 +159,6 @@
                     <tr><td colspan="5" class="text-center py-5 text-muted">La lista está vacía. Usa el panel izquierdo para agregar IoCs.</td></tr>
                     {% endfor %}
                 </tbody>
-                <!--<tbody>
-                    {% for ioc in iocs %}
-                    <tr>
-                        <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
-                        <td class="font-monospace small">
-                            <div class="d-flex align-items-center">
-                                <span class="text-truncate" style="max-width: 300px;" title="{{ ioc.valor }}">
-                                    {{ ioc.valor }}
-                                </span>
-
-                                {% set repeticiones = mapa_recurrencia.get(ioc.valor, 1) %}
-                                
-                                {% if repeticiones > 1 %}
-                                    <a href="{{ url_for('csirt.buscar_ioc', q=ioc.valor) }}" 
-                                    class="ms-2 badge rounded-pill bg-warning text-dark text-decoration-none border border-warning" 
-                                    title="Este IoC aparece en {{ repeticiones }} registros históricos. Clic para ver cronología.">
-                                        <i class="bi bi-clock-history"></i> {{ repeticiones }}
-                                    </a>
-                                {% endif %}
-                            </div>
-                        </td>
-                        <td><small>{{ ioc.alerta.nombre_alerta }}</small></td>
-
-                        <td class="text-center">
-                            {% if ioc.vt_last_check %}
-                                {% if ioc.vt_positives > 0 %}
-                                    <span class="badge bg-danger">{{ ioc.vt_positives }} / {{ ioc.vt_total }}</span>
-                                {% else %}
-                                    <span class="badge bg-success">0 / {{ ioc.vt_total }}</span>
-                                {% endif %}
-                            {% else %}
-                                <span class="text-muted small">-</span>
-                            {% endif %}
-                        </td>
-
-                        <td class="text-center">
-                        {% if ioc.vt_last_check %}
-                                {% set motores = ioc.get_motores() %}
-                                
-                                {# CASO 1: DESCONOCIDO #}
-                                {% if motores.get('ERROR') == 'Not Found in VirusTotal' %}
-                                    <span title="Desconocido"><i class="bi bi-question-circle-fill text-secondary fs-5"></i></span>
-
-                                {# CASO 2: MALICIOSO (SI TIENE AL MENOS 1 DETECCIÓN) #}
-                                {% elif ioc.vt_positives > 0 %}
-                                    <span title="Malicioso: {{ ioc.vt_positives }} motores lo detectan">
-                                        <i class="bi bi-bug-fill text-danger fs-5"></i>
-                                    </span>
-
-                                {# CASO 3: LIMPIO #}
-                                {% else %}
-                                    <span title="Limpio: Ningún motor lo detectó">
-                                        <i class="bi bi-check-circle-fill text-success fs-5"></i>
-                                    </span>
-                                {% endif %}
-
-                        {% else %}
-                                <span class="badge bg-light text-dark border">Pendiente</span>
-                        {% endif %}
-                        </td>
-
-                        <td class="text-center">
-                            {% if ioc.vt_permalink %}
-                                <a href="{{ ioc.vt_permalink }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Ver en VirusTotal">
-                                    <i class="bi bi-box-arrow-up-right"></i>
-                                </a>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6" class="text-center py-3">No hay IoCs registrados.</td></tr>
-                    {% endfor %}
-                </tbody>-->
             </table>
         </div>
     </div>

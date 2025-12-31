@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row">
+<div class="row g-2">
     <div class="col-12">
         <h1>Panel de Control</h1>
         <p class="lead">Bienvenido al sistema de gestión.</p>
@@ -27,6 +27,18 @@
                 <h5 class="card-title">Analisis IoC</h5>
                 <p class="card-text">Analisis de IoC con VirusTotal.</p>
                 <a href="{{ url_for('virustotal.index') }}" class="btn btn-primary">Acceder</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if current_user.is_admin or 'checklist' in current_user.authorized_tools %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h5 class="card-title">Checklist</h5>
+                <p class="card-text">Revision de plataformas clientes.</p>
+                <a href="{{ url_for('checklist.index') }}" class="btn btn-primary">Acceder</a>
             </div>
         </div>
     </div>

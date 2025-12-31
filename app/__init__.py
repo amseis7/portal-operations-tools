@@ -1,8 +1,7 @@
 from flask import Flask
-import os, sys, logging
+import os, sys
 from config import Config
 from app.extensions import db, login_manager, csrf, migrate
-from sqlalchemy import text, inspect
 from flask_apscheduler import APScheduler
 
 # Aceptamos instance_path como opcional (None por defecto)
@@ -72,6 +71,9 @@ def create_app(config_class=Config, instance_path=None):
 
     from app.virustotal import bp as vt_bp
     app.register_blueprint(vt_bp, url_prefix='/virustotal')
+
+    from app.checklist import bp as checklist_bp
+    app.register_blueprint(checklist_bp, url_prefix='/checklist')
 
     # El Portero (Redirección a Setup)
     from flask import request, redirect, url_for

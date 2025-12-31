@@ -1,6 +1,7 @@
 # --- Python ---
 __pycache__/
 *.pyc
+build/
 
 # --- Entorno Virtual ---
 venv/
@@ -20,3 +21,11 @@ instance/
 
 # --- Logs ---
 *.log
+
+# --- Secrets ---
+*.pem
+certificado.py
+migrar DB modificada.txt
+Portal-Operations-Tools.spec
+Docker
+docker-compose.yml

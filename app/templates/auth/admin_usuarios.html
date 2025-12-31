@@ -54,72 +54,82 @@
                                 </div>
 
                                 <div class="modal fade text-start" id="modalEditar{{ u.id }}" tabindex="-1">
-                                <div class="modal-dialog">
-                                    <div class="modal-content">
-                                    <div class="modal-header bg-primary text-white">
-                                        <h5 class="modal-title">Editar Usuario: {{ u.username }}</h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <form action="{{ url_for('auth.editar_usuarios', user_id=u.id) }}" method="POST">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <div class="modal-body">
-                                            
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">Nombre Completo</label>
-                                                <input type="text" name="nombre_completo" class="form-control" value="{{ u.nombre_completo or '' }}" required>
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title">Editar Usuario: {{ u.username }}</h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                             </div>
-
-                                            <div class="row mb-3">
-                                                <div class="col-6">
-                                                    <label class="form-label">Usuario (Login)</label>
-                                                    <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label">Nueva Contraseña</label>
-                                                    <input type="password" name="password" class="form-control" placeholder="(Sin cambios)">
-                                                </div>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label">Email</label>
-                                                <input type="email" name="email" class="form-control" value="{{ u.email or '' }}">
-                                            </div>
-                                            
-                                            <div class="mb-3 p-2 bg-light border rounded">
-                                                <div class="form-check">
-                                                    <input type="checkbox" class="form-check-input" id="is_admin_{{ u.id }}" name="is_admin" {% if u.is_admin %}checked{% endif %}>
-                                                    <label class="form-check-label fw-bold" for="is_admin_{{ u.id }}">
-                                                        Es Administrador
-                                                    </label>
-                                                </div>
-                                            </div>
-
-                                            <div class="mb-3">
-                                                <label class="form-label fw-bold">Herramientas:</label>
-                                                <div class="card p-2 border">
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" name="tools" value="csirt" id="tool_csirt_{{ u.id }}" 
-                                                            {% if 'csirt' in (u.authorized_tools or '') %}checked{% endif %}>
-                                                        <label class="form-check-label" for="tool_csirt_{{ u.id }}">Gestión CSIRT</label>
+                                            <form action="{{ url_for('auth.editar_usuarios', user_id=u.id) }}" method="POST">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <div class="modal-body">
+                                                    
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">Nombre Completo</label>
+                                                        <input type="text" name="nombre_completo" class="form-control" value="{{ u.nombre_completo or '' }}" required>
                                                     </div>
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" name="tools" value="virustotal" id="tool_vt_{{ u.id }}"
-                                                            {% if 'virustotal' in (u.authorized_tools or '') %}checked{% endif %}>
-                                                        <label class="form-check-label" for="tool_vt_{{ u.id }}">VirusTotal</label>
-                                                    </div>
-                                                </div>
-                                            </div>
 
+                                                    <div class="row mb-3">
+                                                        <div class="col-6">
+                                                            <label class="form-label">Usuario (Login)</label>
+                                                            <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label">Nueva Contraseña</label>
+                                                            <input type="password" name="password" class="form-control" placeholder="(Sin cambios)">
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label">Email</label>
+                                                        <input type="email" name="email" class="form-control" value="{{ u.email or '' }}">
+                                                    </div>
+                                                    
+                                                    <div class="mb-3 p-2 bg-light border rounded">
+                                                        <div class="form-check">
+                                                            <input type="checkbox" class="form-check-input" id="is_admin_{{ u.id }}" name="is_admin" {% if u.is_admin %}checked{% endif %}>
+                                                            <label class="form-check-label fw-bold" for="is_admin_{{ u.id }}">
+                                                                Es Administrador
+                                                            </label>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="mb-3">
+                                                        <label class="form-label fw-bold">Herramientas:</label>
+                                                        <div class="card p-3 bg-light">
+                                                            <div class="form-check form-switch mb-2">
+                                                                <input class="form-check-input" type="checkbox" name="tools" value="csirt" 
+                                                                    id="edit_check_csirt_{{ u.id }}"
+                                                                    {% if 'csirt' in (u.authorized_tools or '') %}checked{% endif %}>
+                                                                <label class="form-check-label" for="edit_check_csirt_{{ u.id }}">Gestión CSIRT</label>
+                                                            </div>
+
+                                                            <div class="form-check form-switch mb-2">
+                                                                <input class="form-check-input" type="checkbox" name="tools" value="virustotal" 
+                                                                    id="edit_check_vt_{{ u.id }}"
+                                                                    {% if 'virustotal' in (u.authorized_tools or '') %}checked{% endif %}>
+                                                                <label class="form-check-label" for="edit_check_vt_{{ u.id }}">Análisis IoC (VT)</label>
+                                                            </div>
+
+                                                            <div class="form-check form-switch">
+                                                                <input class="form-check-input" type="checkbox" name="tools" value="checklist" 
+                                                                    id="edit_check_list_{{ u.id }}"
+                                                                    {% if 'checklist' in (u.authorized_tools or '') %}checked{% endif %}>
+                                                                <label class="form-check-label" for="edit_check_list_{{ u.id }}">Checklist Plataformas</label>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                            <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                                        </div>
-                                    </form>
                                     </div>
                                 </div>
-                                </div>
-                                </td>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -130,77 +140,102 @@
 </div>
 
 <div class="modal fade" id="modalCrearUsuario" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-success text-white">
-        <h5 class="modal-title">Registrar Nuevo Usuario</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ url_for('auth.crear_usuario') }}" method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="modal-body">
-            
-            <div class="row mb-3">
-                <div class="col-6">
-                    <label class="form-label fw-bold">Usuario (Login)</label>
-                    <input type="text" name="username" class="form-control" required placeholder="ej: fgarridoc" value="{{ request.form.get('username', '') }}">
-                </div>
-                <div class="col-6">
-                    <label class="form-label fw-bold">Contraseña</label>
-                    <input type="password" name="password" class="form-control" required>
-                </div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Registrar Nuevo Usuario</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-
-            <div class="mb-3">
-                <label class="form-label">Nombre Completo (Responsable)</label>
-                <input type="text" name="nombre_completo" class="form-control" required placeholder="ej: Fernando Garrido" value="{{ request.form.get('nombre_completo', '') }}">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Correo Electrónico</label>
-                <input type="email" name="email" class="form-control" placeholder="ej: usuario@empresa.com" value="{{ request.form.get('email', '') }}">
-            </div>
-
-            <div class="mb-3 p-3 bg-light p-2 border rounded">
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="is_admin" name="is_admin">
-                    <label class="form-check-label text-danger fw-bold" for="is_admin">
-                        Otorgar Permisos de Administrador
-                    </label>
-                </div>
-                <div class="form-text text-warning small mt-1">
-                    Cuidado: Los adminostradores tienen acceso a total al sistema.
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label fw-bold">Asignar Herramientas:</label>
-                <div class="card p-2 border">
-                    
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="tools" value="csirt" id="tool_csirt" checked>
-                        <label class="form-check-label text-muted" for="tool_csirt">
-                            Gestión CSIRT
-                        </label>
+            <form action="{{ url_for('auth.crear_usuario') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Usuario (Login)</label>
+                            <input type="text" name="username" class="form-control" required placeholder="ej: fgarridoc" value="{{ request.form.get('username', '') }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-bold">Contraseña</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
                     </div>
 
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="tools" value="virustotal" id="tool_vt">
-                        <label class="form-check-label" for="tool_vt">
-                            VirusTotal
-                        </label>
+                    <div class="mb-3">
+                        <label class="form-label">Nombre Completo (Responsable)</label>
+                        <input type="text" name="nombre_completo" class="form-control" required placeholder="ej: Fernando Garrido" value="{{ request.form.get('nombre_completo', '') }}">
                     </div>
 
+                    <div class="mb-3">
+                        <label class="form-label">Correo Electrónico</label>
+                        <input type="email" name="email" class="form-control" placeholder="ej: usuario@empresa.com" value="{{ request.form.get('email', '') }}">
                     </div>
-            </div>
 
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-success">Crear Usuario</button>
-          </div>
-      </form>
+                    <div class="mb-3 p-3 bg-light p-2 border rounded">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="is_admin" name="is_admin">
+                            <label class="form-check-label text-danger fw-bold" for="is_admin">
+                                Otorgar Permisos de Administrador
+                            </label>
+                        </div>
+                        <div class="form-text text-warning small mt-1">
+                            Cuidado: Los administradores tienen acceso total al sistema.
+                        </div>
+                    </div>
+
+                    <!--<div class="mb-3">
+                        <label class="form-label fw-bold">Asignar Herramientas:</label>
+                        <div class="card p-2 border">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="tools" value="csirt" id="tool_csirt" checked>
+                                <label class="form-check-label text-muted" for="tool_csirt">
+                                    Gestión CSIRT
+                                </label>
+                            </div>
+
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="tools" value="virustotal" id="tool_vt">
+                                <label class="form-check-label" for="tool_vt">
+                                    VirusTotal
+                                </label>
+                            </div>
+
+                        </div>
+                    </div>-->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Herramientas Autorizadas</label>
+                        <div class="card p-3 bg-light">
+                            
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="herramientas" value="csirt" 
+                                    id="check_csirt_{{ usuarios.id }}"
+                                    {% if 'csirt' in (usuarios.authorized_tools or '') %}checked{% endif %}>
+                                <label class="form-check-label" for="check_csirt_{{ usuarios.id }}">Gestión CSIRT</label>
+                            </div>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="herramientas" value="virustotal" 
+                                    id="check_vt_{{ usuarios.id }}"
+                                    {% if 'virustotal' in (usuarios.authorized_tools or '') %}checked{% endif %}>
+                                <label class="form-check-label" for="check_vt_{{ usuarios.id }}">Análisis IoC (VT)</label>
+                            </div>
+
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="herramientas" value="checklist" 
+                                    id="check_list_{{ usuarios.id }}"
+                                    {% if 'checklist' in (usuarios.authorized_tools or '') %}checked{% endif %}>
+                                <label class="form-check-label" for="check_list_{{ usuarios.id }}">Checklist Plataformas</label>
+                            </div>
+
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Crear Usuario</button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
 
 {% if request.method == 'POST' and request.endpoint == 'auth.crear_usuario' %}
@@ -212,5 +247,4 @@
     });
 </script>
 {% endif %}
-
 {% endblock %}

@@ -157,7 +157,6 @@ def perfil():
             # Guardamos los cambios básicos INMEDIATAMENTE
             db.session.add(current_user)
             db.session.commit()
-            flash('Información de perfil actualizada.', 'success')
 
             # --- BLOQUE 2: CONTRASEÑA (Opcional) ---
             current_pass = request.form.get('current_password')
@@ -185,6 +184,8 @@ def perfil():
                     current_user.set_password(new_pass)
                     db.session.commit() # Segundo commit solo para pass
                     flash('Contraseña actualizada correctamente.', 'success')
+
+            flash('Información de perfil actualizada.', 'success')
 
         except Exception as e:
             db.session.rollback()
