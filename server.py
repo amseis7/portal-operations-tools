@@ -1,16 +1,19 @@
 import sys
 import os
 import socket
-from waitress import serve
+from cheroot.wsgi import Server as WSGIServer
+from cheroot.ssl.builtin import BuiltinSSLAdapter
 from app import create_app, db
 from app.models import User
 from flask_migrate import upgrade, stamp
-# AGREGAMOS 'text' A LOS IMPORTS
-from sqlalchemy import inspect, text 
+from sqlalchemy import inspect 
 
 # Configuración
-PORT = 8080
-THREADS = 6
+PORT = 8443
+THREADS = 10
+
+CERT_FILE = 'cert.pem'
+KEY_FILE = 'key.pem'
 
 # --- LÓGICA HÍBRIDA DE RUTAS ---
 if getattr(sys, 'frozen', False):
@@ -39,70 +42,11 @@ if sys.platform.startswith('win'):
     except:
         pass
 
-# --- NUEVA FUNCIÓN DE PARCHE SQL DIRECTO ---
-def parchear_base_datos(app):
-    """
-    Se ejecuta automáticamente al iniciar la app.
-    Verifica y repara tablas 'user' e 'ioc' agregando columnas faltantes.
-    """
-    with app.app_context():
-        try:
-            db_uri = app.config.get('SQLALCHEMY_DATABASE_URI')
-            print(f"--- [INIT] Conectando a BD: {db_uri} ---")
-            
-            # 1. Crear tablas nuevas si no existen (ej: vt_ticket, vt_ioc)
-            db.create_all()
-
-            inspector = inspect(db.engine)
-            
-            # --- PARCHE 1: Tabla USER (API Key) ---
-            if inspector.has_table("user"):
-                cols_user = [col['name'] for col in inspector.get_columns('user')]
-                if 'virustotal_api_key' not in cols_user:
-                    print("--- [ALERTA] Reparando tabla 'user'... ---")
-                    with db.engine.connect() as conn:
-                        conn.execute(text("ALTER TABLE user ADD COLUMN virustotal_api_key VARCHAR(255)"))
-                        conn.commit()
-            
-            # --- PARCHE 2: Tabla IOC (Datos VirusTotal en CSIRT) ---
-            if inspector.has_table("ioc"):
-                cols_ioc = [col['name'] for col in inspector.get_columns('ioc')]
-                
-                # Lista de columnas nuevas que deben existir
-                nuevas_columnas = [
-                    ("vt_last_check", "DATETIME"),
-                    ("vt_reputation", "INTEGER"),
-                    ("vt_positives", "INTEGER DEFAULT 0"),
-                    ("vt_total", "INTEGER DEFAULT 0"),
-                    ("vt_permalink", "VARCHAR(255)"),
-                    ("vt_md5", "VARCHAR(32)"),
-                    ("vt_sha1", "VARCHAR(40)"),
-                    ("vt_sha256", "VARCHAR(64)"),
-                    ("vt_motores_json", "TEXT")
-                ]
-                
-                with db.engine.connect() as conn:
-                    cambios = False
-                    for col_nombre, col_tipo in nuevas_columnas:
-                        if col_nombre not in cols_ioc:
-                            print(f"--- [ALERTA] Agregando columna '{col_nombre}' a tabla 'ioc'... ---")
-                            conn.execute(text(f"ALTER TABLE ioc ADD COLUMN {col_nombre} {col_tipo}"))
-                            cambios = True
-                    
-                    if cambios:
-                        conn.commit()
-                        print("--- [EXITO] Tabla 'ioc' reparada correctamente. ---")
-                    else:
-                        print("--- [OK] Tabla 'ioc' está al día. ---")
-
-        except Exception as e:
-            print(f"--- [ERROR SILENCIOSO] Falló parche DB: {e} ---")
 
 def inicializar_sistema():
     print("[INIT] Arrancando sistema...")
     with app.app_context():
         try:
-            # 1. Intentamos la lógica de Alembic (Migraciones formales)
             inspector = inspect(db.engine)
             tablas_existentes = inspector.get_table_names()
             
@@ -111,20 +55,12 @@ def inicializar_sistema():
                 print("[INIT] ACCIÓN: Marcando base de datos como 'actual' (Stamp)...")
                 stamp()
             
-            print("[INIT] Verificando esquema de base de datos (Upgrade)...")
             try:
                 upgrade()
                 print("[INIT] Upgrade ejecutado.")
             except Exception as e_up:
                 print(f"[ADVERTENCIA] Upgrade falló (posible en EXE): {e_up}")
 
-            # ----------------------------------------
-            # 2. EJECUTAMOS EL PARCHE DE SEGURIDAD
-            # Esto asegura que la columna exista sí o sí antes de consultar User
-            parchear_base_datos(app)
-            # ----------------------------------------
-
-            # 3. Verificación de Admin (Ahora es seguro hacerlo)
             if not User.query.filter_by(is_admin=True).first():
                  print("[INIT] Estado: Esperando instalación vía Web.")
                  
@@ -145,12 +81,35 @@ if __name__ == "__main__":
     inicializar_sistema()
     ip = obtener_ip()
     
+    cert_path = os.path.join(BASE_DIR, CERT_FILE)
+    key_path = os.path.join(BASE_DIR, KEY_FILE)
+
+    usar_ssl = False
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        usar_ssl = True
+    else:
+        print("\n[ADVERTENCIA] No se encontraron cert.pem o key.pem.")
+        print("El servidor iniciará en modo HTTP inseguro.\n")
+        PORT = 8080 # Fallback a puerto HTTP
+
     print("------------------------------------------------")
     print(" PORTAL DE OPERACIONES - CSIRT V1.0.0")
     print("------------------------------------------------")
-    print(f" STATUS:  EN LINEA")
-    print(f" LOCAL:   http://localhost:{PORT}")
-    print(f" RED:     http://{ip}:{PORT}")
+    print(f" STATUS:  EN LINEA ({'SEGURO HTTPS' if usar_ssl else 'INSEGURO HTTP'})")
+    if usar_ssl:
+        print(f" LOCAL:   https://localhost:{PORT}")
+        print(f" RED:     https://{ip}:{PORT}")
+    else:
+        print(f" LOCAL:   http://localhost:{PORT}")
+        print(f" RED:     http://{ip}:{PORT}")
     print("------------------------------------------------")
     
-    serve(app, host='0.0.0.0', port=PORT, threads=THREADS)
+    server = WSGIServer(('0.0.0.0', PORT), app, numthreads=THREADS)
+
+    if usar_ssl:
+        server.ssl_adapter = BuiltinSSLAdapter(cert_path, key_path)
+
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        server.stop()

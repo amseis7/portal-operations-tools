@@ -2,12 +2,12 @@ import requests
 import time
 import logging
 import base64
-import csv
+import json
 import zipfile
 import re
 from io import BytesIO
-from datetime import datetime
-from flask import flash, request
+from datetime import datetime, timedelta
+from flask import flash
 from flask_login import current_user
 from sqlalchemy import or_
 from app.extensions import db
@@ -15,19 +15,26 @@ from app.models import Ioc, VtIoc, Alerta, ExportTemplate, VtTicket
 
 logger = logging.getLogger(__name__)
 
-def buscar_resultado_previo(valor_hash):
-    # ... (Mismo código de antes) ...
-    existente = Ioc.query.filter(
-        or_(Ioc.vt_md5 == valor_hash, Ioc.vt_sha1 == valor_hash, Ioc.vt_sha256 == valor_hash, Ioc.valor == valor_hash),
-        Ioc.vt_last_check != None
+def buscar_resultado_freco_en_db(valor, dias_validez=14):
+    fecha_limite = datetime.now() - timedelta(days=dias_validez)
+
+    candidato = VtIoc.query.filter(
+        VtIoc.valor == valor,
+        VtIoc.vt_last_check >= fecha_limite
+    ).order_by(VtIoc.vt_last_check.desc()).first()
+
+    if candidato:
+        return candidato
+    
+    candidato_csirt = Ioc.query.filter(
+        Ioc.valor == valor,
+        Ioc.vt_last_check >= fecha_limite
     ).order_by(Ioc.vt_last_check.desc()).first()
 
-    if not existente:
-        existente = VtIoc.query.filter(
-            or_(VtIoc.vt_md5 == valor_hash, VtIoc.vt_sha1 == valor_hash, VtIoc.vt_sha256 == valor_hash, VtIoc.valor == valor_hash),
-            VtIoc.vt_last_check != None
-        ).order_by(VtIoc.vt_last_check.desc()).first()
-    return existente
+    if candidato_csirt:
+        return candidato_csirt
+    
+    return None
 
 def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     """Consulta VT para un objeto (Ioc o VtIoc)."""
@@ -37,12 +44,31 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
         if tiempo.days < 7:
             return True
         
+    if not forzar:
+        resultado_previo = buscar_resultado_freco_en_db(ioc_obj.valor)
+
+        if resultado_previo:
+            ioc_obj.vt_last_check = resultado_previo.vt_last_check
+            ioc_obj.vt_reputation = resultado_previo.vt_reputation
+            ioc_obj.vt_positives = resultado_previo.vt_positives
+            ioc_obj.vt_total = resultado_previo.vt_total
+            ioc_obj.vt_permalink = resultado_previo.vt_permalink
+            ioc_obj.vt_md5 = resultado_previo.vt_md5
+            ioc_obj.vt_sha1 = resultado_previo.vt_sha1
+            ioc_obj.vt_sha256 = resultado_previo.vt_sha256
+
+            ioc_obj.vt_motores_json = resultado_previo.vt_motores_json
+
+            db.session.commit()
+            return True
+        
     if not api_key:
         try:
             if current_user.is_authenticated:
                 api_key = current_user.get_vt_key()
         except:
             pass
+        
     if not api_key: return False
     
     headers = {"x-apikey": api_key}

@@ -4,6 +4,7 @@ from app.virustotal.background import lanzar_analisis_background
 from datetime import datetime
 from app.extensions import db
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
+from app.utils import admin_required, check_access
 from app.virustotal import bp
 from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
 from markupsafe import Markup
@@ -13,12 +14,14 @@ import re
 
 @bp.route('/')
 @login_required
+@check_access('virustotal')
 def index():
     tickets = VtTicket.query.order_by(VtTicket.fecha_creacion.desc()).all()
     return render_template('virustotal/index.html', tickets=tickets, titulo_navbar="Investigaciones VT")
 
 @bp.route('/crear_caso', methods=['POST'])
 @login_required
+@check_access('virustotal')
 def crear_caso():
     nombre = request.form.get('nombre')
     descripcion = request.form.get('descripcion')
@@ -30,6 +33,7 @@ def crear_caso():
 
 @bp.route('/caso/<int:caso_id>', methods=['GET', 'POST'])
 @login_required
+@check_access('virustotal')
 def ver_caso(caso_id):
     # ... (Tu código actual de ver_caso) ...
     caso = VtTicket.query.get_or_404(caso_id)
@@ -79,6 +83,7 @@ def ver_caso(caso_id):
 
 @bp.route('/analizar_caso/<int:caso_id>', methods=['POST'])
 @login_required
+@check_access('virustotal')
 def analizar_caso(caso_id):
     if not current_user.virustotal_api_key:
         link = url_for('auth.perfil')
@@ -118,6 +123,7 @@ def analizar_caso(caso_id):
 
 @bp.route('/analizar_ticket_csirt/<ticket_id>', methods=['POST'])
 @login_required
+@check_access('virustotal')
 def analizar_ticket_csirt(ticket_id):
     """
     Toma IoCs de un Ticket CSIRT (RF-...), crea un Caso VT y analiza.
@@ -149,6 +155,7 @@ def analizar_ticket_csirt(ticket_id):
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
 @login_required
+@check_access('virustotal')
 def analizar_alerta(alerta_id):
     """
     Toma IoCs de una Alerta específica, crea/actualiza el Caso VT del Ticket padre y analiza.
@@ -185,6 +192,7 @@ def analizar_alerta(alerta_id):
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
 @bp.route('/eliminar_caso/<int:caso_id>', methods=['POST'])
 @login_required
+@admin_required
 def eliminar_caso(caso_id):
     # (Mantén tu código de eliminación aquí)
     caso = VtTicket.query.get_or_404(caso_id)
@@ -202,6 +210,7 @@ def eliminar_caso(caso_id):
 
 @bp.route('/exportar_zip/<int:caso_id>/<caso_nombre>', methods=['POST'])
 @login_required
+@check_access('virustotal')
 def exportar_zip(caso_id, caso_nombre):
     # (Mantén tu código de exportación aquí)
     selected = request.form.getlist('templates_seleccionados')
@@ -213,6 +222,7 @@ def exportar_zip(caso_id, caso_nombre):
 
 @bp.route('/admin/templates', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def admin_templates():
     if not current_user.is_admin:
         return redirect(url_for('virustotal.index'))
@@ -236,6 +246,7 @@ def admin_templates():
 
 @bp.route('/admin/templates/eliminar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def eliminar_template(id):
     if not current_user.is_admin: return redirect(url_for('virustotal.index'))
     t = ExportTemplate.query.get_or_404(id)
@@ -245,6 +256,7 @@ def eliminar_template(id):
 
 @bp.route('/admin/templates/editar/<int:id>', methods=['POST'])
 @login_required
+@admin_required
 def editar_template(id):
     # Seguridad: Solo admin
     if not current_user.is_admin: 

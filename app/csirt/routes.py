@@ -15,11 +15,12 @@ from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 
 from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva, obtener_mapa_recurrencia
-from app.utils import admin_required
+from app.utils import admin_required, check_access
 
 
 @bp.route('/')
 @login_required
+@check_access('csirt')
 def index():
     tickets = db.session.query(
         Alerta.ticket,
@@ -32,6 +33,7 @@ def index():
 
 @bp.route('/gestion/<ticket_id>')
 @login_required
+@check_access('csirt')
 def ver_gestion(ticket_id):
     # Buscamos todas las alertas que tengan ese ticket
     alertas = Alerta.query.filter(
@@ -42,6 +44,7 @@ def ver_gestion(ticket_id):
 
 @bp.route('/iocs/<ticket_id>')
 @login_required
+@check_access('csirt')
 def ver_iocs(ticket_id):
     # 1. Query Base
     query = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id)
@@ -83,6 +86,7 @@ def ver_iocs(ticket_id):
 
 @bp.route('/procesar', methods=['POST'])
 @login_required
+@check_access('csirt')
 def procesar():
     ticket = request.form.get('ticket')
 
@@ -106,6 +110,7 @@ def procesar():
 
 @bp.route('/actualizar_iocs/<ticket_id>', methods=['POST'])
 @login_required
+@check_access('csirt')
 def actualizar_iocs(ticket_id):
     try:
         cant_alertas, cant_iocs = actualizar_iocs_faltantes(ticket_id)
@@ -125,6 +130,7 @@ def actualizar_iocs(ticket_id):
 
 @bp.route('/admin/exportar_todo_csv')
 @login_required
+@check_access('csirt')
 def exportar_todo_csv():
     # 1. Seguridad: Solo admin
     if not current_user.is_admin:
@@ -242,6 +248,7 @@ def importar_historico():
 # --- NUEVA RUTA: Descargar CSV Masivo por Ticket ---
 @bp.route('/descargar_csv/<ticket_id>')
 @login_required
+@check_access('csirt')
 def descargar_iocs_csv(ticket_id):
     # 1. Buscamos todos los IoCs asociados a alertas de este ticket
     iocs = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id).order_by(Ioc.tipo).all()
@@ -272,6 +279,7 @@ def descargar_iocs_csv(ticket_id):
 # --- NUEVA RUTA: Ver IoCs de una ALERTA ESPECÍFICA ---
 @bp.route('/iocs_alerta/<int:alerta_id>')
 @login_required
+@check_access('csirt')
 def ver_iocs_alerta(alerta_id):
     alerta = Alerta.query.get_or_404(alerta_id)
     
@@ -337,6 +345,7 @@ def eliminar_ticket(ticket_id):
 
 @bp.route('/generar_reporte', methods=['POST'])
 @login_required
+@check_access('csirt')
 def generar_reporte():
     # 1. Obtener fechas
     fecha_inicio_str = request.form.get('fecha_inicio')

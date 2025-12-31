@@ -20,17 +20,21 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Nombre Completo</label>
-                            <input type="text" name="nombre_completo" class="form-control" value="{{ request.form.get('nombre_completo', current_user.nombre_completo) }}" required>
+                            <input type="text" name="nombre_completo" id="inputNombre" class="form-control" 
+                                   value="{{ request.form.get('nombre_completo', current_user.nombre_completo) }}" required
+                                   oninput="validarNombre(this)">
+                            <div class="form-text small">Solo se permiten letras y espacios.</div>
                         </div>
                     </div>
 
                     <div class="mb-4">
                         <label class="form-label">Correo Electrónico</label>
-                        <input type="email" name="email" class="form-control" value="{{ request.form.get('email', current_user.email) }}" required>
+                        <input type="email" name="email" id="inputEmail" class="form-control" 
+                               value="{{ request.form.get('email', current_user.email) }}"
+                               oninput="validarEmailInput(this)">
                     </div>
 
                     <h6 class="text-primary border-bottom pb-2 mb-3 mt-4">Integraciones Externas</h6>
-                    
                     <div class="mb-3">
                         <label class="form-label fw-bold">VirusTotal API Key</label>
                         <div class="input-group">
@@ -54,46 +58,46 @@
                     </div>
 
                     <div class="card mb-4 shadow-sm border-info">
-    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-speedometer2"></i> Estado de la API Key</span>
-        
-        {% if current_user.virustotal_api_key %}
-            <a href="{{ url_for('auth.perfil', ver_cuota=1) }}" class="btn btn-sm btn-light text-info fw-bold">
-                <i class="bi bi-arrow-clockwise"></i> Verificar Consumo
-            </a>
-        {% else %}
-            <span class="badge bg-warning text-dark">Sin Key</span>
-        {% endif %}
-    </div>
-    
-    <div class="card-body">
-        {% if datos_cuota %}
-        <div class="row text-center">
-            <div class="col-4">
-                <h6 class="text-muted">Por Hora</h6>
-                <h4 class="fw-bold text-secondary">{{ datos_cuota.hora_usado }} / {{ datos_cuota.hora_limite }}</h4>
-            </div>
-            <div class="col-4">
-                <h6 class="text-muted">Diario</h6>
-                <h4 class="fw-bold text-primary">{{ datos_cuota.diario_usado }} / {{ datos_cuota.diario_limite }}</h4>
-            </div>
-            <div class="col-4 border-start border-end">
-                <h6 class="text-muted">Mensual</h6>
-                <h4 class="fw-bold text-success">{{ datos_cuota.mensual_usado }} / {{ datos_cuota.mensual_limite }}</h4>
-            </div>
-        </div>
-        <div class="mt-3 alert alert-light border small text-center mb-0">
-            <i class="bi bi-info-circle"></i> Estos valores son reportados directamente por VirusTotal.
-        </div>
-    {% else %}
-        <p class="text-center text-muted my-3">
-            <i class="bi bi-cloud-slash fs-4 d-block mb-2"></i>
-            Haz clic en "Verificar Consumo" para ver tus límites actuales.<br>
-            <small>(Esta acción consume 1 consulta de tu cuota)</small>
-        </p>
-    {% endif %}
-</div>
-</div>
+                        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-speedometer2"></i> Estado de la API Key</span>
+                            
+                            {% if current_user.virustotal_api_key %}
+                                <a href="{{ url_for('auth.perfil', ver_cuota=1) }}" class="btn btn-sm btn-light text-info fw-bold">
+                                    <i class="bi bi-arrow-clockwise"></i> Verificar Consumo
+                                </a>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Sin Key</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="card-body">
+                            {% if datos_cuota %}
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <h6 class="text-muted">Por Hora</h6>
+                                    <h4 class="fw-bold text-secondary">{{ datos_cuota.hora_usado }} / {{ datos_cuota.hora_limite }}</h4>
+                                </div>
+                                <div class="col-4">
+                                    <h6 class="text-muted">Diario</h6>
+                                    <h4 class="fw-bold text-primary">{{ datos_cuota.diario_usado }} / {{ datos_cuota.diario_limite }}</h4>
+                                </div>
+                                <div class="col-4 border-start border-end">
+                                    <h6 class="text-muted">Mensual</h6>
+                                    <h4 class="fw-bold text-success">{{ datos_cuota.mensual_usado }} / {{ datos_cuota.mensual_limite }}</h4>
+                                </div>
+                            </div>
+                            <div class="mt-3 alert alert-light border small text-center mb-0">
+                                <i class="bi bi-info-circle"></i> Estos valores son reportados directamente por VirusTotal.
+                            </div>
+                            {% else %}
+                                <p class="text-center text-muted my-3">
+                                    <i class="bi bi-cloud-slash fs-4 d-block mb-2"></i>
+                                    Haz clic en "Verificar Consumo" para ver tus límites actuales.<br>
+                                    <small>(Esta acción consume 1 consulta de tu cuota)</small>
+                                </p>
+                            {% endif %}
+                        </div>
+                    </div>
 
                     <h6 class="text-primary border-bottom pb-2 mb-3">Seguridad (Dejar en blanco si no desea cambiar)</h6>
                     
@@ -104,11 +108,21 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Nueva Contraseña</label>
-                            <input type="password" name="new_password" class="form-control">
+                            <input type="password" name="new_password" id="newPass" class="form-control" onkeyup="verificarPassword()">
+                            <div id="passFeedback" class="small mt-1 d-none">
+                                <ul class="list-unstyled mb-0" style="font-size: 0.8rem;">
+                                    <li id="req-len" class="text-danger"><i class="bi bi-x"></i> Mínimo 8 caracteres</li>
+                                    <li id="req-num" class="text-danger"><i class="bi bi-x"></i> Un número</li>
+                                    <li id="req-cap" class="text-danger"><i class="bi bi-x"></i> Una mayúscula</li>
+                                    <li id="req-sym" class="text-danger"><i class="bi bi-x"></i> Un símbolo (!@#$...)</li>
+                                </ul>
+                            </div>
                         </div>
+
                         <div class="col-md-4">
                             <label class="form-label">Confirmar Nueva</label>
-                            <input type="password" name="confirm_password" class="form-control">
+                            <input type="password" name="confirm_password" id="confirmPass" class="form-control" onkeyup="verificarCoincidencia()">
+                            <div id="matchFeedback" class="small mt-1"></div>
                         </div>
                     </div>
 
@@ -121,4 +135,100 @@
         </div>
     </div>
 </div>
+
+<script>
+    // 1. Validar Nombre (Solo letras y espacios)
+    function validarNombre(input) {
+        // Reemplaza todo lo que NO sea letras (a-z, A-Z, acentos) o espacios
+        input.value = input.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]/g, '');
+    }
+
+    // 2. Validar Email (Caracteres permitidos básicos)
+    function validarEmailInput(input) {
+        // Reemplaza lo que no sea alfanumérico, @, ., _, -
+        input.value = input.value.replace(/[^a-zA-Z0-9@._-]/g, '');
+    }
+
+    // 3. Validar Seguridad Password
+    function verificarPassword() {
+        const pass = document.getElementById('newPass').value;
+        const feedback = document.getElementById('passFeedback');
+        
+        // Si está vacío, ocultamos el feedback y limpiamos clases
+        if (pass.length === 0) {
+            feedback.classList.add('d-none');
+            document.getElementById('newPass').classList.remove('is-valid', 'is-invalid');
+            return;
+        }
+        
+        feedback.classList.remove('d-none');
+
+        // Reglas
+        const hasLen = pass.length >= 8;
+        const hasNum = /\d/.test(pass);
+        const hasCap = /[A-Z]/.test(pass);
+        const hasSym = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
+
+        if (hasLen && hasNum && hasCap && hasSym) {
+            feedback.classList.add('d-none')
+        } else {
+            feedback.classList.remove('d-none')
+        }
+
+        // Actualizar UI de la lista
+        updateItem('req-len', hasLen);
+        updateItem('req-num', hasNum);
+        updateItem('req-cap', hasCap);
+        updateItem('req-sym', hasSym);
+
+        // Input visual global
+        const input = document.getElementById('newPass');
+        if (hasLen && hasNum && hasCap && hasSym) {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+        } else {
+            input.classList.remove('is-valid');
+            input.classList.add('is-invalid');
+        }
+        
+        verificarCoincidencia(); // Re-chequear si coinciden al cambiar la original
+    }
+
+    function updateItem(id, isValid) {
+        const el = document.getElementById(id);
+        if (isValid) {
+            el.className = 'text-success';
+            el.innerHTML = '<i class="bi bi-check"></i> ' + el.innerText.replace('✓ ', '').replace('✗ ', '');
+        } else {
+            el.className = 'text-danger';
+            el.innerHTML = '<i class="bi bi-x"></i> ' + el.innerText.replace('✓ ', '').replace('✗ ', '');
+        }
+    }
+
+    // 4. Verificar Coincidencia
+    function verificarCoincidencia() {
+        const pass = document.getElementById('newPass').value;
+        const confirm = document.getElementById('confirmPass').value;
+        const feedback = document.getElementById('matchFeedback');
+        const inputConf = document.getElementById('confirmPass');
+
+        if (confirm.length === 0) {
+            inputConf.classList.remove('is-valid', 'is-invalid');
+            feedback.innerText = "";
+            return;
+        }
+
+        if (pass === confirm) {
+            inputConf.classList.remove('is-invalid');
+            inputConf.classList.add('is-valid');
+            feedback.className = "small mt-1 text-success";
+            feedback.innerHTML = '<i class="bi bi-check-circle"></i> Las contraseñas coinciden.';
+        } else {
+            inputConf.classList.remove('is-valid');
+            inputConf.classList.add('is-invalid');
+            feedback.className = "small mt-1 text-danger";
+            feedback.innerText = 'Las contraseñas no coinciden.';
+        }
+    }
+</script>
 {% endblock %}

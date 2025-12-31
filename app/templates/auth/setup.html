@@ -1,57 +1,54 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Instalación Portal CSIRT</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #e9ecef; display: flex; align-items: center; min-height: 100vh; }
-        .setup-card { max-width: 500px; margin: auto; }
-    </style>
-  </head>
-  <body>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Instalación Portal CSIRT</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            body { background-color: #e9ecef; display: flex; align-items: center; min-height: 100vh; }
+            .setup-card { max-width: 500px; margin: auto; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="card setup-card shadow-lg border-0">
+                <div class="card-header bg-primary text-white text-center p-4">
+                    <h3>🚀 Bienvenido</h3>
+                    <p class="mb-0">Configuremos tu Portal de Operaciones</p>
+                </div>
+                <div class="card-body p-5">
+                    <p class="text-muted mb-4">No se han detectado usuarios. Por favor, crea la cuenta del <strong>Administrador Principal</strong>.</p>  
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nombre Completo</label>
+                            <input type="text" name="nombre" class="form-control" placeholder="Ej: Administrador del Sistema" required>
+                        </div>
 
-    <div class="container">
-        <div class="card setup-card shadow-lg border-0">
-            <div class="card-header bg-primary text-white text-center p-4">
-                <h3>🚀 Bienvenido</h3>
-                <p class="mb-0">Configuremos tu Portal de Operaciones</p>
-            </div>
-            <div class="card-body p-5">
-                <p class="text-muted mb-4">No se han detectado usuarios. Por favor, crea la cuenta del <strong>Administrador Principal</strong>.</p>
-                
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Nombre Completo</label>
-                        <input type="text" name="nombre" class="form-control" placeholder="Ej: Administrador del Sistema" required>
-                    </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Correo Electrónico</label>
+                            <input type="email" name="email" class="form-control" placeholder="admin@empresa.com">
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Correo Electrónico</label>
-                        <input type="email" name="email" class="form-control" placeholder="admin@empresa.com">
-                    </div>
+                        <hr>
 
-                    <hr>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Usuario (Login)</label>
+                            <input type="text" name="username" class="form-control" placeholder="admin" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Contraseña Maestra</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Usuario (Login)</label>
-                        <input type="text" name="username" class="form-control" placeholder="admin" required>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Contraseña Maestra</label>
-                        <input type="password" name="password" class="form-control" required>
-                    </div>
-
-                    <div class="d-grid mt-4">
-                        <button type="submit" class="btn btn-success btn-lg">Crear Cuenta e Iniciar</button>
-                    </div>
-                </form>
+                        <div class="d-grid mt-4">
+                            <button type="submit" class="btn btn-success btn-lg">Crear Cuenta e Iniciar</button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-
-  </body>
+    </body>
 </html>
