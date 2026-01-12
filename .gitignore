@@ -1,7 +1,8 @@
 # --- Python ---
 __pycache__/
 *.pyc
-build/
+build/Portal-Operations-Tools
+dist/
 
 # --- Entorno Virtual ---
 venv/

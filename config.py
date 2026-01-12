@@ -3,6 +3,7 @@ import sys
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or '-pjY4,Ni>66W,Kdi^:XaTxxe=}X_6@w672ZF+qy'
+    SECRET_KEY_DB = b'dCDYmze1H8KQ6hNlhKBsa8jUh8hOBohj1nio7Qbj6FQ='
     
     # --- LÓGICA HÍBRIDA (La magia) ---
     # Preguntamos: ¿Estamos empaquetados en un EXE?
@@ -20,3 +21,4 @@ class Config:
     # Configuraciones Generales
     SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(_instance_path, 'app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SCHEDULER_API_ENABLED = True

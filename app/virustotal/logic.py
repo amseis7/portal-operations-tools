@@ -38,7 +38,7 @@ def buscar_resultado_freco_en_db(valor, dias_validez=14):
 
 def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     """Consulta VT para un objeto (Ioc o VtIoc)."""
-    
+    print(ioc_obj)
     if not forzar and ioc_obj.vt_last_check:
         tiempo = datetime.now() - ioc_obj.vt_last_check
         if tiempo.days < 7:
@@ -81,7 +81,8 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     # 3. ENDPOINTS
     if tipo_db in ['hash', 'md5', 'sha1', 'sha256']:
         endpoint = f"{base_url}/files/{valor_original}"
-    elif tipo_db == 'ip':
+    #elif tipo_db == 'ip':
+    elif tipo_db in ['ip', 'smtp']:
         endpoint = f"{base_url}/ip_addresses/{valor_original}"
     elif tipo_db == 'dominio':
         valor_limpio = valor_original.replace("https://", "").replace("http://", "").split("/")[0]
@@ -91,8 +92,26 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
             url_id = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
             endpoint = f"{base_url}/urls/{url_id}"
         except: return False
+    elif tipo_db == 'email':
+        print(f"[VT SKIP] Ignoraldo email: {valor_original}")
+
+        ioc_obj.vt_last_check = datetime.now()
+        ioc_obj.vt_positives = 0
+        ioc_obj.vt_total = 0
+        ioc_obj.vt_reputation = 0
+
+        # Dejamos un mensaje interno para saber que fue omitido intencionalmente
+        ioc_obj.set_motores({"INFO": "Email ignorado (No analizable en VT)"})
+        
+        db.session.commit()
+        return True # Retornamos True para que el sistema sepa que "terminó" con este
     else:
-        return False 
+        # Si llega un tipo desconocido (ej: 'telefono'), también lo marcamos para no trabar la barra
+        print(f"[VT WARNING] Tipo no soportado: {tipo_db}")
+        ioc_obj.vt_last_check = datetime.now()
+        ioc_obj.set_motores({"ERROR": f"Tipo '{tipo_db}' no soportado por VT"})
+        db.session.commit()
+        return True
 
     # 4. EJECUCIÓN
     try:
@@ -143,6 +162,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                     id_ref = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
                 elif tipo_db == 'dominio': type_link = 'domain'; id_ref = endpoint.split('/')[-1]
                 elif tipo_db == 'ip': type_link = 'ip-address'
+                elif tipo_db == 'smtp': type_link = 'smtp'
 
                 ioc_obj.vt_permalink = f"https://www.virustotal.com/gui/{type_link}/{id_ref}"
 

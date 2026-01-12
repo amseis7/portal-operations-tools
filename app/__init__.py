@@ -49,7 +49,7 @@ def create_app(config_class=Config, instance_path=None):
     scheduler.init_app(app)
     scheduler.start()
     
-    # Tarea del vigilante
+    # --- TAREA 1: Tarea del vigilante nuevas alertas csirt
     from app.csirt.logic import vigilar_nuevas_alertas
     scheduler.add_job(
         id='vigilante_csirt',
@@ -57,6 +57,18 @@ def create_app(config_class=Config, instance_path=None):
         args=[app],
         trigger='interval',
         minutes=60
+    )
+
+    # -- TAREA 2: Tarea de verificacion status checklist
+    from app.checklist.tasks import ejecutar_barrido_checklist
+
+    scheduler.add_job(
+        id='tarea_checklist_automatica',
+        func=ejecutar_barrido_checklist,
+        args=[app],
+        trigger='interval',
+        minutes=30, # Se puede cambiar
+        replace_existing=True
     )
 
     # Blueprints
@@ -75,7 +87,14 @@ def create_app(config_class=Config, instance_path=None):
     from app.checklist import bp as checklist_bp
     app.register_blueprint(checklist_bp, url_prefix='/checklist')
 
-    # El Portero (Redirección a Setup)
+    # --- CONFIGURACIÓN DE Y NUEVOS MODULOS A AGREGAR ---
+    from app.tools_config import TOOLS
+
+    @app.context_processor
+    def inject_tools():
+        return dict(lista_herramientas=TOOLS)
+
+    # El Portero (Redirección a Setup) Valida si existe una cuenta admin, si no, mandará a la pagina de setup inicial para crear una cuenta administrativa
     from flask import request, redirect, url_for
     from app.models import User
 

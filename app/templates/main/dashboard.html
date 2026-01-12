@@ -8,46 +8,32 @@
         <hr>
     </div>
 
-    {% if current_user.is_admin or 'csirt' in current_user.authorized_tools %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">Gestión CSIRT</h5>
-                <p class="card-text">Web scraping y alertas de seguridad.</p>
-                <a href="{{ url_for('csirt.index') }}" class="btn btn-primary">Acceder</a>
+    <div class="row g-1">
+        {% for key, info in lista_herramientas.items() %}
+            {% if current_user.is_admin or key in (current_user.authorized_tools or '') %}
+            <div class="col-md-4">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <i class="bi {{ info.icono }} fs-1 text-{{ info.color }}"></i>
+                        </div>
+                        <h5 class="card-title">{{ info.titulo }}</h5>
+                        <p class="card-text text-muted">{{ info.descripcion }}</p>
+                        <a href="{{ url_for(info.endpoint) }}" class="btn btn-outline-{{ info.color }}">Acceder</a>
+                    </div>
+                </div>
             </div>
-        </div>
+            {% endif %}
+        {% endfor %}
     </div>
-    {% endif %}
-
-    {% if current_user.is_admin or 'virustotal' in current_user.authorized_tools %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">Analisis IoC</h5>
-                <p class="card-text">Analisis de IoC con VirusTotal.</p>
-                <a href="{{ url_for('virustotal.index') }}" class="btn btn-primary">Acceder</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    {% if current_user.is_admin or 'checklist' in current_user.authorized_tools %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-body text-center">
-                <h5 class="card-title">Checklist</h5>
-                <p class="card-text">Revision de plataformas clientes.</p>
-                <a href="{{ url_for('checklist.index') }}" class="btn btn-primary">Acceder</a>
-            </div>
-        </div>
-    </div>
-    {% endif %}
     
     {% if current_user.is_admin %}
     <div class="col-md-4">
         <div class="card h-100 border-warning">
             <div class="card-body text-center">
+                <div class="mb-3">
+                    <i class="bi bi-person-gear fs-1 text-warning"></i>
+                </div>
                 <h5 class="card-title text-warning">Administrar Usuarios</h5>
                 <p class="card-text">Crear cuentas y asignar permisos.</p>
                 <a href="{{ url_for('auth.admin_usuarios') }}" class="btn btn-warning">Gestionar</a>

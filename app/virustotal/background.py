@@ -25,6 +25,7 @@ def _worker_analisis(app, caso_id, user_id, force):
             query = query.filter(VtIoc.vt_last_check == None)
             
         iocs = query.all()
+        
         total = len(iocs)
         print(f"--- [BACKGROUND] Se procesarán {total} IoCs pendientes ---")
         

@@ -95,28 +95,19 @@
                                                     </div>
 
                                                     <div class="mb-3">
-                                                        <label class="form-label fw-bold">Herramientas:</label>
-                                                        <div class="card p-3 bg-light">
-                                                            <div class="form-check form-switch mb-2">
-                                                                <input class="form-check-input" type="checkbox" name="tools" value="csirt" 
-                                                                    id="edit_check_csirt_{{ u.id }}"
-                                                                    {% if 'csirt' in (u.authorized_tools or '') %}checked{% endif %}>
-                                                                <label class="form-check-label" for="edit_check_csirt_{{ u.id }}">Gestión CSIRT</label>
-                                                            </div>
-
-                                                            <div class="form-check form-switch mb-2">
-                                                                <input class="form-check-input" type="checkbox" name="tools" value="virustotal" 
-                                                                    id="edit_check_vt_{{ u.id }}"
-                                                                    {% if 'virustotal' in (u.authorized_tools or '') %}checked{% endif %}>
-                                                                <label class="form-check-label" for="edit_check_vt_{{ u.id }}">Análisis IoC (VT)</label>
-                                                            </div>
-
-                                                            <div class="form-check form-switch">
-                                                                <input class="form-check-input" type="checkbox" name="tools" value="checklist" 
-                                                                    id="edit_check_list_{{ u.id }}"
-                                                                    {% if 'checklist' in (u.authorized_tools or '') %}checked{% endif %}>
-                                                                <label class="form-check-label" for="edit_check_list_{{ u.id }}">Checklist Plataformas</label>
-                                                            </div>
+                                                        <label class="form-label fw-bold">Herramientas</label>
+                                                        <div class="card p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
+                                                            {% for key, info in lista_herramientas.items() %}
+                                                                <div class="form-check form-switch mb-2">
+                                                                    <input class="form-check-input" type="checkbox" name="tools" value="{{ key }}" 
+                                                                            id="edit_check_{{ key }}_{{ u.id }}"
+                                                                            {% if u.authorized_tools and key in u.authorized_tools.split(',') %}checked{% endif %}>
+                                                                    
+                                                                    <label class="form-check-label" for="edit_check_{{ key }}_{{ u.id }}">
+                                                                        <i class="bi {{ info.icono }}"></i> {{ info.titulo }}
+                                                                    </label>
+                                                                </div>
+                                                            {% endfor %}
                                                         </div>
                                                     </div>
                                                     
@@ -182,49 +173,20 @@
                         </div>
                     </div>
 
-                    <!--<div class="mb-3">
-                        <label class="form-label fw-bold">Asignar Herramientas:</label>
-                        <div class="card p-2 border">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="tools" value="csirt" id="tool_csirt" checked>
-                                <label class="form-check-label text-muted" for="tool_csirt">
-                                    Gestión CSIRT
-                                </label>
-                            </div>
-
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="tools" value="virustotal" id="tool_vt">
-                                <label class="form-check-label" for="tool_vt">
-                                    VirusTotal
-                                </label>
-                            </div>
-
-                        </div>
-                    </div>-->
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Herramientas Autorizadas</label>
-                        <div class="card p-3 bg-light">
+                        <label class="form-label fw-bold">Herramientas</label>
+                        <div class="card p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
                             
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" name="herramientas" value="csirt" 
-                                    id="check_csirt_{{ usuarios.id }}"
-                                    {% if 'csirt' in (usuarios.authorized_tools or '') %}checked{% endif %}>
-                                <label class="form-check-label" for="check_csirt_{{ usuarios.id }}">Gestión CSIRT</label>
-                            </div>
-
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" name="herramientas" value="virustotal" 
-                                    id="check_vt_{{ usuarios.id }}"
-                                    {% if 'virustotal' in (usuarios.authorized_tools or '') %}checked{% endif %}>
-                                <label class="form-check-label" for="check_vt_{{ usuarios.id }}">Análisis IoC (VT)</label>
-                            </div>
-
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" name="herramientas" value="checklist" 
-                                    id="check_list_{{ usuarios.id }}"
-                                    {% if 'checklist' in (usuarios.authorized_tools or '') %}checked{% endif %}>
-                                <label class="form-check-label" for="check_list_{{ usuarios.id }}">Checklist Plataformas</label>
-                            </div>
+                            {% for key, info in lista_herramientas.items() %}
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="tools" value="{{ key }}" 
+                                        id="create_check_{{ key }}">
+                                    
+                                    <label class="form-check-label" for="create_check_{{ key }}">
+                                        <i class="bi {{ info.icono }}"></i> {{ info.titulo }}
+                                    </label>
+                                </div>
+                            {% endfor %}
 
                         </div>
                     </div>

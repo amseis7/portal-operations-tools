@@ -1,22 +1,169 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-        <h1 class="h2">CheckList Clientes</h1>
+<div class="container-fluid mt-4">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="text-secondary"><i class="bi bi-activity"></i> Monitoreo de Servicios</h3>
+        {% if current_user.is_admin %}
+        <a href="{{ url_for('checklist.config') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-gear-fill"></i> Configurar Monitores
+        </a>
+        {% endif %}
     </div>
 
-    <div class="row">
-        <div class="col-md-12">
-            <div class="card shadow-sm">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-cone-striped fs-1 text-warning mb-3"></i>
-                    <h3>Módulo en Construccion</h3>
-                    <p class="text-muted">Aqui ira tu nueva funcionalidad</p>
-                    <button class="btn btn-primary">Accion de Ejemplo</button>
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+        
+        {% for svc in servicios %}
+        <div class="col">
+            <div class="card h-100 shadow-sm border-0">
+                
+                {% set header_class = 'bg-light' %}
+                
+                {% if svc.estado_actual == 'offline' or svc.estado_actual == 'error_auth' or svc.estado_actual == 'error' %}
+                    {% set header_class = 'bg-danger text-white' %}
+                {% elif svc.estado_actual == 'warning' %}
+                    {% set header_class = 'bg-warning text-dark' %}
+                {% elif svc.estado_actual == 'online' %}
+                    {% set header_class = 'bg-success text-white' %}
+                {% endif %}
+
+                <div class="card-header {{ header_class }} d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 card-title fw-bold">
+                        <i class="bi bi-hdd-rack"></i> {{ svc.nombre_cliente }}
+                    </h5>
+                    <span class="badge bg-white text-dark opacity-75">{{ svc.tipo_tecnologia|upper }}</span>
+                </div>
+
+                <div class="card-body">
+                    
+                    {% if svc.mensaje_error %}
+                        <div class="alert alert-light border-danger text-danger d-flex align-items-center p-2">
+                            <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
+                            <div>
+                                <strong>Fallo en la revisión:</strong><br>
+                                <small>{{ svc.mensaje_error }}</small>
+                            </div>
+                        </div>
+
+                    {% else %}
+                        <h6 class="card-subtitle mb-3 text-muted border-bottom pb-2">
+                            {{ svc.ultima_data.get('message', 'Sin información') if svc.ultima_data else 'Esperando primera actualización...' }}
+                        </h6>
+
+                        {% if svc.ultima_data and svc.ultima_data.get('details') %}
+                        <ul class="list-group list-group-flush small">
+                            {% for item in svc.ultima_data.get('details', []) %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                <span>
+                                    {% if item.status == 'ok' %}
+                                        <i class="bi bi-check-circle-fill text-success"></i>
+                                    {% elif item.status == 'warning' %}
+                                        <i class="bi bi-circle-fill text-warning"></i>
+                                    {% else %}
+                                        <i class="bi bi-x-circle-fill text-danger"></i>
+                                    {% endif %}
+                                    {{ item.check }}
+                                </span>
+                                <span class="fw-bold">{{ item.text }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    {% endif %}
+
+                </div>
+
+                <div class="card-footer bg-white text-muted small d-flex justify-content-between align-items-center">
+                    <span title="Última actualización automática por el sistema">
+                        <i class="bi bi-robot"></i> 
+                        {{ svc.fecha_actualizacion.strftime('%H:%M') if svc.fecha_actualizacion else '--:--' }}
+                    </span>
+                    
+                    {% if svc.revisado_hoy %}
+                        <div class="text-success fw-bold" 
+                             title="Por: {{ svc.ultimo_revisor }} a las {{ svc.hora_revision }}{{ '\nNota: ' + svc.comentario_revision if svc.comentario_revision else '' }}">
+                            <i class="bi bi-check-all fs-5 align-middle"></i> 
+                            Visto {{ svc.hora_revision }}
+                            {% if svc.comentario_revision %}
+                                <i class="bi bi-chat-text small ms-1"></i>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <button type="button" 
+                                class="btn btn-sm btn-outline-primary" 
+                                data-bs-toggle="modal" 
+                                data-bs-target="#modalValidar"
+                                data-id="{{ svc.id }}"
+                                data-nombre="{{ svc.nombre_cliente }}">
+                            <i class="bi bi-check2-square"></i> Validar
+                        </button>
+                    {% endif %}
                 </div>
             </div>
         </div>
+        {% else %}
+        <div class="col-12 text-center py-5">
+            <div class="text-muted mb-3">
+                <i class="bi bi-inbox fs-1"></i>
+            </div>
+            <h4>No hay monitores configurados.</h4>
+            <p>Ve a configuración para agregar tu primer cliente.</p>
+            <a href="{{ url_for('checklist.config') }}" class="btn btn-primary">Ir a Configuración</a>
+        </div>
+        {% endfor %}
+
     </div>
 </div>
+
+<div class="modal fade" id="modalValidar" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Registrar Revisión Diaria</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formValidar" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="modal-body">
+                    <p>Vas a confirmar que revisaste el estado de: <strong id="nombreServicioModal"></strong></p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Comentario (Opcional):</label>
+                        <textarea name="comentario" class="form-control" rows="2" placeholder="Ej: Todo normal, pero hay una alerta leve..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check-lg"></i> Confirmar Revisión
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    var modalValidar = document.getElementById('modalValidar');
+    modalValidar.addEventListener('show.bs.modal', function (event) {
+        // Botón que activó el modal
+        var button = event.relatedTarget;
+        
+        // Extraer info de los atributos data-*
+        var id = button.getAttribute('data-id');
+        var nombre = button.getAttribute('data-nombre');
+        
+        // Actualizar el contenido del modal
+        var modalTitle = modalValidar.querySelector('#nombreServicioModal');
+        modalTitle.textContent = nombre;
+        
+        // Actualizar la acción del formulario con el ID correcto
+        // Asegúrate de que esta URL base coincida con tu ruta
+        var form = modalValidar.querySelector('#formValidar');
+        form.action = "/checklist/marcar_revisado/" + id;
+    });
+</script>
 {% endblock %}

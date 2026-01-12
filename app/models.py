@@ -3,6 +3,9 @@ from cryptography.fernet import Fernet
 import base64
 from flask import current_app
 import json
+from app import db
+from datetime import datetime
+from sqlalchemy.dialects.mysql import JSON, TEXT
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app.extensions import db, login_manager
@@ -178,3 +181,50 @@ class ExportTemplate(db.Model):
 
     def __repr__(self):
         return f'<Template {self.nombre_plataforma}>'
+    
+class ChecklistService(db.Model):
+    __tablename__ = 'checklist_services'
+
+    id = db.Column(db.Integer, primary_key=True)
+    nombre_cliente = db.Column(db.String(100), nullable=False)
+    tipo_tecnologia = db.Column(db.String(50), nullable=False)
+
+    # --- SEGURIDAD ---
+    # Aquí guardaremos un JSON encriptado con las credenciales (API Key, Secret, URL, etc)
+    _config_encrypted = db.Column(TEXT, nullable=True)
+    estado_actual = db.Column(db.String(20), default='pending')
+    mensaje_error = db.Column(db.String(255), nullable=True)
+    ultima_data = db.Column(JSON, nullable=True)
+    fecha_actualizacion = db.Column(db.DateTime, default=None)
+    reviews = db.relationship('ChecklistReview', backref='service', lazy='dynamic')
+
+    def set_config(self, config_dict):
+        """Recibe un diccionario, lo convierte a texto y lo encripta"""
+        key = current_app.config.get('SECRET_KEY_DB') # Necesitaremos definir esto
+        f = Fernet(key)
+        json_str = json.dumps(config_dict)
+        self._config_encrypted = f.encrypt(json_str.encode()).decode()
+
+    def get_config(self):
+        """Desencripta y devuelve el diccionario de credenciales"""
+        try:
+            key = current_app.config.get('SECRET_KEY_DB')
+            f = Fernet(key)
+            decrypted_data = f.decrypt(self._config_encrypted.encode()).decode()
+            return json.loads(decrypted_data)
+        except Exception as e:
+            print(f"Error desencriptando: {e}")
+            return {}
+        
+class ChecklistReview(db.Model):
+    """Registra cuando un humano hace clic en 'Revisado'"""
+    __tablename__ = 'checklist_reviews'
+
+    id = db.Column(db.Integer, primary_key=True)
+    service_id = db.Column(db.Integer, db.ForeignKey('checklist_services.id'))
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id')) # Asumiendo que tu tabla de usuarios es 'user'
+    user = db.relationship('User')
+    timestamp = db.Column(db.DateTime, default=datetime.now)
+    
+    # Opcional: Si quieres que dejen un comentario al revisar
+    comentario = db.Column(db.String(200), nullable=True)

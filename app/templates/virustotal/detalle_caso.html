@@ -2,13 +2,13 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h3 class="mb-0">Caso #{{ caso.id }}: <span class="text-primary">{{ caso.nombre }}</span></h3>
             <small class="text-muted">{{ caso.descripcion }}</small>
         </div>
 
-        <div id="zona-progreso" class="card mb-3 border-info d-none">
+        <div id="zona-progreso" class="card mb-2 border-info d-none">
             <div class="card-body">
                 <h5 class="card-title text-info">
                     <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -20,7 +20,7 @@
                         0%
                     </div>
                 </div>
-                <div class="text-muted small mt-1">
+                <div class="text-muted small mt-2">
                     Procesados: <span id="contador-progreso">0/0</span>
                 </div>
             </div>
@@ -87,7 +87,7 @@
             
             {# CASO 1: Vienes del CSIRT (Independiente del nombre del caso) #}
             <a href="{{ url_for('csirt.ver_gestion', ticket_id=request.args.get('origin_id')) }}" class="btn btn-outline-primary">
-                <i class="bi bi-arrow-left"></i> Volver al Ticket {{ request.args.get('origin_id') }}
+                <i class="bi bi-arrow-left"></i> Volver al Ticket <!--{{ request.args.get('origin_id') }}-->
             </a>
 
         {% else %}
@@ -315,17 +315,17 @@
 
         fetch('/virustotal/api/estado_caso/' + casoId)
             .then(function(r) { return r.json(); })
-            .then(function(d) {
-                // CONDICIÓN: Mostramos la barra SOLO SI:
-                // 1. Acabamos de pulsar el botón (vieneDeBoton)
-                // 2. O SI ya hay progreso real (>0) pero no ha terminado (<100)
-                // Esto evita que salga en casos nuevos con 0 procesados.
-                
-                var enProgresoReal = (d.procesados > 0 && d.porcentaje < 100);
+            .then(function(d) {                
+                //var servidorTrabajando = (d.estado === 'procesando');
 
-                if (vieneDeBoton || enProgresoReal) {
+                if (vieneDeBoton){// || servidorTrabajando) {
                     zonaProgreso.classList.remove('d-none');
                     intervalo = setInterval(consultarEstado, 3000); // Iniciar Polling
+                }
+                else{
+                    fetch('/virustotal/api/estado_caso/' + casoId)
+                    .then(r => r.json())
+                    .then(d => console.log("Estado servidor:", d));
                 }
             });
     });
