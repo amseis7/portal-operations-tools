@@ -67,7 +67,7 @@ def create_app(config_class=Config, instance_path=None):
         func=ejecutar_barrido_checklist,
         args=[app],
         trigger='interval',
-        minutes=30, # Se puede cambiar
+        minutes=120, # Se puede cambiar
         replace_existing=True
     )
 

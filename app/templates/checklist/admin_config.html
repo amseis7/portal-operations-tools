@@ -2,206 +2,254 @@
 
 {% block content %}
 <div class="container mt-4">
+    
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-gear-wide-connected"></i> Configuración de Monitoreo</h2>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNuevoServicio">
-            <i class="bi bi-plus-lg"></i> Nuevo Monitor
-        </button>
-        <a href="{{ url_for('checklist.forzar_actualizacion') }}" class="btn btn-warning">
-            <i class="bi bi-arrow-clockwise"></i> Forzar Actualización
-        </a>
-    </div>
-
-    <div class="d-flex gap-2">     
-        
-    </div>
-
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
-                    <tr>
-                        <th>Cliente</th>
-                        <th>Tecnología (Plugin)</th>
-                        <th>Estado Actual</th>
-                        <th>Última Actualización</th>
-                        <th class="text-end">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for svc in servicios %}
-                    <tr>
-                        <td class="fw-bold">{{ svc.nombre_cliente }}</td>
-                        <td><span class="badge bg-secondary">{{ svc.tipo_tecnologia }}</span></td>
-                        <td>
-                            {% if svc.estado_actual == 'online' %}
-                                <span class="badge bg-success">Online</span>
-                            {% elif svc.estado_actual == 'warning' %}
-                                <span class="badge bg-warning text-dark">Alerta</span>
-                            {% elif svc.estado_actual == 'offline' %}
-                                <span class="badge bg-danger">Offline</span>
-                            {% else %}
-                                <span class="badge bg-light text-dark border">Pendiente</span>
-                            {% endif %}
-                        </td>
-                        <td class="small text-muted">
-                            {{ svc.fecha_actualizacion.strftime('%d/%m %H:%M') if svc.fecha_actualizacion else 'Nunca' }}
-                        </td>
-                        <td class="text-end">
-                            <form action="{{ url_for('checklist.eliminar_servicio', id=svc.id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Borrar este monitor?');">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="5" class="text-center py-4 text-muted">No hay servicios configurados.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div>
+            <h2><i class="fas fa-cogs"></i> Configuración de Servicios</h2>
+            <p class="text-muted">Gestiona las credenciales de tus monitores externos.</p>
+        </div>
+        <div>
+            <a href="{{ url_for('checklist.forzar_actualizacion') }}" class="btn btn-warning me-2">
+                <i class="fas fa-sync-alt"></i> Forzar Actualización
+            </a>
+            <a href="{{ url_for('checklist.index') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Volver al Dashboard
+            </a>
         </div>
     </div>
-</div>
 
-<div class="modal fade" id="modalNuevoServicio" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Configurar Nuevo Cliente</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form action="{{ url_for('checklist.guardar_servicio') }}" method="POST" id="formConfig">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Nombre del Cliente</label>
-                        <input type="text" name="nombre_cliente" class="form-control" required placeholder="Ej: Sonda">
-                    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+             {{ message }}
+             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Tecnología a Monitorear</label>
-                        <select class="form-select" name="plugin_slug" id="selectPlugin" required>
-                            <option value="" selected disabled>Seleccione...</option>
-                            {% for p in plugins %}
-                                <option value="{{ p.slug }}">{{ p.nombre }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <hr>
-
-                    <div id="dynamicFields" class="mb-3">
-                        <p class="text-muted small text-center">Seleccione una tecnología para ver las credenciales requeridas.</p>
-                    </div>
-                    
-                    <div id="testConnectionResult" class="mt-2"></div>
-                </div>
-
-                <div class="modal-footer justify-content-between">
-                    <button type="button" class="btn btn-outline-info" id="btnTestConnection" disabled>
-                        <i class="bi bi-lightning-fill"></i> Probar Conexión
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0" id="formTitle">Nuevo Servicio</h5>
+                    <button class="btn btn-sm btn-light text-primary" id="btnCancelEdit" style="display:none;" onclick="resetForm()">
+                        Cancelar
                     </button>
-                    <button type="submit" class="btn btn-primary" id="btnGuardar" disabled>Guardar Configuración</button>
                 </div>
-            </form>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('checklist.guardar_servicio') }}" id="configForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
+                        <input type="hidden" name="service_id" id="service_id" value="">
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nombre del Cliente / Servicio</label>
+                            <input type="text" class="form-control" name="nombre_cliente" id="nombre_cliente" 
+                                   placeholder="Ej: Banco Estado - FortiEDR" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Tecnología</label>
+                            <select class="form-select" name="plugin_slug" id="pluginSelect" onchange="renderFields()" required>
+                                <option value="" disabled selected>-- Seleccionar Plugin --</option>
+                                {% for p in plugins %}
+                                <option value="{{ p.slug }}">{{ p.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <hr>
+
+                        <div id="dynamicFields" class="mb-3">
+                            <p class="text-muted small text-center">Selecciona una tecnología para ver las opciones.</p>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-secondary" id="btnTest" onclick="probarConexion()">
+                                <i class="fas fa-plug"></i> Probar Conexión
+                            </button>
+                            
+                            <button type="submit" class="btn btn-success" id="btnGuardar">
+                                <i class="fas fa-save"></i> Guardar Configuración
+                            </button>
+                        </div>
+                        
+                        <div id="testResult" class="mt-2 text-center" style="display:none;"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-7">
+            <div class="card shadow">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Servicios Activos</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for svc in servicios %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-0 fw-bold">{{ svc.nombre_cliente }}</h6>
+                                    <small class="text-muted">
+                                        {% for p in plugins %}
+                                            {% if p.slug == svc.tipo_tecnologia %}
+                                                {{ p.nombre }}
+                                            {% endif %}
+                                        {% endfor %}
+                                    </small>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button class="btn btn-sm btn-outline-primary" 
+                                            onclick="cargarEdicion('{{ svc.id }}', '{{ svc.tipo_tecnologia }}', '{{ svc.nombre_cliente }}')">
+                                        Editar
+                                    </button>
+                                    
+                                    <form action="{{ url_for('checklist.eliminar_servicio', id=svc.id) }}" method="POST" 
+                                          onsubmit="return confirm('¿Estás seguro de eliminar este servicio?');" style="margin:0;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            Borrar
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="p-4 text-center text-muted">
+                                No hay servicios configurados.
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    const selectPlugin = document.getElementById('selectPlugin');
-    const container = document.getElementById('dynamicFields');
-    const btnTest = document.getElementById('btnTestConnection');
-    const btnGuardar = document.getElementById('btnGuardar');
-    const resultDiv = document.getElementById('testConnectionResult');
+    // Diccionarios limpios desde Python
+    const pluginDefs = {{ plugin_defs_js|tojson }};
+    const savedConfigs = {{ saved_configs|tojson }}; 
+    const csrfToken = "{{ csrf_token() }}"; // Token para usar en Fetch/AJAX
 
-    // Cuando cambia el select, pedimos los campos al servidor
-    selectPlugin.addEventListener('change', function() {
-        const slug = this.value;
-        if(!slug) return;
+    function renderFields(dataValues = null) {
+        const slug = document.getElementById('pluginSelect').value;
+        const container = document.getElementById('dynamicFields');
+        container.innerHTML = ''; 
 
-        // Limpiar
-        container.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div> Cargando campos...</div>';
-        btnTest.disabled = true;
-        btnGuardar.disabled = true;
-        resultDiv.innerHTML = '';
+        if (!slug || !pluginDefs[slug]) return;
 
-        // Fetch API
-        fetch(`/checklist/api/get_fields/${slug}`)
-            .then(r => r.json())
-            .then(campos => {
-                container.innerHTML = ''; // Borrar spinner
-                
-                // Generar Inputs
-                campos.forEach(campo => {
-                    const div = document.createElement('div');
-                    div.className = 'mb-3';
-                    
-                    const label = document.createElement('label');
-                    label.className = 'form-label';
-                    label.innerText = campo.label;
-                    
-                    const input = document.createElement('input');
-                    input.type = campo.type || 'text'; // text o password
-                    input.name = campo.name;
-                    input.className = 'form-control';
-                    if(campo.placeholder) input.placeholder = campo.placeholder;
-                    input.required = true;
-                    // Clase especial para recolectar datos en el test
-                    input.classList.add('dynamic-input'); 
+        const fields = pluginDefs[slug];
+        fields.forEach(field => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mb-3';
+            
+            const label = document.createElement('label');
+            label.className = 'form-label';
+            label.innerText = field.label;
+            
+            const input = document.createElement('input');
+            input.type = field.type; 
+            input.name = field.name;      
+            input.id = 'field_' + field.name; // ID para buscarlo fácil con JS
+            input.className = 'form-control';
+            input.placeholder = field.placeholder || '';
 
-                    div.appendChild(label);
-                    div.appendChild(input);
-                    container.appendChild(div);
-                });
+            if (dataValues && dataValues[field.name]) {
+                if (field.type === 'password') {
+                    input.placeholder = "●●●●●● (Dejar vacío para mantener)";
+                } else {
+                    input.value = dataValues[field.name];
+                }
+            }
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            container.appendChild(wrapper);
+        });
+    }
 
-                // Habilitar botón de prueba
-                btnTest.disabled = false;
-            })
-            .catch(err => {
-                container.innerHTML = '<p class="text-danger">Error cargando campos del plugin.</p>';
-                console.error(err);
-            });
-    });
+    function cargarEdicion(id, slug, nombre) {
+        document.getElementById('service_id').value = id;
+        document.getElementById('nombre_cliente').value = nombre;
+        document.getElementById('pluginSelect').value = slug;
 
-    // Botón Probar Conexión
-    btnTest.addEventListener('click', function() {
-        const slug = selectPlugin.value;
-        const inputs = document.querySelectorAll('.dynamic-input');
+        const configData = savedConfigs[id] || {};
+        renderFields(configData);
+
+        // UI Updates
+        document.getElementById('formTitle').innerText = "Editando: " + nombre;
+        document.getElementById('btnGuardar').className = "btn btn-warning";
+        document.getElementById('btnGuardar').innerText = "Actualizar Servicio";
+        document.getElementById('btnCancelEdit').style.display = 'block';
+        document.getElementById('testResult').style.display = 'none';
+        
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById('configForm').reset();
+        document.getElementById('service_id').value = "";
+        document.getElementById('dynamicFields').innerHTML = '<p class="text-muted small text-center">Selecciona una tecnología...</p>';
+        
+        document.getElementById('formTitle').innerText = "Nuevo Servicio";
+        document.getElementById('btnGuardar').className = "btn btn-success";
+        document.getElementById('btnGuardar').innerText = "Guardar Configuración";
+        document.getElementById('btnCancelEdit').style.display = 'none';
+        document.getElementById('testResult').style.display = 'none';
+    }
+
+    // --- FUNCIÓN AJAX PARA PROBAR CONEXIÓN ---
+    function probarConexion() {
+        const slug = document.getElementById('pluginSelect').value;
+        const resultDiv = document.getElementById('testResult');
+        
+        if (!slug) {
+            alert("Selecciona primero una tecnología.");
+            return;
+        }
+
+        // 1. Recopilar datos del formulario manualmente
+        const fields = pluginDefs[slug];
         let credentials = {};
         
-        // Recolectar datos del formulario dinámico
-        inputs.forEach(input => {
-            credentials[input.name] = input.value;
+        fields.forEach(f => {
+            const val = document.getElementById('field_' + f.name).value;
+            credentials[f.name] = val;
         });
 
-        // Mostrar carga
-        resultDiv.innerHTML = '<span class="text-info"><span class="spinner-border spinner-border-sm"></span> Conectando...</span>';
+        // UI de "Cargando..."
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'alert alert-info mt-2';
+        resultDiv.innerText = "Probando conexión... espera un momento.";
 
-        // Enviar al servidor para probar
-        fetch('/checklist/api/test_connection', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': "{{ csrf_token() }}"},
+        // 2. Enviar petición POST a Flask
+        fetch("{{ url_for('checklist.api_test_connection') }}", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": csrfToken // Importante pasar el token aquí
+            },
             body: JSON.stringify({
                 plugin_slug: slug,
                 credentials: credentials
             })
         })
-        .then(r => r.json())
+        .then(response => response.json())
         .then(data => {
-            if(data.success) {
-                resultDiv.innerHTML = `<div class="alert alert-success py-1"><i class="bi bi-check-circle"></i> ${data.message}</div>`;
-                btnGuardar.disabled = false; // Solo dejamos guardar si la prueba pasa
+            if (data.success) {
+                resultDiv.className = 'alert alert-success mt-2';
+                resultDiv.innerText = "✅ Éxito: " + data.message;
             } else {
-                resultDiv.innerHTML = `<div class="alert alert-danger py-1"><i class="bi bi-x-circle"></i> ${data.message}</div>`;
-                btnGuardar.disabled = true;
+                resultDiv.className = 'alert alert-danger mt-2';
+                resultDiv.innerText = "❌ Error: " + data.message;
             }
+        })
+        .catch(error => {
+            resultDiv.className = 'alert alert-danger mt-2';
+            resultDiv.innerText = "Error de red: " + error;
         });
-    });
-});
+    }
 </script>
 {% endblock %}

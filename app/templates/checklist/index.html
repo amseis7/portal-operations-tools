@@ -2,30 +2,36 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
-    
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h3 class="text-secondary"><i class="bi bi-activity"></i> Monitoreo de Servicios</h3>
         {% if current_user.is_admin %}
-        <a href="{{ url_for('checklist.config') }}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-gear-fill"></i> Configurar Monitores
-        </a>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('checklist.forzar_actualizacion') }}" class="btn btn-warning btn-sm text-dark">
+                <i class="bi bi-arrow-repeat"></i> Actualizar
+            </a>
+            <a href="{{ url_for('checklist.config') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-gear-fill"></i> Configurar Monitores
+            </a>
+        </div>
         {% endif %}
     </div>
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-        
+
         {% for svc in servicios %}
         <div class="col">
             <div class="card h-100 shadow-sm border-0">
-                
+
                 {% set header_class = 'bg-light' %}
-                
-                {% if svc.estado_actual == 'offline' or svc.estado_actual == 'error_auth' or svc.estado_actual == 'error' %}
-                    {% set header_class = 'bg-danger text-white' %}
+
+                {# --- CAMBIO 1: Aceptamos 'success' y 'ok' como VERDE --- #}
+                {% if svc.estado_actual in ['offline', 'error_auth', 'error'] %}
+                {% set header_class = 'bg-danger text-white' %}
                 {% elif svc.estado_actual == 'warning' %}
-                    {% set header_class = 'bg-warning text-dark' %}
-                {% elif svc.estado_actual == 'online' %}
-                    {% set header_class = 'bg-success text-white' %}
+                {% set header_class = 'bg-warning text-dark' %}
+                {% elif svc.estado_actual in ['online', 'success', 'ok'] %}
+                {% set header_class = 'bg-success text-white' %}
                 {% endif %}
 
                 <div class="card-header {{ header_class }} d-flex justify-content-between align-items-center">
@@ -36,68 +42,64 @@
                 </div>
 
                 <div class="card-body">
-                    
+
                     {% if svc.mensaje_error %}
-                        <div class="alert alert-light border-danger text-danger d-flex align-items-center p-2">
-                            <i class="bi bi-exclamation-triangle-fill fs-3 me-3"></i>
-                            <div>
-                                <strong>Fallo en la revisión:</strong><br>
-                                <small>{{ svc.mensaje_error }}</small>
-                            </div>
+                    {# Si hay un error explícito o mensaje de estado #}
+                    <div
+                        class="alert alert-light border-{{ 'danger' if svc.estado_actual in ['offline','error'] else 'success' }} d-flex align-items-center p-2">
+                        {% if svc.estado_actual in ['offline','error'] %}
+                        <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-danger"></i>
+                        {% else %}
+                        <i class="bi bi-check-circle-fill fs-3 me-3 text-success"></i>
+                        {% endif %}
+
+                        <div>
+                            <strong>Estado:</strong><br>
+                            <small>{{ svc.mensaje_error }}</small>
                         </div>
+                    </div>
 
                     {% else %}
-                        <h6 class="card-subtitle mb-3 text-muted border-bottom pb-2">
-                            {{ svc.ultima_data.get('message', 'Sin información') if svc.ultima_data else 'Esperando primera actualización...' }}
-                        </h6>
+                    {# Mensaje por defecto si no hay mensaje_error #}
+                    <h6 class="card-subtitle mb-3 text-muted border-bottom pb-2">
+                        {{ svc.ultima_data.get('message', 'Esperando actualización...') if svc.ultima_data else 'Sin
+                        datos aún...' }}
+                    </h6>
+                    {% endif %}
 
-                        {% if svc.ultima_data and svc.ultima_data.get('details') %}
-                        <ul class="list-group list-group-flush small">
-                            {% for item in svc.ultima_data.get('details', []) %}
-                            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
-                                <span>
-                                    {% if item.status == 'ok' %}
-                                        <i class="bi bi-check-circle-fill text-success"></i>
-                                    {% elif item.status == 'warning' %}
-                                        <i class="bi bi-circle-fill text-warning"></i>
-                                    {% else %}
-                                        <i class="bi bi-x-circle-fill text-danger"></i>
-                                    {% endif %}
-                                    {{ item.check }}
-                                </span>
-                                <span class="fw-bold">{{ item.text }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% endif %}
+                    {# --- CAMBIO 2: Botón de Detalles en lugar de lista larga --- #}
+                    {# Solo mostramos el botón si hay data técnica JSON #}
+                    {% if svc.ultima_data %}
+                    <div class="d-grid mt-3">
+                        <button type="button" class="btn btn-sm btn-outline-info"
+                            onclick='verDetalles({{ svc.ultima_data|tojson }}, "{{ svc.nombre_cliente }}")'>
+                            <i class="bi bi-eye"></i> Ver Detalles Técnicos
+                        </button>
+                    </div>
                     {% endif %}
 
                 </div>
 
                 <div class="card-footer bg-white text-muted small d-flex justify-content-between align-items-center">
                     <span title="Última actualización automática por el sistema">
-                        <i class="bi bi-robot"></i> 
+                        <i class="bi bi-robot"></i>
                         {{ svc.fecha_actualizacion.strftime('%H:%M') if svc.fecha_actualizacion else '--:--' }}
                     </span>
-                    
+
                     {% if svc.revisado_hoy %}
-                        <div class="text-success fw-bold" 
-                             title="Por: {{ svc.ultimo_revisor }} a las {{ svc.hora_revision }}{{ '\nNota: ' + svc.comentario_revision if svc.comentario_revision else '' }}">
-                            <i class="bi bi-check-all fs-5 align-middle"></i> 
-                            Visto {{ svc.hora_revision }}
-                            {% if svc.comentario_revision %}
-                                <i class="bi bi-chat-text small ms-1"></i>
-                            {% endif %}
-                        </div>
+                    <div class="text-success fw-bold"
+                        title="Por: {{ svc.ultimo_revisor }} a las {{ svc.hora_revision }}{{ '\nNota: ' + svc.comentario_revision if svc.comentario_revision else '' }}">
+                        <i class="bi bi-check-all fs-5 align-middle"></i>
+                        Visto {{ svc.hora_revision }}
+                        {% if svc.comentario_revision %}
+                        <i class="bi bi-chat-text small ms-1"></i>
+                        {% endif %}
+                    </div>
                     {% else %}
-                        <button type="button" 
-                                class="btn btn-sm btn-outline-primary" 
-                                data-bs-toggle="modal" 
-                                data-bs-target="#modalValidar"
-                                data-id="{{ svc.id }}"
-                                data-nombre="{{ svc.nombre_cliente }}">
-                            <i class="bi bi-check2-square"></i> Validar
-                        </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                        data-bs-target="#modalValidar" data-id="{{ svc.id }}" data-nombre="{{ svc.nombre_cliente }}">
+                        <i class="bi bi-check2-square"></i> Validar
+                    </button>
                     {% endif %}
                 </div>
             </div>
@@ -124,17 +126,18 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="formValidar" method="POST">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
                 <div class="modal-body">
                     <p>Vas a confirmar que revisaste el estado de: <strong id="nombreServicioModal"></strong></p>
-                    
+
                     <div class="mb-3">
                         <label class="form-label text-muted small">Comentario (Opcional):</label>
-                        <textarea name="comentario" class="form-control" rows="2" placeholder="Ej: Todo normal, pero hay una alerta leve..."></textarea>
+                        <textarea name="comentario" class="form-control" rows="2"
+                            placeholder="Ej: Todo normal, pero hay una alerta leve..."></textarea>
                     </div>
                 </div>
-                
+
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                     <button type="submit" class="btn btn-success">
@@ -146,24 +149,146 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalDetalles" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="modalTituloDetalle"><i class="bi bi-info-circle"></i> Detalles del Servicio
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="modalCuerpoDetalle">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+    // --- Lógica del Modal Validar (TU ORIGINAL) ---
     var modalValidar = document.getElementById('modalValidar');
     modalValidar.addEventListener('show.bs.modal', function (event) {
-        // Botón que activó el modal
         var button = event.relatedTarget;
-        
-        // Extraer info de los atributos data-*
         var id = button.getAttribute('data-id');
         var nombre = button.getAttribute('data-nombre');
-        
-        // Actualizar el contenido del modal
+
         var modalTitle = modalValidar.querySelector('#nombreServicioModal');
         modalTitle.textContent = nombre;
-        
-        // Actualizar la acción del formulario con el ID correcto
-        // Asegúrate de que esta URL base coincida con tu ruta
+
         var form = modalValidar.querySelector('#formValidar');
         form.action = "/checklist/marcar_revisado/" + id;
     });
+
+    // --- LÓGICA DEL NUEVO MODAL DE DETALLES ---
+    function verDetalles(data, nombre) {
+        document.getElementById('modalTituloDetalle').innerText = "Detalles: " + nombre;
+        const cuerpo = document.getElementById('modalCuerpoDetalle');
+        cuerpo.innerHTML = "";
+
+        if (!data || Object.keys(data).length === 0) {
+            cuerpo.innerHTML = '<div class="alert alert-warning">No hay detalles técnicos adicionales.</div>';
+            const modal = new bootstrap.Modal(document.getElementById('modalDetalles'));
+            modal.show();
+            return;
+        }
+
+        let html = "";
+        let summary = data.infra_summary || {};
+
+        // 0. Sección Resumen de Componentes (DISEÑO 4 COLUMNAS)
+        // ----------------------------------------------------
+        html += '<div class="row g-2 mb-4">';
+
+        // Helper para generar tarjetas
+        const renderCard = (title, iconClass, objKey) => {
+            let item = summary[objKey] || { total: 0, active: 0, status: 'OK' };
+            let badgeClass = 'secondary';
+            let statusText = 'N/A';
+
+            if (item.total > 0) {
+                if (item.status === 'OK' && item.active === item.total) {
+                    badgeClass = 'success';
+                } else if (item.status === 'Warning' || item.active < item.total) {
+                    badgeClass = 'warning';
+                } else {
+                    badgeClass = 'danger';
+                }
+                statusText = `${item.active} / ${item.total} Activos`;
+            } else {
+                statusText = "0 Detectados";
+            }
+
+            return `
+            <div class="col-md-3">
+                <div class="p-2 border rounded bg-light text-center h-100 position-relative">
+                    <div class="mb-1 text-${badgeClass}">
+                        <i class="${iconClass} fs-4"></i>
+                    </div>
+                    <small class="text-muted d-block text-uppercase fw-bold mb-1" style="font-size: 0.7rem;">${title}</small>
+                    <span class="badge bg-${badgeClass} text-white">${statusText}</span>
+                </div>
+            </div>`;
+        };
+
+        // 1. Cloud Service
+        let cloudStatus = summary.cloud_status || 'Unknown';
+        let cloudClass = cloudStatus === 'OK' ? 'success' : (cloudStatus === 'Unknown' ? 'secondary' : 'danger');
+        html += `
+        <div class="col-md-3">
+            <div class="p-2 border rounded bg-light text-center h-100">
+                <div class="mb-1 text-${cloudClass}">
+                    <i class="bi bi-cloud-check-fill fs-4"></i>
+                </div>
+                <small class="text-muted d-block text-uppercase fw-bold mb-1" style="font-size: 0.7rem;">Cloud Service</small>
+                <span class="badge bg-${cloudClass}">${cloudStatus}</span>
+            </div>
+        </div>`;
+
+        // 2. VAs
+        html += renderCard('Virtual Appliances', 'bi bi-hdd-rack-fill', 'vas');
+
+        // 3. AD Connectors
+        html += renderCard('AD Connectors', 'bi bi-plug-fill', 'ad_connectors');
+
+        // 4. Domain Controllers
+        html += renderCard('Domain Controllers', 'bi bi-diagram-3-fill', 'domain_controllers');
+
+        html += '</div>'; // Fin row badges
+
+        // 1. Alertas de Infraestructura (EXISTENTE, pero lo mantenemos por si hay fallos específicos)
+        if (data.infra_alertas && data.infra_alertas.length > 0) {
+            html += '<h6 class="text-danger border-bottom pb-2"><i class="bi bi-hdd-network-fill"></i> Fallas Reportadas</h6>';
+            html += '<table class="table table-sm table-striped mb-4">';
+            html += '<thead class="table-danger"><tr><th>Componente</th><th>Estado Reportado</th></tr></thead><tbody>';
+            data.infra_alertas.forEach(item => {
+                html += `<tr><td>${item.component}</td><td>${item.state}</td></tr>`;
+            });
+            html += '</tbody></table>';
+        }
+
+        // 2. Alertas de MFA / Usuarios (EXISTENTE)
+        if (data.mfa_alertas && data.mfa_alertas.length > 0) {
+            html += '<h6 class="text-warning border-bottom pb-2"><i class="bi bi-person-x-fill"></i> Usuarios sin MFA / Riesgo</h6>';
+            html += '<table class="table table-sm table-hover mb-4">';
+            html += '<thead class="table-warning"><tr><th>Usuario</th><th>Rol / Estado</th></tr></thead><tbody>';
+            data.mfa_alertas.forEach(user => {
+                let uName = user.user || user.email || "Desconocido";
+                let uRole = user.role || user.status || "-";
+                html += `<tr><td>${uName}</td><td>${uRole}</td></tr>`;
+            });
+            html += '</tbody></table>';
+        }
+
+        // 3. Fallback visual si está todo 100% OK
+        if (html.includes('table') === false && cloudStatus === 'OK') {
+            html += '<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Todos los sistemas operando normalmente.</div>';
+        }
+
+        cuerpo.innerHTML = html;
+        const modal = new bootstrap.Modal(document.getElementById('modalDetalles'));
+        modal.show();
+    }
 </script>
 {% endblock %}

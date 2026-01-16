@@ -1,6 +1,7 @@
 from flask import render_template, request, flash, redirect, url_for, jsonify
 from datetime import datetime, date
-from app import db
+from app import db, csrf
+from flask_wtf.csrf import CSRFProtect
 from flask_login import current_user
 from app.checklist import bp
 from app.utils import proteger_blueprint, admin_required
@@ -49,18 +50,29 @@ def index():
 def config():
     # Listamos los servicios existentes
     servicios = ChecklistService.query.all()
+
+    configs_map = {}
+    for svc in servicios:
+        datos = svc.get_config()
+        configs_map[svc.id] = datos
     
     # Preparamos la lista de plugins para el <select> del HTML
     plugins_info = []
+    plugin_defs_js = {}
     for slug, plugin_class in AVAILABLE_PLUGINS.items():
+        campos = plugin_class.get_form_fields()
         plugins_info.append({
             'slug': slug,
-            'nombre': plugin_class.nombre
+            'nombre': plugin_class.nombre,
+            'fields': plugin_class.get_form_fields()
         })
+        plugin_defs_js[slug] = campos
         
     return render_template('checklist/admin_config.html', 
                            servicios=servicios, 
-                           plugins=plugins_info)
+                           plugins=plugins_info,
+                           saved_configs=configs_map,
+                           plugin_defs_js=plugin_defs_js)
 
 # --- RUTA 2: API PARA OBTENER CAMPOS (AJAX) ---
 @bp.route('/api/get_fields/<slug>')
@@ -96,34 +108,52 @@ def api_test_connection():
 # --- RUTA 4: GUARDAR SERVICIO ---
 @bp.route('/guardar', methods=['POST'])
 @admin_required
+#@csrf.exempt
 def guardar_servicio():
     try:
         # Datos fijos
+        service_id = request.form.get('service_id')
         nombre_cliente = request.form.get('nombre_cliente')
         plugin_slug = request.form.get('plugin_slug')
         
         # Datos dinámicos (Credenciales)
         # Recorremos los campos que pide el plugin para extraerlos del request.form
         plugin_class = get_plugin_class(plugin_slug)
-        campos_requeridos = plugin_class.get_form_fields()
+        if not plugin_class:
+            flash('Error: Plugin no valido.', 'danger')
+            return redirect(url_for('checklist.config'))
         
-        credenciales_dict = {}
+        campos_requeridos = plugin_class.get_form_fields()
+
+        if service_id:
+            servicio = ChecklistService.query.get_or_404(service_id)
+            old_config = servicio.get_config()
+
+            servicio.nombre_cliente = nombre_cliente
+            flash_msg = f'Servicio {nombre_cliente} actualizado correctamente.'
+        else:
+            servicio = ChecklistService()
+            servicio.nombre_cliente = nombre_cliente
+            servicio.tipo_tecnologia = plugin_slug
+            old_config = {}
+
+            db.session.add(servicio)
+            flash_msg = f'Servicio {nombre_cliente} creado correctamente.'
+        
+        new_config = {}
         for campo in campos_requeridos:
             key = campo['name']
-            credenciales_dict[key] = request.form.get(key)
+            valor_form = request.form.get(key)
+
+            if campo['type'] == 'password' and not valor_form:
+                new_config[key] = old_config.get(key, '')
+            else:
+                new_config[key] = valor_form
             
-        # Creamos la instancia en DB
-        nuevo_servicio = ChecklistService(
-            nombre_cliente=nombre_cliente,
-            tipo_tecnologia=plugin_slug
-        )
-        # Encriptamos y guardamos
-        nuevo_servicio.set_config(credenciales_dict)
-        
-        db.session.add(nuevo_servicio)
+        servicio.set_config(new_config)
+
         db.session.commit()
-        
-        flash(f'Servicio para {nombre_cliente} creado correctamente.', 'success')
+        flash(flash_msg, 'success')
         
     except Exception as e:
         db.session.rollback()
@@ -180,4 +210,4 @@ def forzar_actualizacion():
     except Exception as e:
         flash(f'Error ejecutando tarea: {e}', 'danger')
     
-    return redirect(url_for('checklist.config'))
+    return redirect(request.referrer or url_for('checklist.index'))
