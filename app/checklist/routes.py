@@ -1,11 +1,12 @@
 from flask import render_template, request, flash, redirect, url_for, jsonify
 from datetime import datetime, date
-from app import db, csrf
+from app import csrf
 from flask_wtf.csrf import CSRFProtect
 from flask_login import current_user
 from app.checklist import bp
 from app.utils import proteger_blueprint, admin_required
-from app.models import ChecklistService, ChecklistReview
+from app.models.checklist import ChecklistService, ChecklistReview
+from app.extensions import db
 from app.checklist.plugins import AVAILABLE_PLUGINS, get_plugin_class
 
 # Import Temporal

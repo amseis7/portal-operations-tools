@@ -1,9 +1,8 @@
-from datetime import datetime
+"""from datetime import datetime
 from cryptography.fernet import Fernet
 import base64
 from flask import current_app
 import json
-from app import db
 from datetime import datetime
 from sqlalchemy.dialects.mysql import JSON, TEXT
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -227,4 +226,4 @@ class ChecklistReview(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.now)
     
     # Opcional: Si quieres que dejen un comentario al revisar
-    comentario = db.Column(db.String(200), nullable=True)
+    comentario = db.Column(db.String(200), nullable=True)"""

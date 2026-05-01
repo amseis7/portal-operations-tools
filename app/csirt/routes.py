@@ -2,7 +2,7 @@ from sqlalchemy import func
 from flask import render_template, request, flash, redirect, url_for, send_file, stream_with_context
 from flask_login import login_required, current_user
 from app.csirt import bp
-from app.models import Alerta, Ioc, VtIoc, VtTicket
+from app.models.csirt import Alerta, Ioc
 from app.extensions import db
 import csv
 import re

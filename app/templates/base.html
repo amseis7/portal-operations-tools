@@ -5,14 +5,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Plataforma Operaciones</title>
-    
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
-    
+
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
 
     <style>
-        body { background-color: #f8f9fa; }
-        .card-login { max-width: 400px; margin: auto; margin-top: 100px; }
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .card-login {
+            max-width: 400px;
+            margin: auto;
+            margin-top: 100px;
+        }
     </style>
 </head>
 
@@ -23,12 +30,13 @@
             <a class="navbar-brand" href="{{ url_for('main.dashboard') }}">
                 <i class="bi bi-grid-3x3-gap-fill me-2"></i> {{ titulo_navbar | default('Portal de Operaciones') }}
             </a>
-          
+
             <div class="d-flex align-items-center gap-3">
                 {% if current_user.is_authenticated %}
                 <form class="d-flex" action="{{ url_for('csirt.buscar_ioc') }}" method="GET">
                     <div class="input-group" style="min-width: 300px;">
-                        <input class="form-control" type="search" name="q" placeholder="Buscar IP, Hash, URL..." aria-label="Search" required>
+                        <input class="form-control" type="search" name="q" placeholder="Buscar IP, Hash, URL..."
+                            aria-label="Search" required>
                         <button class="btn btn-primary" type="submit" title="Buscar">
                             <i class="bi bi-search me-1"></i> Buscar
                         </button>
@@ -39,57 +47,68 @@
                 {% if current_user.is_authenticated %}
                 <div class="dropdown">
                     <a class="text-reset text-decoration-none position-relative" href="#" id="notifDropdown"
-                    role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        role="button" data-bs-toggle="dropdown" aria-expanded="false">
 
                         <i class="bi bi-bell-fill fs-4 text-white"></i>
-                        
+
                         {% if cantidad_notif > 0 %}
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light">
+                        <span
+                            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light">
                             {{ cantidad_notif }}
                             <span class="visually-hidden">nuevas alertas</span>
                         </span>
                         {% endif %}
                     </a>
-                    
-                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="notifDropdown" style="width: 320px; max-height: 400px; overflow-y: auto;">
+
+                    <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="notifDropdown"
+                        style="width: 320px; max-height: 400px; overflow-y: auto;">
                         <li class="dropdown-header bg-light fw-bold">Notificaciones</li>
-                        <li><hr class="dropdown-divider my-0"></li>
-                        
+                        <li>
+                            <hr class="dropdown-divider my-0">
+                        </li>
+
                         {% if mis_notificaciones %}
-                            {% for notif in mis_notificaciones %}
-                            <li>
-                                <a class="dropdown-item d-flex align-items-start py-2" href="{{ notif.link or '#' }}">
-                                    <div class="me-2 mt-1">
-                                        {% if notif.category == 'csirt' %}
-                                            <i class="bi bi-shield-exclamation text-warning fs-5"></i>
-                                        {% else %}
-                                            <i class="bi bi-info-circle text-primary fs-5"></i>
-                                        {% endif %}
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <small class="d-block text-wrap">{{ notif.message }}</small>
-                                        <small class="text-muted" style="font-size: 0.75rem;">{{ notif.timestamp.strftime('%H:%M') }}</small>
-                                    </div>
-                                    <form action="{{ url_for('main.marcar_leida', notif_id=notif.id) }}" method="POST" class="ms-2">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-link p-0 text-secondary" title="Marcar leída" onclick="event.stopPropagation();">
-                                            <i class="bi bi-x-lg"></i>
-                                        </button>
-                                    </form>
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider my-0"></li>
-                            {% endfor %}
-                            <li><a class="dropdown-item text-center small text-primary py-2" href="{{ url_for('main.marcar_todas_leidas') }}">Marcar todas como leídas</a></li>
+                        {% for notif in mis_notificaciones %}
+                        <li>
+                            <a class="dropdown-item d-flex align-items-start py-2" href="{{ notif.link or '#' }}">
+                                <div class="me-2 mt-1">
+                                    {% if notif.category == 'csirt' %}
+                                    <i class="bi bi-shield-exclamation text-warning fs-5"></i>
+                                    {% else %}
+                                    <i class="bi bi-info-circle text-primary fs-5"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="flex-grow-1">
+                                    <small class="d-block text-wrap">{{ notif.message }}</small>
+                                    <small class="text-muted" style="font-size: 0.75rem;">{{
+                                        notif.timestamp.strftime('%H:%M') }}</small>
+                                </div>
+                                <form action="{{ url_for('main.marcar_leida', notif_id=notif.id) }}" method="POST"
+                                    class="ms-2">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                                    <button type="submit" class="btn btn-link p-0 text-secondary" title="Marcar leída"
+                                        onclick="event.stopPropagation();">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            </a>
+                        </li>
+                        <li>
+                            <hr class="dropdown-divider my-0">
+                        </li>
+                        {% endfor %}
+                        <li><a class="dropdown-item text-center small text-primary py-2"
+                                href="{{ url_for('main.marcar_todas_leidas') }}">Marcar todas como leídas</a></li>
                         {% else %}
-                            <li class="py-3 text-center text-muted small">No tienes notificaciones nuevas.</li>
+                        <li class="py-3 text-center text-muted small">No tienes notificaciones nuevas.</li>
                         {% endif %}
                     </ul>
                 </div>
                 {% endif %}
 
                 <div class="dropdown">
-                    <button class="btn btn-dark dropdown-toggle d-flex align-items-center" type="button" id="userMenu" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-dark dropdown-toggle d-flex align-items-center" type="button" id="userMenu"
+                        data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="bi bi-person-circle fs-5 me-2"></i> {{ current_user.username }}
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userMenu">
@@ -98,7 +117,9 @@
                                 <i class="bi bi-gear me-2"></i> Mi Cuenta
                             </a>
                         </li>
-                        <li><hr class="dropdown-divider"></li>  
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
                         <li>
                             <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
                                 <i class="bi bi-box-arrow-right me-2"></i> Salir
@@ -113,14 +134,14 @@
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            {% for category, message in messages %}
-              <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-              </div>
-            {% endfor %}
-          {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
@@ -128,4 +149,5 @@
 
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
 </body>
+
 </html>

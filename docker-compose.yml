@@ -9,11 +9,12 @@ services:
   
     ports:
       - "8080:8080"
+
+    enviroment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SECRET_KEY_DB=${SECRET_KEY_DB}
+      - CREDENTIAL_MANAGER_KEY=${CREDENTIAL_MANAGER_KEY}
     
     # Persistencia de Datos (El volumen mágico)
     volumes:
       - portal_db:/app/instance
-
-# Definición del volumen
-volumes:
-  portal_db:

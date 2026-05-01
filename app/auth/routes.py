@@ -1,6 +1,7 @@
 from flask import render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, current_user, login_required
-from app.models import User, db
+from app.models.user import User
+from app.extensions import db
 from app.virustotal.logic import obtener_uso_api
 from app.auth import bp
 from app.utils import admin_required
@@ -30,18 +31,27 @@ def validar_complejidad_password(password):
 
 @bp.route('/setup', methods=['GET', 'POST'])
 def setup():
-    # 1. SEGURIDAD: Verificar si ya existe un admin
-    # Si ya existe, no permitimos entrar aquí y mandamos al login
     admin_existente = User.query.filter_by(is_admin=True).first()
     if admin_existente:
         return redirect(url_for('auth.login'))
 
     if request.method == 'POST':
-        # 2. Capturar datos del formulario
-        username = request.form.get('username')
-        password = request.form.get('password')
-        nombre = request.form.get('nombre')
-        email = request.form.get('email')
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        nombre = request.form.get('nombre', '').strip()
+        email = request.form.get('email', '').strip()
+
+        if not username or not password or not nombre:
+            flash('Usuario, contraseña y nombre son obligatorio.', 'danger')
+
+        es_valida, mensaje_error = validar_complejidad_password(password)
+        if not es_valida:
+            flash(mensaje_error, 'danger')
+            return render_template('auth/setup.html')
+        
+        if User.query.filter_by(username=username).first():
+            flash('Ese nombre de usuario ya existe.', 'danger')
+            return render_template('auth/setup.html')
 
         # 3. Crear el Super Admin
         admin = User(

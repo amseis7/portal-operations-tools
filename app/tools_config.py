@@ -19,6 +19,13 @@ TOOLS = {
         'icono': 'bi-check2-square',
         'endpoint': 'checklist.index',
         'color': 'success'
+    },
+    'credentials': {
+        'titulo': 'Credenciales',
+        'descripcion': 'Almacenamiento seguro de credenciales.',
+        'icono': 'bi-key',
+        'endpoint': 'credentials.index',
+        'color': 'warning'
     }
     # ¡AQUÍ AGREGAS LA PRÓXIMA HERRAMIENTA CON UNA SOLA LÍNEA!
 }

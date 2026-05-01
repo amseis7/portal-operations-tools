@@ -12,6 +12,7 @@ env/
 instance/
 *.db
 *.sqlite3
+.env
 
 # --- IDEs (Configuraciones de tu editor) ---
 .idea/
@@ -25,6 +26,7 @@ instance/
 
 # --- Secrets ---
 *.pem
+*.crt
 certificado.py
 migrar DB modificada.txt
 Portal-Operations-Tools.spec

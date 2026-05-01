@@ -87,6 +87,9 @@ def create_app(config_class=Config, instance_path=None):
     from app.checklist import bp as checklist_bp
     app.register_blueprint(checklist_bp, url_prefix='/checklist')
 
+    from app.credentials import bp as credentials_bp
+    app.register_blueprint(credentials_bp, url_prefix='/credentials')
+
     # --- CONFIGURACIÓN DE Y NUEVOS MODULOS A AGREGAR ---
     from app.tools_config import TOOLS
 

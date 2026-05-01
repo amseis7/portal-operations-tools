@@ -1,6 +1,7 @@
 import sys
 import os
 import socket
+from dotenv import load_dotenv
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
 from app import create_app, db
@@ -22,6 +23,8 @@ if getattr(sys, 'frozen', False):
 else:
     # Estamos en Python normal (Docker/Dev)
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 INSTANCE_PATH = os.path.join(BASE_DIR, 'instance')
 
