@@ -38,7 +38,7 @@ def buscar_resultado_freco_en_db(valor, dias_validez=14):
 
 def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     """Consulta VT para un objeto (Ioc o VtIoc)."""
-    print(ioc_obj)
+    logger.info(ioc_obj)
     if not forzar and ioc_obj.vt_last_check:
         tiempo = datetime.now() - ioc_obj.vt_last_check
         if tiempo.days < 7:
@@ -93,7 +93,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
             endpoint = f"{base_url}/urls/{url_id}"
         except: return False
     elif tipo_db == 'email':
-        print(f"[VT SKIP] Ignoraldo email: {valor_original}")
+        logger.info(f"[VT SKIP] Ignoraldo email: {valor_original}")
 
         ioc_obj.vt_last_check = datetime.now()
         ioc_obj.vt_positives = 0
@@ -107,7 +107,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
         return True # Retornamos True para que el sistema sepa que "terminó" con este
     else:
         # Si llega un tipo desconocido (ej: 'telefono'), también lo marcamos para no trabar la barra
-        print(f"[VT WARNING] Tipo no soportado: {tipo_db}")
+        logger.warning(f"[VT WARNING] Tipo no soportado: {tipo_db}")
         ioc_obj.vt_last_check = datetime.now()
         ioc_obj.set_motores({"ERROR": f"Tipo '{tipo_db}' no soportado por VT"})
         db.session.commit()
@@ -119,7 +119,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
             response = requests.get(endpoint, headers=headers, timeout=15)
             
             if response.status_code == 429:
-                print(f"[VT LIMIT] Cuota excedida (429) para {valor_original}. Verificando cuota real...") # <--- DIAGNÓSTICO
+                logger.warning(f"[VT LIMIT] Cuota excedida (429) para {valor_original}. Verificando cuota real...") # <--- DIAGNÓSTICO
                 cuota = obtener_uso_api(api_key)
 
                 if cuota:
@@ -127,11 +127,11 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                     limite = cuota.get('diario_limite', 0)
 
                 if isinstance(limite, int) and usado >= limite:
-                    print(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
+                    logger.warning(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
                     # Lanzamos una excepción específica para detener el bucle en background
                     raise Exception("VT_QUOTA_EXCEEDED")
 
-                print(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
+                logger.info(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
                 time.sleep(60)
                 continue
             
@@ -199,7 +199,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                 return True
             
             else:
-                print(f"[VT ERROR] Fallo con código {response.status_code}: {response.text}")
+                logger.error(f"[VT ERROR] Fallo con código {response.status_code}: {response.text}")
                 return False
 
     except Exception as e:

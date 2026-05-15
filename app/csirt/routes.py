@@ -6,8 +6,6 @@ from app.models.csirt import Alerta, Ioc
 from app.extensions import db
 import csv
 import re
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from werkzeug.wrappers import Response
 
 import pandas as pd
@@ -15,7 +13,7 @@ from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 
 from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva, obtener_mapa_recurrencia
-from app.utils import admin_required, proteger_blueprint
+from app.utils import admin_required, proteger_blueprint, generar_reporte_excel
 
 proteger_blueprint(bp, 'csirt')
 
@@ -326,7 +324,6 @@ def eliminar_ticket(ticket_id):
 
 @bp.route('/generar_reporte', methods=['POST'])
 def generar_reporte():
-    # 1. Obtener fechas
     fecha_inicio_str = request.form.get('fecha_inicio')
     fecha_fin_str = request.form.get('fecha_fin')
 
@@ -342,7 +339,6 @@ def generar_reporte():
         flash('Formato de fecha inválido.', 'danger')
         return redirect(url_for('csirt.index'))
 
-    # 2. Consultar BD
     alertas = Alerta.query.filter(
         Alerta.fecha_realizacion >= fecha_inicio,
         Alerta.fecha_realizacion <= fecha_fin_inclusive
@@ -352,110 +348,7 @@ def generar_reporte():
         flash(f'No se encontraron alertas entre {fecha_inicio_str} y {fecha_fin_str}.', 'info')
         return redirect(url_for('csirt.index'))
 
-    # 3. Preparar Excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Reporte Gestión"
-
-    # --- ESTILOS ---
-    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
-    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    left_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'), 
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
-
-    # --- ENCABEZADOS (Ordenados según tu solicitud) ---
-    headers = [
-        'Nº',
-        'Fecha',
-        'Detalle Incidente / Reporte de vulnerabilidades',
-        'Tipo (Phishing, virus, etc.)',
-        'Criticidad (Alta, Media, Baja)',
-        'Canal de información de obtención (Twitter, email, etc.)',
-        'Plan de acción',
-        'Fecha de implementación',
-        'Chequeo post remediación'
-    ]
-    ws.append(headers)
-
-    # Estilar Cabecera y definir anchos
-    column_widths = [5, 12, 40, 25, 15, 25, 25, 20, 25] # Anchos para col 1 a 9
-    
-    for col_num, cell in enumerate(ws[1], 1):
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center_align
-        cell.border = thin_border
-        # Aplicar anchos
-        col_letter = openpyxl.utils.get_column_letter(col_num)
-        if col_num <= len(column_widths):
-            ws.column_dimensions[col_letter].width = column_widths[col_num-1]
-
-    # --- DICCIONARIO DE TIPOS ---
-    mapa_tipos = {
-        "8FPH": "Phishing",
-        "2CMV": "Malware",
-        "8FFR": "Sitios Fraudulentos",
-        "4IIA": "Ataques de Fuerza Bruta",
-        "4IIV": "Ataques de Fuerza Bruta",
-        "ACF": "Campaña Fraudulenta",
-        "AIA": "Investigacion de Amenazas",
-        "AVC": "Vulnerabilidad Critica"
-    }
-
-    # --- LLENADO DE DATOS ---
-    contador = 1
-    for alerta in alertas:
-        
-        # A. Lógica de Traducción de Tipo
-        # Buscamos si alguna de las claves (Ej: 8FPH) está contenida en el nombre de la alerta
-        tipo_reporte = "Otro / Desconocido"
-        nombre_upper = alerta.nombre_alerta.upper()
-        
-        for codigo, descripcion in mapa_tipos.items():
-            if codigo in nombre_upper:
-                tipo_reporte = descripcion
-                break
-        
-        # Si no encontró coincidencias exactas pero tenemos el tipo corto guardado
-        if tipo_reporte == "Otro / Desconocido" and alerta.tipo_alerta:
-             # Intento de fallback (Ej: si la BD tiene 'AIA' pero el nombre no)
-             tipo_reporte = mapa_tipos.get(alerta.tipo_alerta, alerta.tipo_alerta)
-
-        # C. Construcción de la Fila
-        row_data = [
-            contador,                                      # Nº
-            alerta.fecha_realizacion.strftime('%d/%m/%Y'), # Fecha
-            alerta.nombre_alerta,                          # Detalle
-            tipo_reporte,                                  # Tipo Traducido
-            "Alta",                                        # Criticidad
-            "CSIRT",                                       # Canal
-            "Bloqueo de IoC",                              # Plan de acción (Vacio para llenar manual)
-            alerta.fecha_realizacion.strftime('%d/%m/%Y'), # Fecha implementación (Vacio)
-            "OK"                                             # Chequeo post (Vacio)
-        ]
-        ws.append(row_data)
-        
-        # Estilar celdas de datos
-        current_row = ws.max_row
-        for col_idx, cell in enumerate(ws[current_row], 1):
-            cell.border = thin_border
-            # Alinear a la izquierda el Detalle y el Tipo, el resto centrado
-            if col_idx in [3, 4, 7, 9]: 
-                cell.alignment = left_align
-            else:
-                cell.alignment = center_align
-        
-        contador += 1
-
-    # Guardar y enviar
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-
+    excel_file = generar_reporte_excel(alertas, fecha_inicio_str, fecha_fin_str)
     nombre_archivo = f"Reporte_CSIRT_{fecha_inicio_str}_al_{fecha_fin_str}.xlsx"
     return send_file(
         excel_file,

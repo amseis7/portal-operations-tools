@@ -13,6 +13,43 @@ import re
 
 proteger_blueprint(bp, 'virustotal')
 
+VARIABLES_PERMITIDAS = {
+    'valor', 'tipo', 'tipo_real', 'ticket', 'filename',
+    'md5', 'sha1', 'sha256', 'positives', 'total', 'estado_motor'
+}
+EXTENSIONES_PERMITIDAS = {'csv', 'txt', 'xml', 'json'}
+
+def validar_plantilla(form):
+    errores = []
+    nombre = form.get('nombre', '').strip()
+    engine = form.get('vt_engine', '').strip()
+    ext = form.get('extension', '').strip().lower()
+    row = form.get('row_template', '').strip()
+    hashes = form.get('supported_hashes', '').strip()
+
+    if not nombre:
+        errores.append("El nombre de la plataforma es obligatorio.")
+    if not engine:
+        errores.append("El nombre del motor VT es obligatorio.")
+    if ext not in EXTENSIONES_PERMITIDAS:
+        errores.append(f"Extensión no válida: {ext}")
+    if not row:
+        errores.append("La plantilla de fila es obligatoria.")
+    else:
+        usadas = set(re.findall(r'\{(\w+)\}', row))
+        invalidas = usadas - VARIABLES_PERMITIDAS
+        if invalidas:
+            errores.append(
+                f"Variables no reconocidas: {', '.join(sorted(invalidas))}. "
+                f"Válidas: {', '.join(sorted(VARIABLES_PERMITIDAS))}"
+            )
+    if hashes:
+        for h in hashes.split(','):
+            if h.strip() not in ('md5', 'sha1', 'sha256'):
+                errores.append(f"Hash no soportado: {h.strip()}")
+    return errores
+
+
 # --- RUTAS DE GESTIÓN DE CASOS ---
 @bp.route('/')
 def index():
@@ -79,7 +116,8 @@ def ver_caso(caso_id):
 
 @bp.route('/analizar_caso/<int:caso_id>', methods=['POST'])
 def analizar_caso(caso_id):
-    if not current_user.virustotal_api_key:
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
         link = url_for('auth.perfil')
         mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{link}" class="alert-link">Perfil de Usuario</a>.')
         flash(mensaje, 'danger')
@@ -120,6 +158,11 @@ def analizar_ticket_csirt(ticket_id):
     """
     Toma IoCs de un Ticket CSIRT (RF-...), crea un Caso VT y analiza.
     """
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
+        flash("Necesitas configurar tu API Key de VirusTotal en tu perfil antes de crear casos.", "warning")
+        return redirect(url_for('auth.perfil'))
+
     # 1. Obtener IoCs origen
     query = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id)
 
@@ -142,7 +185,10 @@ def analizar_ticket_csirt(ticket_id):
     # 2. Procesar (Importar -> Analizar)
     caso_vt_id = procesar_importacion_csirt(ticket_id, iocs_csirt)
 
-    # 3. Redirigir al CASO VT (Nueva pantalla)
+    # 3. Lanzar análisis en segundo plano
+    lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
+
+    # 4. Redirigir al CASO VT (Nueva pantalla)
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id, analyzing=1))
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
@@ -150,6 +196,11 @@ def analizar_alerta(alerta_id):
     """
     Toma IoCs de una Alerta específica, crea/actualiza el Caso VT del Ticket padre y analiza.
     """
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
+        flash("Necesitas configurar tu API Key de VirusTotal en tu perfil antes de analizar.", "warning")
+        return redirect(url_for('auth.perfil'))
+
     # 1. Obtener Alerta para saber el Ticket Padre
     alerta = Alerta.query.get_or_404(alerta_id)
     ticket_padre = alerta.ticket # Ej: RF-123456
@@ -176,7 +227,10 @@ def analizar_alerta(alerta_id):
     # 3. Procesar (Usamos el ticket del padre para agrupar todo en el mismo caso)
     caso_vt_id = procesar_importacion_csirt(ticket_padre, iocs_csirt)
 
-    # 4. Redirigir al CASO VT
+    # 4. Lanzar análisis en segundo plano
+    lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
+
+    # 5. Redirigir al CASO VT
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre, analyzing=1))
 
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
@@ -210,22 +264,24 @@ def exportar_zip(caso_id, caso_nombre):
 @bp.route('/admin/templates', methods=['GET', 'POST'])
 @admin_required
 def admin_templates():
-    if not current_user.is_admin:
-        return redirect(url_for('virustotal.index'))
-        
     if request.method == 'POST':
-        t = ExportTemplate(
-            nombre_plataforma=request.form.get('nombre'),
-            vt_engine_name=request.form.get('vt_engine'),
-            file_extension=request.form.get('extension'),
-            header_content=request.form.get('header'),
-            row_template=request.form.get('row_template'),
-            supported_hashes=request.form.get("supported_hashes"),
-            footer_content=request.form.get('footer')
-        )
-        db.session.add(t)
-        db.session.commit()
-        flash('Plantilla creada.', 'success')
+        errores = validar_plantilla(request.form)
+        if errores:
+            for e in errores:
+                flash(e, 'danger')
+        else:
+            t = ExportTemplate(
+                nombre_plataforma=request.form.get('nombre'),
+                vt_engine_name=request.form.get('vt_engine'),
+                file_extension=request.form.get('extension'),
+                header_content=request.form.get('header'),
+                row_template=request.form.get('row_template'),
+                supported_hashes=request.form.get("supported_hashes"),
+                footer_content=request.form.get('footer')
+            )
+            db.session.add(t)
+            db.session.commit()
+            flash('Plantilla creada.', 'success')
     
     templates = ExportTemplate.query.all()
     return render_template('virustotal/admin_templates.html', templates=templates)
@@ -233,7 +289,6 @@ def admin_templates():
 @bp.route('/admin/templates/eliminar/<int:id>', methods=['POST'])
 @admin_required
 def eliminar_template(id):
-    if not current_user.is_admin: return redirect(url_for('virustotal.index'))
     t = ExportTemplate.query.get_or_404(id)
     db.session.delete(t)
     db.session.commit()
@@ -242,14 +297,15 @@ def eliminar_template(id):
 @bp.route('/admin/templates/editar/<int:id>', methods=['POST'])
 @admin_required
 def editar_template(id):
-    # Seguridad: Solo admin
-    if not current_user.is_admin: 
-        return redirect(url_for('virustotal.index'))
-    
+    errores = validar_plantilla(request.form)
+    if errores:
+        for e in errores:
+            flash(e, 'danger')
+        return redirect(url_for('virustotal.admin_templates'))
+
     t = ExportTemplate.query.get_or_404(id)
     
     try:
-        # Actualizar campos
         t.nombre_plataforma = request.form.get('nombre')
         t.vt_engine_name = request.form.get('vt_engine')
         t.file_extension = request.form.get('extension')

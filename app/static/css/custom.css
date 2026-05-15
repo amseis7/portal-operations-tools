@@ -1,0 +1,144 @@
+/* =========================================================
+   Portal de Operaciones CSIRT - Custom Styles
+   ========================================================= */
+
+/* ---------------------------------------------------------
+   FIX: White splotches on table-hover rows
+   Bootstrap's .table-hover darkens the row, but child
+   elements with their own background (badges, etc.) don't
+   inherit the hover state, creating visible white/colored
+   patches. This rule darkens those backgrounds on hover.
+   --------------------------------------------------------- */
+
+/* Light/white badges become slightly gray on row hover */
+.table-hover tbody tr:hover .badge.bg-light,
+.table-hover tbody tr:hover .badge.bg-white {
+    background-color: var(--bs-gray-300) !important;
+}
+
+/* Colored badges darken subtly on row hover */
+.table-hover tbody tr:hover .badge.bg-danger {
+    background-color: var(--bs-red-700, #b02a37) !important;
+}
+
+.table-hover tbody tr:hover .badge.bg-warning {
+    background-color: var(--bs-yellow-700, #9c6f1a) !important;
+    color: #000 !important;
+}
+
+.table-hover tbody tr:hover .badge.bg-secondary {
+    background-color: var(--bs-gray-600) !important;
+}
+
+.table-hover tbody tr:hover .badge.bg-info {
+    background-color: var(--bs-cyan-700, #087990) !important;
+    color: #fff !important;
+}
+
+.table-hover tbody tr:hover .badge.bg-success {
+    background-color: var(--bs-green-700, #146c43) !important;
+}
+
+/* ---------------------------------------------------------
+   NAVBAR
+   --------------------------------------------------------- */
+
+/* Make the search bar more compact on small screens */
+@media (max-width: 991.98px) {
+    .navbar .input-group {
+        min-width: 0 !important;
+        width: 100%;
+    }
+}
+
+/* ---------------------------------------------------------
+   TABLES - General Improvements
+   --------------------------------------------------------- */
+
+/* Better vertical rhythm in tables */
+.table > :not(caption) > * > * {
+    padding-bottom: 0.6rem;
+    padding-top: 0.6rem;
+}
+
+/* Ensure monospace values don't break layout */
+.table .font-monospace {
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+/* ---------------------------------------------------------
+   CARDS - Consistent Headers
+   --------------------------------------------------------- */
+
+/* Standard card header accent */
+.card-header.bg-dark {
+    font-size: 0.875rem;
+}
+
+/* ---------------------------------------------------------
+   BADGES - Table Context
+   --------------------------------------------------------- */
+
+/* Ensure badges in table cells vertically align */
+.table td .badge {
+    vertical-align: middle;
+}
+
+/* ---------------------------------------------------------
+   FORMS - Feedback Improvements
+   --------------------------------------------------------- */
+
+/* Better focus states */
+.form-control:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+/* ---------------------------------------------------------
+   RESPONSIVE - Mobile Table Scroll
+   --------------------------------------------------------- */
+
+/* Sticky first column in tables on mobile */
+@media (max-width: 767.98px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+
+    /* Make action buttons stack better */
+    .table .d-flex.gap-2 {
+        flex-wrap: wrap;
+        justify-content: center !important;
+    }
+}
+
+/* ---------------------------------------------------------
+   ACCESSIBILITY - Focus Indicators
+   --------------------------------------------------------- */
+
+/* Visible focus for keyboard navigation */
+a:focus-visible,
+button:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+.form-check-input:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------
+   PRINT - Clean output
+   --------------------------------------------------------- */
+
+@media print {
+    .navbar,
+    .btn,
+    .dropdown,
+    form {
+        display: none !important;
+    }
+
+    .card {
+        border: 1px solid #000 !important;
+        box-shadow: none !important;
+    }
+}

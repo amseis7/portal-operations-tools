@@ -1,13 +1,16 @@
 import sys
 import os
 import socket
+import logging
 from dotenv import load_dotenv
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
 from app import create_app, db
 from app.models import User
 from flask_migrate import upgrade, stamp
-from sqlalchemy import inspect 
+from sqlalchemy import inspect
+
+logger = logging.getLogger(__name__)
 
 # Configuración
 PORT = 8443
@@ -47,28 +50,28 @@ if sys.platform.startswith('win'):
 
 
 def inicializar_sistema():
-    print("[INIT] Arrancando sistema...")
+    logger.info("[INIT] Arrancando sistema...")
     with app.app_context():
         try:
             inspector = inspect(db.engine)
             tablas_existentes = inspector.get_table_names()
             
             if 'user' in tablas_existentes and 'alembic_version' not in tablas_existentes:
-                print("[INIT] DETECTADO: Base de datos existente sin versionado.")
-                print("[INIT] ACCIÓN: Marcando base de datos como 'actual' (Stamp)...")
+                logger.warning("[INIT] DETECTADO: Base de datos existente sin versionado.")
+                logger.info("[INIT] ACCIÓN: Marcando base de datos como 'actual' (Stamp)...")
                 stamp()
             
             try:
                 upgrade()
-                print("[INIT] Upgrade ejecutado.")
+                logger.info("[INIT] Upgrade ejecutado.")
             except Exception as e_up:
-                print(f"[ADVERTENCIA] Upgrade falló (posible en EXE): {e_up}")
+                logger.warning(f"[ADVERTENCIA] Upgrade falló (posible en EXE): {e_up}")
 
             if not User.query.filter_by(is_admin=True).first():
-                 print("[INIT] Estado: Esperando instalación vía Web.")
+                 logger.info("[INIT] Estado: Esperando instalación vía Web.")
                  
         except Exception as e:
-            print(f"[ERROR CRÍTICO] Fallo en inicialización de DB: {e}")
+            logger.error(f"[ERROR CRÍTICO] Fallo en inicialización de DB: {e}")
 
 def obtener_ip():
     try:
@@ -91,8 +94,8 @@ if __name__ == "__main__":
     if os.path.exists(cert_path) and os.path.exists(key_path):
         usar_ssl = True
     else:
-        print("\n[ADVERTENCIA] No se encontraron cert.pem o key.pem.")
-        print("El servidor iniciará en modo HTTP inseguro.\n")
+        logger.warning("\n[ADVERTENCIA] No se encontraron cert.pem o key.pem.")
+        logger.warning("El servidor funcionará en modo HTTP inseguro.\n")
         PORT = 8080 # Fallback a puerto HTTP
 
     print("------------------------------------------------")

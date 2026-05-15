@@ -1,6 +1,12 @@
+import logging
+from dotenv import load_dotenv
+load_dotenv()
+
 from app import create_app, db
 from app.models import User
 from sqlalchemy import text, inspect
+
+logger = logging.getLogger(__name__)
 
 app = create_app()
 
@@ -10,7 +16,7 @@ def parchear_base_datos():
     Verifica manualmente si faltan columnas críticas y las agrega.
     Se ejecuta al iniciar para asegurar que la DB sea compatible.
     """
-    print("[INIT] Verificando integridad de la base de datos...")
+    logger.info("[INIT] Verificando integridad de la base de datos...")
     with app.app_context():
         try:
             inspector = inspect(db.engine)
@@ -23,21 +29,21 @@ def parchear_base_datos():
                 
                 # VERIFICACIÓN: ¿Falta virustotal_api_key?
                 if 'virustotal_api_key' not in columnas:
-                    print("[ALERTA] Columna 'virustotal_api_key' faltante. Aplicando parche SQL...")
+                    logger.warning("[ALERTA] Columna 'virustotal_api_key' faltante. Aplicando parche SQL...")
                     with db.engine.connect() as conn:
                         # Ejecutamos el SQL directo para arreglarlo
                         conn.execute(text("ALTER TABLE user ADD COLUMN virustotal_api_key VARCHAR(255)"))
                         conn.commit()
-                    print("[ÉXITO] Columna agregada correctamente.")
+                    logger.info("[ÉXITO] Columna agregada correctamente.")
                 else:
-                    print("[OK] La tabla 'user' ya tiene la columna virustotal_api_key.")
+                    logger.info("[OK] La tabla 'user' ya tiene la columna virustotal_api_key.")
             else:
                 # Si no existen las tablas, las creamos todas
                 db.create_all()
-                print("[OK] Tablas creadas desde cero.")
+                logger.info("[OK] Tablas creadas desde cero.")
                     
         except Exception as e:
-            print(f"[ERROR PARCHE] No se pudo parchear la DB: {e}")
+            logger.error(f"[ERROR PARCHE] No se pudo parchear la DB: {e}")
 # -------------------------------------------
 
 # Esto permite usar el comando 'flask shell' con contexto cargado

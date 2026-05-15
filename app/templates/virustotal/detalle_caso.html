@@ -4,7 +4,7 @@
 <div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h3 class="mb-0">Caso #{{ caso.id }}: <span class="text-primary">{{ caso.nombre }}</span></h3>
+            <h2 class="mb-0">Caso #{{ caso.id }}: <span class="text-primary">{{ caso.nombre }}</span></h2>
             <small class="text-muted">{{ caso.descripcion }}</small>
         </div>
 
@@ -16,7 +16,7 @@
                 </h5>
                 <div class="progress mt-2" style="height: 25px;">
                     <div id="barra-progreso" class="progress-bar progress-bar-striped progress-bar-animated bg-info" 
-                        role="progressbar" style="width: 0%;">
+                        role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
                         0%
                     </div>
                 </div>
@@ -45,7 +45,7 @@
                             <h5 class="modal-title">Generar Archivos de Bloqueo</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                         </div>
-                        <form action="{{ url_for('virustotal.exportar_zip', caso_id=caso.id, caso_nombre=caso.nombre) }}" method="POST">
+                        <form id="formExportar" action="{{ url_for('virustotal.exportar_zip', caso_id=caso.id, caso_nombre=caso.nombre) }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                             <div class="modal-body">
                                 <p class="small text-muted">Activa las plataformas para las que deseas generar archivos. Se incluirán solo los IoCs que dicha plataforma <strong>NO detectó</strong>.</p>
@@ -141,8 +141,8 @@
                 <div class="card-header bg-light small fw-bold">
                     Resultados del Análisis ({{ caso.iocs|length }} IoCs)
                 </div>
-                <div class="card-body p-0">
-                    <table class="table table-sm table-hover mb-0 align-middle">
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-sm table-hover table-striped mb-0 align-middle">
                         <thead class="table-dark text-nowrap">
                             <tr>
                                 <th>Tipo</th>
@@ -284,9 +284,10 @@
                 .then(function(response) { return response.json(); })
                 .then(function(data) {
                     var pct = data.porcentaje;
-                    barra.style.width = pct + "%";
-                    barra.innerText = pct + "%";
-                    contador.innerText = data.procesados + " / " + data.total;
+barra.style.width = pct + "%";
+                        barra.innerText = pct + "%";
+                        barra.setAttribute('aria-valuenow', pct);
+                        contador.innerText = data.procesados + " / " + data.total;
 
                     // Si sigue procesando, mostramos (por si estaba oculto)
                     if (data.estado === 'procesando') {
@@ -329,5 +330,12 @@
                 }
             });
     });
+
+document.getElementById('formExportar').addEventListener('submit', function() {
+    setTimeout(function() {
+        var modal = bootstrap.Modal.getInstance(document.getElementById('modalExportar'));
+        if (modal) modal.hide();
+    }, 500);
+});
 </script>
 {% endblock %}

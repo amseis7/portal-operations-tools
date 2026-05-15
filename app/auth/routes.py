@@ -6,6 +6,8 @@ from app.virustotal.logic import obtener_uso_api
 from app.auth import bp
 from app.utils import admin_required
 import re
+import logging
+logger = logging.getLogger(__name__)
 
 def validar_complejidad_password(password):
     """
@@ -178,18 +180,18 @@ def perfil():
                 
                 if not current_user.check_password(current_pass):
                     flash('Error: La contraseña actual no es correcta.', 'danger')
-                    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+                    return render_template('auth/perfil.html', datos_cuota=datos_cuota, has_vt_key=bool(current_user.get_vt_key()))
                 
                 elif new_pass != confirm_pass:
                     flash('Error: Las nuevas contraseñas no coinciden.', 'warning')
                     # CAMBIO: Renderizamos directamente
-                    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+                    return render_template('auth/perfil.html', datos_cuota=datos_cuota, has_vt_key=bool(current_user.get_vt_key()))
                     
                 else:
                     es_valida, mensaje_error = validar_complejidad_password(new_pass)
                     if not es_valida:
                         flash(mensaje_error, 'danger')
-                        return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+                        return render_template('auth/perfil.html', datos_cuota=datos_cuota, has_vt_key=bool(current_user.get_vt_key()))
                     
                     current_user.set_password(new_pass)
                     db.session.commit() # Segundo commit solo para pass
@@ -199,22 +201,21 @@ def perfil():
 
         except Exception as e:
             db.session.rollback()
-            print(f"Error guardando perfil: {e}")
+            logger.error(f"Error guardando perfil: {e}")
             flash(f'Error interno al guardar: {e}', 'danger')
 
         return redirect(url_for('auth.perfil'))
     
     # Solo consultamos si viene el parámetro ?ver_cuota=1 en la URL
-    if request.args.get('ver_cuota') == '1' and current_user.virustotal_api_key:
-        api_key_real = current_user.get_vt_key()
-        if api_key_real:
-            datos_cuota = obtener_uso_api(api_key_real)
-            if not datos_cuota:
-                flash('No se pudo obtener la cuota. Verifica tu API Key.', 'warning')
-            else:
-                flash('Cuota actualizada correctamente.', 'success')
+    vt_key = current_user.get_vt_key()
+    if request.args.get('ver_cuota') == '1' and vt_key:
+        datos_cuota = obtener_uso_api(vt_key)
+        if not datos_cuota:
+            flash('No se pudo obtener la cuota. Verifica tu API Key.', 'warning')
+        else:
+            flash('Cuota actualizada correctamente.', 'success')
 
-    return render_template('auth/perfil.html', datos_cuota=datos_cuota)
+    return render_template('auth/perfil.html', datos_cuota=datos_cuota, has_vt_key=bool(current_user.get_vt_key()))
 
 @bp.route('/admin/usuarios')
 @login_required

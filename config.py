@@ -1,10 +1,14 @@
 import os
 import sys
+from dotenv import load_dotenv
+
+# Load .env from current directory if exists
+load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY')
     if not SECRET_KEY:
-        raise RuntimeError("ERROR CRÍTICO: La variable de entorno SERCRET_KEY no está definido.")
+        raise RuntimeError("ERROR CRÍTICO: La variable de entorno SECRET_KEY no está definida.")
     
     SECRET_KEY_DB = os.environ.get('SECRET_KEY_DB')
     if not SECRET_KEY_DB:

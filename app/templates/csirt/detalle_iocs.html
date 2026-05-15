@@ -3,7 +3,7 @@
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>IoCs del Ticket: <span class="text-info">{{ id_volver }}</span></h3>
+        <h2>IoCs del Ticket: <span class="text-info">{{ id_volver }}</span></h2>
         
         <div>
             <div class="btn-group me-2">
@@ -86,8 +86,8 @@
     {% endif %}
 
     <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0 align-middle">
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-sm table-hover table-striped mb-0 align-middle">
                 <thead class="table-dark text-nowrap">
                     <tr>
                         <th>Tipo</th>
@@ -156,7 +156,7 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="5" class="text-center py-5 text-muted">La lista está vacía. Usa el panel izquierdo para agregar IoCs.</td></tr>
+                    <tr><td colspan="6" class="text-center py-5 text-muted">La lista está vacía. Usa el panel izquierdo para agregar IoCs.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

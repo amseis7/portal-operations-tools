@@ -3,10 +3,11 @@
 {% block content %}
 <div class="container">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Gestión del Ticket: <span class="text-primary">{{ ticket }}</span></h3>
+        <h2>Gestión del Ticket: <span class="text-primary">{{ ticket }}</span></h2>
         
         <div>
             <form action="{{ url_for('csirt.actualizar_iocs', ticket_id=ticket) }}" method="POST" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="btn btn-warning me-2" title="Buscar IoCs para alertas vacías">
                     <i class="bi bi-cloud-download"></i> Recuperar IoCs Faltantes
                 </button>
@@ -49,11 +50,11 @@
         </div>
     </div>
 
-    <div class="card">
-        <div class="card-header bg-light">Alertas detectadas en esta gestión</div>
-        <div class="card-body p-0">
-            <table class="table mb-0 align-middle">
-                <thead>
+    <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white small fw-bold">Alertas detectadas en esta gestión</div>
+        <div class="card-body p-0 table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-dark text-nowrap">
                     <tr>
                         <th>ID Alerta</th>
                         <th>Tipo</th>
