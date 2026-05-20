@@ -5,26 +5,22 @@ import logging
 from dotenv import load_dotenv
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
-from app import create_app, db
-from app.models import User
 from flask_migrate import upgrade, stamp
 from sqlalchemy import inspect
+from app import create_app, db
+from app.models import User
 
 logger = logging.getLogger(__name__)
 
-# Configuración
 PORT = 8443
 THREADS = 10
 
 CERT_FILE = 'cert.pem'
 KEY_FILE = 'key.pem'
 
-# --- LÓGICA HÍBRIDA DE RUTAS ---
 if getattr(sys, 'frozen', False):
-    # Estamos en EXE
     BASE_DIR = os.path.dirname(sys.executable)
 else:
-    # Estamos en Python normal (Docker/Dev)
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 load_dotenv(os.path.join(BASE_DIR, '.env'))
@@ -34,18 +30,15 @@ INSTANCE_PATH = os.path.join(BASE_DIR, 'instance')
 if not os.path.exists(INSTANCE_PATH):
     try:
         os.makedirs(INSTANCE_PATH)
-    except:
+    except OSError:
         pass
-# -------------------------------
 
-# Iniciamos la app pasándole la ruta calculada
 app = create_app(instance_path=INSTANCE_PATH)
 
-# Ajuste de consola solo para Windows (Evita error Unicode en Docker Linux)
 if sys.platform.startswith('win'):
     try:
         sys.stdout.reconfigure(encoding='utf-8')
-    except:
+    except Exception:
         pass
 
 
@@ -55,23 +48,29 @@ def inicializar_sistema():
         try:
             inspector = inspect(db.engine)
             tablas_existentes = inspector.get_table_names()
-            
-            if 'user' in tablas_existentes and 'alembic_version' not in tablas_existentes:
-                logger.warning("[INIT] DETECTADO: Base de datos existente sin versionado.")
-                logger.info("[INIT] ACCIÓN: Marcando base de datos como 'actual' (Stamp)...")
+
+            if not tablas_existentes:
+                logger.info("[INIT] Base de datos vacía. Se creará con las migraciones.")
+            elif 'user' in tablas_existentes and 'alembic_version' not in tablas_existentes:
+                logger.warning("[INIT] DB existente sin versionado. Marcando como actual (stamp)...")
                 stamp()
-            
+                logger.info("[INIT] Stamp aplicado correctamente.")
+
             try:
                 upgrade()
-                logger.info("[INIT] Upgrade ejecutado.")
-            except Exception as e_up:
-                logger.warning(f"[ADVERTENCIA] Upgrade falló (posible en EXE): {e_up}")
+                logger.info("[INIT] Migraciones aplicadas correctamente.")
+            except Exception as e_upgrade:
+                logger.critical(f"[FATAL] Falló flask db upgrade: {e_upgrade}")
+                logger.critical("[FATAL] El servidor no puede arrancar con la DB en estado inconsistente.")
+                sys.exit(1)
 
             if not User.query.filter_by(is_admin=True).first():
-                 logger.info("[INIT] Estado: Esperando instalación vía Web.")
-                 
+                logger.info("[INIT] Estado: Esperando instalación vía Web.")
+
         except Exception as e:
-            logger.error(f"[ERROR CRÍTICO] Fallo en inicialización de DB: {e}")
+            logger.critical(f"[FATAL] Error en inicialización de DB: {e}")
+            sys.exit(1)
+
 
 def obtener_ip():
     try:
@@ -80,13 +79,13 @@ def obtener_ip():
         ip = s.getsockname()[0]
         s.close()
         return ip
-    except:
+    except Exception:
         return "127.0.0.1"
 
 if __name__ == "__main__":
     inicializar_sistema()
     ip = obtener_ip()
-    
+
     cert_path = os.path.join(BASE_DIR, CERT_FILE)
     key_path = os.path.join(BASE_DIR, KEY_FILE)
 
@@ -94,9 +93,9 @@ if __name__ == "__main__":
     if os.path.exists(cert_path) and os.path.exists(key_path):
         usar_ssl = True
     else:
-        logger.warning("\n[ADVERTENCIA] No se encontraron cert.pem o key.pem.")
+        logger.warning("[ADVERTENCIA] No se encontraron cert.pem o key.pem.")
         logger.warning("El servidor funcionará en modo HTTP inseguro.\n")
-        PORT = 8080 # Fallback a puerto HTTP
+        PORT = 8080
 
     print("------------------------------------------------")
     print(" PORTAL DE OPERACIONES - CSIRT V1.0.0")
@@ -109,7 +108,7 @@ if __name__ == "__main__":
         print(f" LOCAL:   http://localhost:{PORT}")
         print(f" RED:     http://{ip}:{PORT}")
     print("------------------------------------------------")
-    
+
     server = WSGIServer(('0.0.0.0', PORT), app, numthreads=THREADS)
 
     if usar_ssl:

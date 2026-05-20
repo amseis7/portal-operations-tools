@@ -3,10 +3,13 @@ from flask import render_template, request, flash, redirect, url_for, send_file,
 from flask_login import login_required, current_user
 from app.csirt import bp
 from app.models.csirt import Alerta, Ioc
+from app.models.virustotal import VtTicket, VtIoc
 from app.extensions import db
 import csv
 import re
+import logging
 from werkzeug.wrappers import Response
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from io import StringIO, BytesIO
@@ -91,7 +94,7 @@ def procesar():
     
     # Llamamos a la lógica maestra
     responsable_real = current_user.nombre_completo or current_user.username
-    resultado = ejecutar_proceso_csirt(ticket, responsable_real, simulacion=modo_prueba)
+    resultado = ejecutar_proceso_csirt(ticket, responsable_real, simulacion=modo_prueba, user_id=current_user.id)
     
     if resultado['status'] == 'exito':
         flash(f"¡Proceso finalizado! {resultado['msg']}", 'success' if not modo_prueba else 'warning')
@@ -111,7 +114,8 @@ def actualizar_iocs(ticket_id):
             flash('No se encontraron IoCs nuevos o las alertas ya estaban completas.', 'info')
             
     except Exception as e:
-        flash(f'Ocurrió un error al actualizar: {str(e)}', 'danger')
+        logger.error(f"Error al actualizar IoCs del ticket {ticket_id}: {e}")
+        flash('Ocurrió un error interno al actualizar. Contacte al administrador.', 'danger')
         
     # Volvemos a la misma página de gestión
     return redirect(url_for('csirt.ver_gestion', ticket_id=ticket_id))
@@ -166,6 +170,17 @@ def importar_historico():
         file = request.files.get('archivo_csv')
         if not file:
             flash('sube un archivo CSV', 'warning')
+            return redirect(request.url)
+
+        if not file.filename.lower().endswith('.csv'):
+            flash('Solo se permiten archivos .csv', 'danger')
+            return redirect(request.url)
+
+        file.stream.seek(0, 2)
+        size = file.stream.tell()
+        file.stream.seek(0)
+        if size > 5 * 1024 * 1024:
+            flash('El archivo excede el límite de 5MB.', 'danger')
             return redirect(request.url)
         
         try:
@@ -225,8 +240,8 @@ def importar_historico():
 
         except Exception as e:
             db.session.rollback()
-            # Muestra el error detallado para depurar
-            flash(f'Error al importar: {str(e)}', 'danger')
+            logger.error(f"Error al importar CSV: {e}")
+            flash('Ocurrió un error interno al importar. Contacte al administrador.', 'danger')
 
     return render_template('csirt/importar.html')
 
@@ -318,7 +333,8 @@ def eliminar_ticket(ticket_id):
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar: {str(e)}', 'danger')
+        logger.error(f"Error al eliminar ticket {ticket_id}: {e}")
+        flash('Ocurrió un error interno al eliminar. Contacte al administrador.', 'danger')
 
     return redirect(url_for('csirt.index'))
 
@@ -366,6 +382,7 @@ def stream_actualizacion():
 @bp.route('/buscar', methods=['GET'])
 def buscar_ioc():
     query_str = request.args.get('q', '').strip()
+    query_escaped = query_str.replace('%', r'\%').replace('_', r'\_')
 
     if not query_str:
         flash('Por favor ingrese un termino de busqueda.', 'warning')
@@ -374,14 +391,14 @@ def buscar_ioc():
     # 1. Búsqueda en CSIRT (Histórico de Tickets/Alertas)
     resultados_csirt = db.session.query(Ioc)\
         .join(Alerta)\
-        .filter(Ioc.valor.contains(query_str))\
+        .filter(Ioc.valor.contains(query_escaped))\
         .order_by(Alerta.fecha_realizacion.desc())\
         .all()
 
     # 2. Búsqueda en Casos VT (Investigaciones)
     resultados_vt = db.session.query(VtIoc)\
         .join(VtTicket)\
-        .filter(VtIoc.valor.contains(query_str))\
+        .filter(VtIoc.valor.contains(query_escaped))\
         .order_by(VtTicket.fecha_creacion.desc())\
         .all()
     

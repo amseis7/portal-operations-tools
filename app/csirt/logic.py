@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 # Intentamos configurar locale para fechas en español (ej: "10 de Enero")
 try:
     locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-except:
+except Exception:
     try:
         locale.setlocale(locale.LC_TIME, 'es_ES')
-    except:
+    except Exception:
         logger.warning("No se pudo configurar locale es_ES. El parseo de fechas podría fallar si están en texto.")
 
 def decrypt_cfemail(cfemail):
@@ -43,7 +43,7 @@ def convert_date(date_str):
         # Fallback: Si falla, devolvemos fecha actual o intentamos otro formato
         try:
             return datetime.strptime(date_str, "%d-%m-%Y")
-        except:
+        except Exception:
             return datetime.now()
 
 def obtener_ultimos_ids_db():
@@ -97,7 +97,7 @@ def obtener_alertas_desde_rss(max_items=10):
         try:
             dt = datetime.strptime(pubdate_str, '%a, %d %b %Y %H:%M:%S %z')
             fecha = dt.replace(tzinfo=None)
-        except:
+        except Exception:
             fecha = datetime.now()
 
         alertas.append({
@@ -144,7 +144,7 @@ def escanear_y_guardar_alertas_desde_html(max_paginas=10):
                 if time_tag:
                     try:
                         fecha = convert_date(time_tag.get_text())
-                    except:
+                    except Exception:
                         pass
 
                 alertas.append({
@@ -161,7 +161,7 @@ def escanear_y_guardar_alertas_desde_html(max_paginas=10):
     return alertas
 
 
-def escanear_y_guardar_alertas(ticket_gestion, responsable, simulacion=False):
+def escanear_y_guardar_alertas(ticket_gestion, responsable, simulacion=False, user_id=None):
     """
     Extrae alertas del CSIRT y guarda las nuevas.
     Estrategia: RSS + HTML en paralelo, merge por ID.
@@ -212,7 +212,8 @@ def escanear_y_guardar_alertas(ticket_gestion, responsable, simulacion=False):
             ticket=ticket_gestion,
             tipo_alerta=alerta['tipo'],
             responsable=responsable,
-            fecha_realizacion=alerta['fecha']
+            fecha_realizacion=alerta['fecha'],
+            user_id=user_id
         )
 
         if simulacion:
@@ -304,12 +305,12 @@ def descargar_iocs_para_alerta(alerta_obj, url_suffix, simulacion=False):
     
     return count_iocs
 
-def ejecutar_proceso_csirt(ticket_rf, responsable, simulacion=False):
+def ejecutar_proceso_csirt(ticket_rf, responsable, simulacion=False, user_id=None):
     """
     Esta es la función que llamará la Ruta.
     """
     # 1. Escanear y crear alertas
-    lista_nuevas = escanear_y_guardar_alertas(ticket_rf, responsable, simulacion)
+    lista_nuevas = escanear_y_guardar_alertas(ticket_rf, responsable, simulacion, user_id=user_id)
  
     if not lista_nuevas:
         return {"status": "sin_novedad", "msg": "No se encontraron alertas nuevas."}

@@ -4,6 +4,17 @@ from flask import current_app
 from cryptography.fernet import Fernet
 from app.extensions import db, login_manager
 
+
+class UserTool(db.Model):
+    __tablename__ = "user_tool"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), primary_key=True)
+    tool_name = db.Column(db.String(50), primary_key=True)
+
+    def __repr__(self):
+        return f"<UserTool {self.user_id}:{self.tool_name}>"
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "user"
 
@@ -17,8 +28,22 @@ class User(UserMixin, db.Model):
     nombre_completo = db.Column(db.String(100))
     email = db.Column(db.String(120), index=True)
 
-    authorized_tools = db.Column(db.String(200), default="")
     _virustotal_api_key = db.Column("virustotal_api_key", db.String(255))
+
+    authorized_tools = db.relationship(
+        "UserTool",
+        backref="user",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
+
+    def has_tool(self, tool_name):
+        if self.is_admin:
+            return True
+        return self.authorized_tools.filter_by(tool_name=tool_name).first() is not None
+
+    def get_tool_names(self):
+        return [ut.tool_name for ut in self.authorized_tools]
 
     # -------- PASSWORD --------
     def set_password(self, password: str):
@@ -54,6 +79,7 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f"<User {self.username}>"
+
 
 @login_manager.user_loader
 def load_user(user_id):

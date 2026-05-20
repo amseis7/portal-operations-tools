@@ -31,4 +31,6 @@ certificado.py
 migrar DB modificada.txt
 Portal-Operations-Tools.spec
 Docker
-docker-compose.yml
+agency-agents/
+.opencode/
+.claude/

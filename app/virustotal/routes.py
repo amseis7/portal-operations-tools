@@ -3,12 +3,15 @@ from flask_login import current_user
 from app.virustotal.background import lanzar_analisis_background
 from datetime import datetime
 from app.extensions import db
+from sqlalchemy import or_
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.utils import admin_required, proteger_blueprint
 from app.virustotal import bp
 from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
-from markupsafe import Markup
+from markupsafe import Markup, escape
 import re
+import logging
+logger = logging.getLogger(__name__)
 
 
 proteger_blueprint(bp, 'virustotal')
@@ -70,6 +73,9 @@ def crear_caso():
 def ver_caso(caso_id):
     # ... (Tu código actual de ver_caso) ...
     caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     
     if request.method == 'POST':
         raw = request.form.get('hashes_input')
@@ -96,7 +102,19 @@ def ver_caso(caso_id):
                     if '.' not in valor_limpio: es_valido = False
 
                 if es_valido:
+                    es_hash_tipo = tipo_seleccionado in ['hash', 'md5', 'sha1', 'sha256']
                     existe = VtIoc.query.filter_by(ticket_id=caso.id, valor=valor_limpio).first()
+
+                    if not existe and es_hash_tipo:
+                        existe = VtIoc.query.filter(
+                            VtIoc.ticket_id == caso.id,
+                            or_(
+                                VtIoc.vt_md5 == valor_limpio,
+                                VtIoc.vt_sha1 == valor_limpio,
+                                VtIoc.vt_sha256 == valor_limpio
+                            )
+                        ).first()
+
                     if not existe:
                         nuevo_ioc = VtIoc(ticket_id=caso.id, tipo=tipo_seleccionado, valor=valor_limpio)
                         db.session.add(nuevo_ioc)
@@ -119,11 +137,14 @@ def analizar_caso(caso_id):
     vt_key = current_user.get_vt_key()
     if not vt_key:
         link = url_for('auth.perfil')
-        mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{link}" class="alert-link">Perfil de Usuario</a>.')
+        mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{escape(link)}" class="alert-link">Perfil de Usuario</a>.')
         flash(mensaje, 'danger')
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
     caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     tipo_filtro = request.args.get('tipo')
     
     query = VtIoc.query.filter_by(ticket_id=caso_id)
@@ -248,12 +269,16 @@ def eliminar_caso(caso_id):
         flash('Caso eliminado.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error: {e}', 'danger')
+        logger.error(f"Error al eliminar caso VT {caso_id}: {e}")
+        flash('Ocurrió un error interno al eliminar. Contacte al administrador.', 'danger')
     return redirect(url_for('virustotal.index'))
 
 @bp.route('/exportar_zip/<int:caso_id>/<caso_nombre>', methods=['POST'])
 def exportar_zip(caso_id, caso_nombre):
-    # (Mantén tu código de exportación aquí)
+    caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     selected = request.form.getlist('templates_seleccionados')
     if not selected:
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
@@ -318,7 +343,8 @@ def editar_template(id):
         flash(f'Plantilla "{t.nombre_plataforma}" actualizada correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al actualizar: {e}', 'danger')
+        logger.error(f"Error al actualizar plantilla {id}: {e}")
+        flash('Ocurrió un error interno al actualizar. Contacte al administrador.', 'danger')
         
     return redirect(url_for('virustotal.admin_templates'))
 
@@ -327,6 +353,9 @@ def estado_caso(caso_id):
     """
     Ruta API para que la barra de progreso consulte el estado.
     """
+    caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        return jsonify({"error": "No autorizado"}), 403
     try:
         # Total de IoCs en el caso
         total = VtIoc.query.filter_by(ticket_id=caso_id).count()
@@ -350,4 +379,5 @@ def estado_caso(caso_id):
             "estado": estado
         })
     except Exception as e:
-        return jsonify({"error": str(e), "porcentaje": 0, "estado": "error"}), 500
+        logger.error(f"Error en estado_caso {caso_id}: {e}")
+        return jsonify({"error": "Error interno", "porcentaje": 0, "estado": "error"}), 500

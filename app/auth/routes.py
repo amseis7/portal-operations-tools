@@ -1,13 +1,21 @@
 from flask import render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, current_user, login_required
-from app.models.user import User
-from app.extensions import db
+from urllib.parse import urlparse
+from app.models.user import User, UserTool
+from app.extensions import db, limiter
 from app.virustotal.logic import obtener_uso_api
 from app.auth import bp
 from app.utils import admin_required
 import re
 import logging
 logger = logging.getLogger(__name__)
+
+EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+
+def validar_email(email):
+    if not email:
+        return True
+    return bool(EMAIL_REGEX.match(email))
 
 def validar_complejidad_password(password):
     """
@@ -32,6 +40,7 @@ def validar_complejidad_password(password):
     return True, ""
 
 @bp.route('/setup', methods=['GET', 'POST'])
+@limiter.limit("3 per minute")
 def setup():
     admin_existente = User.query.filter_by(is_admin=True).first()
     if admin_existente:
@@ -60,13 +69,18 @@ def setup():
             username=username,
             nombre_completo=nombre,
             email=email,
-            is_admin=True,         # ¡Importante!
-            authorized_tools='all', # Full acceso
-            must_change_password = False
+            is_admin=True,
+            must_change_password=False
         )
         admin.set_password(password)
         
         db.session.add(admin)
+        db.session.flush()
+
+        from app.tools_config import TOOLS
+        for tool_name in TOOLS.keys():
+            db.session.add(UserTool(user_id=admin.id, tool_name=tool_name))
+        
         db.session.commit()
         
         flash('¡Sistema inicializado correctamente! Inicia sesión.', 'success')
@@ -118,6 +132,7 @@ def cambiar_password_inicial():
     return render_template('auth/cambiar_inicial.html')
 
 @bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
 def login():
     # Si el usuario ya esta logueando, lo mandamos al dashboard
     if current_user.is_authenticated:
@@ -142,7 +157,11 @@ def login():
 
         # Redirigir a la pagina que intentaba ver o al dashboard
         next_page = request.args.get('next')
-        if not next_page or not next_page.startswith('/'):
+        if next_page:
+            parsed = urlparse(next_page)
+            if parsed.netloc != '' or not next_page.startswith('/'):
+                next_page = url_for('main.dashboard')
+        else:
             next_page = url_for('main.dashboard')
         return redirect(next_page)
 
@@ -159,6 +178,10 @@ def perfil():
             nombre = request.form.get('nombre_completo')
             email = request.form.get('email')
             vt_key = request.form.get('vt_key')
+
+            if not validar_email(email):
+                flash('El formato del email no es válido.', 'danger')
+                return redirect(url_for('auth.perfil'))
 
             current_user.nombre_completo = nombre
             current_user.email = email
@@ -201,8 +224,8 @@ def perfil():
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error guardando perfil: {e}")
-            flash(f'Error interno al guardar: {e}', 'danger')
+            logger.error(f"Error guardando perfil de {current_user.username}: {e}")
+            flash('Ocurrió un error interno. Contacte al administrador.', 'danger')
 
         return redirect(url_for('auth.perfil'))
     
@@ -234,9 +257,10 @@ def crear_usuario():
     nombre_completo = request.form.get('nombre_completo')
     email = request.form.get('email')
     is_admin = request.form.get('is_admin') == 'on'
-    lista_herramientas = request.form.getlist('tools')
 
-    tools_string = ",".join(lista_herramientas)
+    if not validar_email(email):
+        flash('El formato del email no es válido.', 'danger')
+        return redirect(url_for('auth.admin_usuarios'))
 
     if User.query.filter_by(username=username).first():
         flash(f'El usuario {username} ya existe.', 'warning')
@@ -248,17 +272,21 @@ def crear_usuario():
         usuarios = User.query.all()
         return render_template('auth/admin_usuarios.html', usuarios=usuarios)
 
-    # Creamos usuario con todos los datos
     nuevo_user = User(
-        username=username, 
+        username=username,
         nombre_completo=nombre_completo,
         email=email,
-        is_admin=is_admin, 
-        authorized_tools=tools_string
+        is_admin=is_admin
     )
     nuevo_user.set_password(password)
     
     db.session.add(nuevo_user)
+    db.session.flush()
+
+    lista_herramientas = request.form.getlist('tools')
+    for tool_name in lista_herramientas:
+        db.session.add(UserTool(user_id=nuevo_user.id, tool_name=tool_name))
+
     db.session.commit()
     
     flash(f'Usuario {nombre_completo} ({username}) creado correctamente.', 'success')
@@ -277,9 +305,11 @@ def editar_usuarios(user_id):
     user.email = request.form.get('email')
     user.is_admin = request.form.get('is_admin') == 'on'
 
-    # 2. Capturar Herramientas (Misma corrección de antes)
+    # 2. Capturar Herramientas
     lista_herramientas = request.form.getlist('tools')
-    user.authorized_tools = ",".join(lista_herramientas)
+    UserTool.query.filter_by(user_id=user.id).delete()
+    for tool_name in lista_herramientas:
+        db.session.add(UserTool(user_id=user.id, tool_name=tool_name))
 
     # 3. Lógica de Contraseña (Opcional)
     new_password = request.form.get('password')
@@ -308,7 +338,8 @@ def eliminar_usuario(user_id):
     flash(f'Usuario {user.username} eliminado.', 'success')
     return redirect(url_for('auth.admin_usuarios'))
 
-@bp.route('/logout')
+@bp.route('/logout', methods=['POST'])
+@login_required
 def logout():
     logout_user()
     return redirect(url_for('auth.login'))

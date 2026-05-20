@@ -1,60 +1,55 @@
+import sys
 import logging
 from dotenv import load_dotenv
 load_dotenv()
 
 from app import create_app, db
 from app.models import User
-from sqlalchemy import text, inspect
+from flask_migrate import upgrade, stamp
+from sqlalchemy import inspect
 
 logger = logging.getLogger(__name__)
 
 app = create_app()
 
-# --- FUNCIÓN DE AUTO-REPARACIÓN (PARCHE) ---
-def parchear_base_datos():
+
+def inicializar_db():
     """
-    Verifica manualmente si faltan columnas críticas y las agrega.
-    Se ejecuta al iniciar para asegurar que la DB sea compatible.
+    Ejecuta migraciones de base de datos al arrancar.
+    Si falla, aborta el proceso para evitar DB inconsistente.
     """
-    logger.info("[INIT] Verificando integridad de la base de datos...")
     with app.app_context():
         try:
             inspector = inspect(db.engine)
-            # Obtenemos las tablas actuales
-            tablas = inspector.get_table_names()
-            
-            if 'user' in tablas:
-                # Obtenemos las columnas de la tabla 'user'
-                columnas = [col['name'] for col in inspector.get_columns('user')]
-                
-                # VERIFICACIÓN: ¿Falta virustotal_api_key?
-                if 'virustotal_api_key' not in columnas:
-                    logger.warning("[ALERTA] Columna 'virustotal_api_key' faltante. Aplicando parche SQL...")
-                    with db.engine.connect() as conn:
-                        # Ejecutamos el SQL directo para arreglarlo
-                        conn.execute(text("ALTER TABLE user ADD COLUMN virustotal_api_key VARCHAR(255)"))
-                        conn.commit()
-                    logger.info("[ÉXITO] Columna agregada correctamente.")
-                else:
-                    logger.info("[OK] La tabla 'user' ya tiene la columna virustotal_api_key.")
-            else:
-                # Si no existen las tablas, las creamos todas
-                db.create_all()
-                logger.info("[OK] Tablas creadas desde cero.")
-                    
-        except Exception as e:
-            logger.error(f"[ERROR PARCHE] No se pudo parchear la DB: {e}")
-# -------------------------------------------
+            tablas_existentes = inspector.get_table_names()
 
-# Esto permite usar el comando 'flask shell' con contexto cargado
+            if not tablas_existentes:
+                logger.info("[INIT] Base de datos vacía. Se creará con las migraciones.")
+            elif 'user' in tablas_existentes and 'alembic_version' not in tablas_existentes:
+                logger.warning("[INIT] DB existente sin versionado. Marcando como actual (stamp)...")
+                stamp()
+                logger.info("[INIT] Stamp aplicado correctamente.")
+
+            try:
+                upgrade()
+                logger.info("[INIT] Migraciones aplicadas correctamente.")
+            except Exception as e_upgrade:
+                logger.critical(f"[FATAL] Falló flask db upgrade: {e_upgrade}")
+                logger.critical("[FATAL] El servidor no puede arrancar con la DB en estado inconsistente.")
+                sys.exit(1)
+
+            if not User.query.filter_by(is_admin=True).first():
+                logger.info("[INIT] Estado: Esperando instalación vía Web.")
+
+        except Exception as e:
+            logger.critical(f"[FATAL] Error en inicialización de DB: {e}")
+            sys.exit(1)
+
+
 @app.shell_context_processor
 def make_shell_context():
     return {'db': db, 'User': User}
 
 if __name__ == '__main__':
-    # 1. EJECUTAMOS EL PARCHE ANTES DE ARRANCAR
-    parchear_base_datos()
-    
-    # 2. ARRANCAMOS EL SERVIDOR
-    # Nota: debug=True puede ocultar errores de inicio, pero es útil en desarrollo
+    inicializar_db()
     app.run(debug=True, host='0.0.0.0')

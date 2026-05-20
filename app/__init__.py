@@ -2,7 +2,7 @@ import logging
 import os, sys
 from flask import Flask
 from config import Config
-from app.extensions import db, login_manager, csrf, migrate
+from app.extensions import db, login_manager, csrf, migrate, limiter
 from flask_apscheduler import APScheduler
 
 logger = logging.getLogger(__name__)
@@ -26,6 +26,16 @@ def create_app(config_class=Config, instance_path=None):
     login_manager.login_message = "Por favor inicia sesión para acceder."
     login_manager.login_message_category = "warning"
     csrf.init_app(app)
+    limiter.init_app(app)
+    
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+        return response
     
     if getattr(sys, 'frozen', False):
         migration_dir = os.path.join(sys._MEIPASS, 'migrations')
@@ -34,10 +44,6 @@ def create_app(config_class=Config, instance_path=None):
 
     try:
         migrate.init_app(app, db, directory=migration_dir)
-
-        with app.app_context():
-            db.create_all()
-
     except Exception as e:
         logger.warning(f"No se pudo iniciar Flask-Migrate: {e}")
     
@@ -83,7 +89,7 @@ def create_app(config_class=Config, instance_path=None):
             admin_count = User.query.filter_by(is_admin=True).count()
             if admin_count == 0:
                 return redirect(url_for('auth.setup'))
-        except:
+        except Exception:
             pass
 
     return app
