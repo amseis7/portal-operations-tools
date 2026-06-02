@@ -108,7 +108,14 @@
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="5" class="text-center py-4">No hay tickets registrados.</td></tr>
+                            <tr>
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <i class="bi bi-journal-text empty-state-icon"></i>
+                                        <p>No hay tickets registrados.</p>
+                                    </div>
+                                </td>
+                            </tr>
                         {% endif %}
                     </tbody>
                 </table>

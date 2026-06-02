@@ -51,7 +51,14 @@
                         </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="6" class="text-center py-5 text-muted">No hay investigaciones registradas.</td></tr>
+                    <tr>
+                        <td colspan="6">
+                            <div class="empty-state">
+                                <i class="bi bi-folder2 empty-state-icon"></i>
+                                <p>No hay investigaciones registradas.</p>
+                            </div>
+                        </td>
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>

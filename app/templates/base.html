@@ -4,8 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plataforma Operaciones</title>
+    <title>{% block title %}Portal de Operaciones{% endblock %}</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-icons.css') }}">
@@ -149,11 +152,13 @@
     <div class="container" id="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
+        {% set _icons = {'success': 'check-circle-fill', 'danger': 'exclamation-triangle-fill', 'warning': 'exclamation-circle-fill', 'info': 'info-circle-fill', 'primary': 'shield-fill-check'} %}
         <div aria-live="polite" aria-atomic="true">
             {% for category, message in messages %}
             <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+                <i class="bi bi-{{ _icons.get(category, 'info-circle-fill') }} alert-icon"></i>
+                <span class="alert-body">{{ message }}</span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Cerrar"></button>
             </div>
             {% endfor %}
         </div>

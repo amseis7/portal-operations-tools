@@ -1,42 +1,50 @@
 {% extends "base.html" %}
+{% block title %}Panel de Control — Portal de Operaciones{% endblock %}
 
 {% block content %}
-<div class="row g-2">
+<div class="row g-3">
     <div class="col-12">
-        <h2>Panel de Control</h2>
-        <p class="lead">Bienvenido al sistema de gestión.</p>
-        <hr>
+        <h2 class="mb-1">Panel de Control</h2>
+        <p class="lead text-muted mb-0">
+            Bienvenido, <strong class="text-body">{{ current_user.username }}</strong>.
+            Selecciona una herramienta para continuar.
+        </p>
+        <hr class="mt-3">
     </div>
 
     <div class="col-12">
-        <div class="row g-1">
+        <div class="row g-3">
             {% for key, info in lista_herramientas.items() %}
                 {% if current_user.has_tool(key) %}
                 <div class="col-md-4">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-body text-center">
+                    <div class="card h-100 shadow-sm tool-card">
+                        <div class="card-body text-center p-4">
                             <div class="mb-3">
                                 <i class="bi {{ info.icono }} fs-1 text-{{ info.color }}"></i>
                             </div>
                             <h5 class="card-title">{{ info.titulo }}</h5>
                             <p class="card-text text-muted">{{ info.descripcion }}</p>
-                            <a href="{{ url_for(info.endpoint) }}" class="btn btn-outline-{{ info.color }}">Acceder</a>
+                            <a href="{{ url_for(info.endpoint) }}" class="btn btn-outline-{{ info.color }} mt-1">
+                                Acceder <i class="bi bi-arrow-right ms-1"></i>
+                            </a>
                         </div>
                     </div>
                 </div>
                 {% endif %}
             {% endfor %}
-            
+
             {% if current_user.is_admin %}
             <div class="col-md-4">
-                <div class="card h-100 border-warning">
-                    <div class="card-body text-center">
+                <div class="card h-100 border-warning tool-card">
+                    <div class="card-body text-center p-4">
                         <div class="mb-3">
                             <i class="bi bi-person-gear fs-1 text-warning"></i>
                         </div>
                         <h5 class="card-title text-warning">Administrar Usuarios</h5>
-                        <p class="card-text">Crear cuentas y asignar permisos.</p>
-                        <a href="{{ url_for('auth.admin_usuarios') }}" class="btn btn-warning">Gestionar</a>
+                        <p class="card-text text-muted">Crear cuentas y asignar permisos.</p>
+                        <a href="{{ url_for('auth.admin_usuarios') }}" class="btn btn-warning mt-1">
+                            Gestionar <i class="bi bi-arrow-right ms-1"></i>
+                        </a>
                     </div>
                 </div>
             </div>
