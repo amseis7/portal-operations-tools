@@ -1,24 +1,65 @@
 from flask import render_template, redirect, url_for, flash, request, Response, jsonify
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.virustotal.background import lanzar_analisis_background
 from datetime import datetime
 from app.extensions import db
+from sqlalchemy import or_
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
+from app.utils import admin_required, proteger_blueprint
 from app.virustotal import bp
 from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
-from markupsafe import Markup
+from markupsafe import Markup, escape
 import re
+import logging
+logger = logging.getLogger(__name__)
+
+
+proteger_blueprint(bp, 'virustotal')
+
+VARIABLES_PERMITIDAS = {
+    'valor', 'tipo', 'tipo_real', 'ticket', 'filename',
+    'md5', 'sha1', 'sha256', 'positives', 'total', 'estado_motor'
+}
+EXTENSIONES_PERMITIDAS = {'csv', 'txt', 'xml', 'json'}
+
+def validar_plantilla(form):
+    errores = []
+    nombre = form.get('nombre', '').strip()
+    engine = form.get('vt_engine', '').strip()
+    ext = form.get('extension', '').strip().lower()
+    row = form.get('row_template', '').strip()
+    hashes = form.get('supported_hashes', '').strip()
+
+    if not nombre:
+        errores.append("El nombre de la plataforma es obligatorio.")
+    if not engine:
+        errores.append("El nombre del motor VT es obligatorio.")
+    if ext not in EXTENSIONES_PERMITIDAS:
+        errores.append(f"Extensión no válida: {ext}")
+    if not row:
+        errores.append("La plantilla de fila es obligatoria.")
+    else:
+        usadas = set(re.findall(r'\{(\w+)\}', row))
+        invalidas = usadas - VARIABLES_PERMITIDAS
+        if invalidas:
+            errores.append(
+                f"Variables no reconocidas: {', '.join(sorted(invalidas))}. "
+                f"Válidas: {', '.join(sorted(VARIABLES_PERMITIDAS))}"
+            )
+    if hashes:
+        for h in hashes.split(','):
+            if h.strip() not in ('md5', 'sha1', 'sha256'):
+                errores.append(f"Hash no soportado: {h.strip()}")
+    return errores
+
 
 # --- RUTAS DE GESTIÓN DE CASOS ---
-
 @bp.route('/')
-@login_required
 def index():
     tickets = VtTicket.query.order_by(VtTicket.fecha_creacion.desc()).all()
     return render_template('virustotal/index.html', tickets=tickets, titulo_navbar="Investigaciones VT")
 
 @bp.route('/crear_caso', methods=['POST'])
-@login_required
 def crear_caso():
     nombre = request.form.get('nombre')
     descripcion = request.form.get('descripcion')
@@ -29,10 +70,12 @@ def crear_caso():
     return redirect(url_for('virustotal.ver_caso', caso_id=nuevo.id))
 
 @bp.route('/caso/<int:caso_id>', methods=['GET', 'POST'])
-@login_required
 def ver_caso(caso_id):
     # ... (Tu código actual de ver_caso) ...
     caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     
     if request.method == 'POST':
         raw = request.form.get('hashes_input')
@@ -59,7 +102,19 @@ def ver_caso(caso_id):
                     if '.' not in valor_limpio: es_valido = False
 
                 if es_valido:
+                    es_hash_tipo = tipo_seleccionado in ['hash', 'md5', 'sha1', 'sha256']
                     existe = VtIoc.query.filter_by(ticket_id=caso.id, valor=valor_limpio).first()
+
+                    if not existe and es_hash_tipo:
+                        existe = VtIoc.query.filter(
+                            VtIoc.ticket_id == caso.id,
+                            or_(
+                                VtIoc.vt_md5 == valor_limpio,
+                                VtIoc.vt_sha1 == valor_limpio,
+                                VtIoc.vt_sha256 == valor_limpio
+                            )
+                        ).first()
+
                     if not existe:
                         nuevo_ioc = VtIoc(ticket_id=caso.id, tipo=tipo_seleccionado, valor=valor_limpio)
                         db.session.add(nuevo_ioc)
@@ -78,15 +133,18 @@ def ver_caso(caso_id):
     return render_template('virustotal/detalle_caso.html', caso=caso, titulo_navbar=f"Investigaciones VT", templates_export=templates_export)
 
 @bp.route('/analizar_caso/<int:caso_id>', methods=['POST'])
-@login_required
 def analizar_caso(caso_id):
-    if not current_user.virustotal_api_key:
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
         link = url_for('auth.perfil')
-        mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{link}" class="alert-link">Perfil de Usuario</a>.')
+        mensaje = Markup(f'Error: Configura tu API Key primero en tu <a href="{escape(link)}" class="alert-link">Perfil de Usuario</a>.')
         flash(mensaje, 'danger')
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
     caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     tipo_filtro = request.args.get('tipo')
     
     query = VtIoc.query.filter_by(ticket_id=caso_id)
@@ -117,11 +175,15 @@ def analizar_caso(caso_id):
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id, analyzing=1))
 
 @bp.route('/analizar_ticket_csirt/<ticket_id>', methods=['POST'])
-@login_required
 def analizar_ticket_csirt(ticket_id):
     """
     Toma IoCs de un Ticket CSIRT (RF-...), crea un Caso VT y analiza.
     """
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
+        flash("Necesitas configurar tu API Key de VirusTotal en tu perfil antes de crear casos.", "warning")
+        return redirect(url_for('auth.perfil'))
+
     # 1. Obtener IoCs origen
     query = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id)
 
@@ -144,15 +206,22 @@ def analizar_ticket_csirt(ticket_id):
     # 2. Procesar (Importar -> Analizar)
     caso_vt_id = procesar_importacion_csirt(ticket_id, iocs_csirt)
 
-    # 3. Redirigir al CASO VT (Nueva pantalla)
+    # 3. Lanzar análisis en segundo plano
+    lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
+
+    # 4. Redirigir al CASO VT (Nueva pantalla)
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id, analyzing=1))
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
-@login_required
 def analizar_alerta(alerta_id):
     """
     Toma IoCs de una Alerta específica, crea/actualiza el Caso VT del Ticket padre y analiza.
     """
+    vt_key = current_user.get_vt_key()
+    if not vt_key:
+        flash("Necesitas configurar tu API Key de VirusTotal en tu perfil antes de analizar.", "warning")
+        return redirect(url_for('auth.perfil'))
+
     # 1. Obtener Alerta para saber el Ticket Padre
     alerta = Alerta.query.get_or_404(alerta_id)
     ticket_padre = alerta.ticket # Ej: RF-123456
@@ -179,12 +248,15 @@ def analizar_alerta(alerta_id):
     # 3. Procesar (Usamos el ticket del padre para agrupar todo en el mismo caso)
     caso_vt_id = procesar_importacion_csirt(ticket_padre, iocs_csirt)
 
-    # 4. Redirigir al CASO VT
+    # 4. Lanzar análisis en segundo plano
+    lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
+
+    # 5. Redirigir al CASO VT
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre, analyzing=1))
 
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
 @bp.route('/eliminar_caso/<int:caso_id>', methods=['POST'])
-@login_required
+@admin_required
 def eliminar_caso(caso_id):
     # (Mantén tu código de eliminación aquí)
     caso = VtTicket.query.get_or_404(caso_id)
@@ -197,13 +269,16 @@ def eliminar_caso(caso_id):
         flash('Caso eliminado.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error: {e}', 'danger')
+        logger.error(f"Error al eliminar caso VT {caso_id}: {e}")
+        flash('Ocurrió un error interno al eliminar. Contacte al administrador.', 'danger')
     return redirect(url_for('virustotal.index'))
 
 @bp.route('/exportar_zip/<int:caso_id>/<caso_nombre>', methods=['POST'])
-@login_required
 def exportar_zip(caso_id, caso_nombre):
-    # (Mantén tu código de exportación aquí)
+    caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        flash('No tienes permiso para acceder a este caso.', 'danger')
+        return redirect(url_for('virustotal.index'))
     selected = request.form.getlist('templates_seleccionados')
     if not selected:
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
@@ -212,48 +287,50 @@ def exportar_zip(caso_id, caso_nombre):
     return Response(zip_file, mimetype="application/zip", headers={"Content-disposition": f"attachment; filename=Pack_{caso_nombre}_{fecha}.zip"})
 
 @bp.route('/admin/templates', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def admin_templates():
-    if not current_user.is_admin:
-        return redirect(url_for('virustotal.index'))
-        
     if request.method == 'POST':
-        t = ExportTemplate(
-            nombre_plataforma=request.form.get('nombre'),
-            vt_engine_name=request.form.get('vt_engine'),
-            file_extension=request.form.get('extension'),
-            header_content=request.form.get('header'),
-            row_template=request.form.get('row_template'),
-            supported_hashes=request.form.get("supported_hashes"),
-            footer_content=request.form.get('footer')
-        )
-        db.session.add(t)
-        db.session.commit()
-        flash('Plantilla creada.', 'success')
+        errores = validar_plantilla(request.form)
+        if errores:
+            for e in errores:
+                flash(e, 'danger')
+        else:
+            t = ExportTemplate(
+                nombre_plataforma=request.form.get('nombre'),
+                vt_engine_name=request.form.get('vt_engine'),
+                file_extension=request.form.get('extension'),
+                header_content=request.form.get('header'),
+                row_template=request.form.get('row_template'),
+                supported_hashes=request.form.get("supported_hashes"),
+                footer_content=request.form.get('footer')
+            )
+            db.session.add(t)
+            db.session.commit()
+            flash('Plantilla creada.', 'success')
     
     templates = ExportTemplate.query.all()
     return render_template('virustotal/admin_templates.html', templates=templates)
 
 @bp.route('/admin/templates/eliminar/<int:id>', methods=['POST'])
-@login_required
+@admin_required
 def eliminar_template(id):
-    if not current_user.is_admin: return redirect(url_for('virustotal.index'))
     t = ExportTemplate.query.get_or_404(id)
     db.session.delete(t)
     db.session.commit()
     return redirect(url_for('virustotal.admin_templates'))
 
 @bp.route('/admin/templates/editar/<int:id>', methods=['POST'])
-@login_required
+@admin_required
 def editar_template(id):
-    # Seguridad: Solo admin
-    if not current_user.is_admin: 
-        return redirect(url_for('virustotal.index'))
-    
+    errores = validar_plantilla(request.form)
+    if errores:
+        for e in errores:
+            flash(e, 'danger')
+        return redirect(url_for('virustotal.admin_templates'))
+
     t = ExportTemplate.query.get_or_404(id)
     
     try:
-        # Actualizar campos
         t.nombre_plataforma = request.form.get('nombre')
         t.vt_engine_name = request.form.get('vt_engine')
         t.file_extension = request.form.get('extension')
@@ -266,16 +343,19 @@ def editar_template(id):
         flash(f'Plantilla "{t.nombre_plataforma}" actualizada correctamente.', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al actualizar: {e}', 'danger')
+        logger.error(f"Error al actualizar plantilla {id}: {e}")
+        flash('Ocurrió un error interno al actualizar. Contacte al administrador.', 'danger')
         
     return redirect(url_for('virustotal.admin_templates'))
 
 @bp.route('/api/estado_caso/<int:caso_id>')
-@login_required
 def estado_caso(caso_id):
     """
     Ruta API para que la barra de progreso consulte el estado.
     """
+    caso = VtTicket.query.get_or_404(caso_id)
+    if not current_user.is_admin and caso.usuario_id != current_user.id:
+        return jsonify({"error": "No autorizado"}), 403
     try:
         # Total de IoCs en el caso
         total = VtIoc.query.filter_by(ticket_id=caso_id).count()
@@ -299,4 +379,5 @@ def estado_caso(caso_id):
             "estado": estado
         })
     except Exception as e:
-        return jsonify({"error": str(e), "porcentaje": 0, "estado": "error"}), 500
+        logger.error(f"Error en estado_caso {caso_id}: {e}")
+        return jsonify({"error": "Error interno", "porcentaje": 0, "estado": "error"}), 500

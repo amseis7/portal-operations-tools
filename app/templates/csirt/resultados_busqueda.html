@@ -4,7 +4,7 @@
 <div class="container">
     <div class="mb-4 d-flex justify-content-between align-items-center">
         <div>
-            <h3>Resultados para: <span class="text-primary">"{{ query }}"</span></h3>
+            <h2>Resultados para: <span class="text-primary">"{{ query }}"</span></h2>
             <p class="text-muted mb-0">Se encontraron coincidencias en {{ resultados_csirt|length }} registros CSIRT y {{ resultados_vt|length }} casos VT.</p>
         </div>
         <a href="{{ url_for('csirt.index') }}" class="btn btn-secondary">Volver al Inicio</a>
@@ -17,7 +17,7 @@
         </div>
         <div class="card-body p-0">
             <table class="table table-hover table-striped mb-0 align-middle">
-                <thead class="table-light">
+                <thead class="table-dark text-nowrap">
                     <tr>
                         <th>IoC</th>
                         <th>Tipo</th>
@@ -31,7 +31,7 @@
                     {% for ioc in resultados_csirt %}
                     <tr>
                         <td class="font-monospace fw-bold text-danger">{{ ioc.valor }}</td>
-                        <td><span class="badge bg-white text-dark border">{{ ioc.tipo }}</span></td>
+                        <td><span class="badge bg-light text-dark border">{{ ioc.tipo }}</span></td>
                         <td>{{ ioc.alerta.nombre_alerta }}</td>
                         <td>
                             <a href="{{ url_for('csirt.ver_gestion', ticket_id=ioc.alerta.ticket) }}" class="text-decoration-none fw-bold">
@@ -60,7 +60,7 @@
         </div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0 align-middle">
-                <thead class="table-light">
+                <thead class="table-dark text-nowrap">
                     <tr>
                         <th>IoC</th>
                         <th>Tipo</th>
@@ -112,6 +112,5 @@
             </table>
         </div>
     </div>
-
 </div>
 {% endblock %}

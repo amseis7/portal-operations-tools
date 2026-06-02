@@ -1,21 +1,22 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-journal-text text-primary"></i> Bitácora de Investigaciones</h2>
-        {% if current_user.is_admin %}
-            <a href="{{ url_for('virustotal.admin_templates') }}" class="btn btn-outline-secondary me-2">
+        <div class="d-flex gap-2">
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('virustotal.admin_templates') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-gear-fill"></i> Configurar Plantillas
             </a>
-        {% endif %}
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoCaso">
-            <i class="bi bi-plus-lg"></i> Crear Nuevo Caso
-        </button>
+            {% endif %}
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalNuevoCaso">
+                <i class="bi bi-plus-lg"></i> Crear Nuevo Caso
+            </button>
+        </div>
     </div>
 
     <div class="card shadow-sm">
-        <div class="card-body p-0">
+        <div class="card-body p-0 table-responsive">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-dark">
                     <tr>
@@ -32,8 +33,8 @@
                     <tr>
                         <td>#{{ ticket.id }}</td>
                         <td><strong>{{ ticket.nombre }}</strong></td>
-                        <td>{{ ticket.descripcion }}</td>
-                        <td>{{ ticket.creador.username }}</td>
+                        <td style="max-width: 200px;" class="text-truncate d-inline-block w-100" title="{{ ticket.descripcion }}">{{ ticket.descripcion }}</td>
+                        <td>{{ ticket.creador.nombre_completo }}</td>
                         <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y') }}</td>
                         <td class="text-center">
                             <div class="d-flex justify-content-center gap-2">
@@ -42,12 +43,9 @@
                                 </a>
                                 
                                 {% if current_user.is_admin  %}
-                                <form action="{{ url_for('virustotal.eliminar_caso', caso_id=ticket.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de eliminar el caso &quot;{{ ticket.nombre }}&quot;?\nEsta acción borrará todos los IoCs y análisis asociados.');">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                    <button type="submit" class="btn btn-sm btn-danger" title="Eliminar Caso">
-                                        <i class="bi bi-trash"></i> Eliminar
-                                    </button>
-                                </form>
+                                <button type="button" class="btn btn-sm btn-danger" title="Eliminar Caso" data-bs-toggle="modal" data-bs-target="#modalConfirmarEliminar" data-nombre="{{ ticket.nombre }}" data-action="{{ url_for('virustotal.eliminar_caso', caso_id=ticket.id) }}">
+                                    <i class="bi bi-trash"></i> Eliminar
+                                </button>
                                 {% endif %}
                             </div>
                         </td>
@@ -62,30 +60,72 @@
 </div>
 
 <div class="modal fade" id="modalNuevoCaso" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title">Nueva Investigación</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ url_for('virustotal.crear_caso') }}" method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="modal-body">
-            <div class="mb-3">
-                <label class="form-label fw-bold">Nombre del Caso / Ticket</label>
-                <input type="text" name="nombre" class="form-control" placeholder="Ej: INC-2025-001 - Malware Contabilidad" required>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">Nueva Investigación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Descripción (Opcional)</label>
-                <textarea name="descripcion" class="form-control" rows="3" placeholder="Detalles breves..."></textarea>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-success">Crear Caso</button>
-          </div>
-      </form>
+            <form action="{{ url_for('virustotal.crear_caso') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Nombre del Caso / Ticket</label>
+                        <input type="text" name="nombre" class="form-control" placeholder="Ej: INC-2025-001 - Malware Contabilidad" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descripción (Opcional)</label>
+                        <textarea name="descripcion" class="form-control" rows="3" placeholder="Detalles breves..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Crear Caso</button>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
+
+<!-- Modal de Confirmación de Eliminación -->
+<div class="modal fade" id="modalConfirmarEliminar" tabindex="-1" aria-labelledby="modalConfirmarEliminarLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalConfirmarEliminarLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar el caso: <strong><span id="nombreCasoEliminar"></span></strong>?</p>
+                <p class="text-danger">Esta acción borrará todos los IoCs y análisis asociados y no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formEliminarCaso" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Eliminar Caso</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalConfirmarEliminar = document.getElementById('modalConfirmarEliminar');
+        if (modalConfirmarEliminar) {
+            modalConfirmarEliminar.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget; // Botón que activó el modal
+                const nombreCaso = button.getAttribute('data-nombre');
+                const actionUrl = button.getAttribute('data-action');
+
+                const modalTitle = modalConfirmarEliminar.querySelector('#nombreCasoEliminar');
+                const formEliminar = modalConfirmarEliminar.querySelector('#formEliminarCaso');
+
+                modalTitle.textContent = nombreCaso;
+                formEliminar.setAttribute('action', actionUrl);
+            });
+        }
+    });
+</script>
 {% endblock %}

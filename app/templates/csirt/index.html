@@ -5,30 +5,24 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2><i class="bi bi-journal-text text-primary"></i>Bitácora de Tickets CSIRT</h2>
         <div class="d-flex gap-2">
-        
             {% if current_user.is_admin %}
             <div class="dropdown">
                 <button class="btn btn-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="bi bi-gear-fill me-1"></i> Mantenimiento
                 </button>
                 <ul class="dropdown-menu">
-
                     <li>
                         <a class="dropdown-item text-primary" href="{{ url_for('csirt.exportar_todo_csv') }}">
                             <i class="bi bi-download me-2"></i> Exportar Respaldo (CSV)
                         </a>
                     </li>
-
                     <li><hr class="dropdown-divider"></li>
-
                     <li>
                         <a class="dropdown-item" href="{{ url_for('csirt.importar_historico') }}">
                             <i class="bi bi-upload me-2"></i> Importar CSV
                         </a>
-                    </li>
-                
-                    <li><hr class="dropdown-divider"></li>
-                
+                    </li>  
+                    <li><hr class="dropdown-divider"></li>  
                     <li>
                         <button class="dropdown-item text-warning" onclick="iniciarActualizacionMasiva()">
                             <i class="bi bi-arrow-repeat me-2"></i> Actualizar Todo (IoCs)
@@ -63,10 +57,8 @@
                             <i class="bi bi-virus2 me-2"></i> Investigaciones VT
                         </a>
                     </li>
-
                 </ul>
             </div>
-
         </div>
     </div>
 
@@ -126,136 +118,134 @@
 </div>
 
 <div class="modal fade" id="modalReporte" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-success text-white">
-        <h5 class="modal-title">Generar Reporte de Gestión</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form action="{{ url_for('csirt.generar_reporte') }}" method="POST">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="modal-body">
-            
-            <p class="mb-3">Selecciona el rango para el Excel:</p>
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="fecha_inicio" class="form-label fw-bold">Fecha Inicio:</label>
-                    <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" required onchange="actualizarTextoCorreo()">
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label for="fecha_fin" class="form-label fw-bold">Fecha Fin:</label>
-                    <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" required onchange="actualizarTextoCorreo()">
-                </div>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">Generar Reporte de Gestión</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            <form action="{{ url_for('csirt.generar_reporte') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">   
+                    <p class="mb-3">Selecciona el rango para el Excel:</p>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="fecha_inicio" class="form-label fw-bold">Fecha Inicio:</label>
+                            <input type="date" class="form-control" id="fecha_inicio" name="fecha_inicio" required onchange="actualizarTextoCorreo()">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="fecha_fin" class="form-label fw-bold">Fecha Fin:</label>
+                            <input type="date" class="form-control" id="fecha_fin" name="fecha_fin" required onchange="actualizarTextoCorreo()">
+                        </div>
+                    </div>
 
-            <hr>
+                    <hr>
 
-            <h6 class="fw-bold text-success"><i class="bi bi-envelope"></i> Datos para el Correo</h6>
-            <p class="small text-muted">Copia y pega esto en tu cliente de correo:</p>
+                    <h6 class="fw-bold text-success"><i class="bi bi-envelope"></i> Datos para el Correo</h6>
+                    <p class="small text-muted">Copia y pega esto en tu cliente de correo:</p>
 
-            <div class="mb-3">
-                <label class="small fw-bold">Asunto:</label>
-                <div class="input-group">
-                    <input type="text" class="form-control form-control-sm bg-light" id="emailAsunto" readonly>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailAsunto', this)">
-                        <i class="bi bi-clipboard"></i> Copiar
+                    <div class="mb-3">
+                        <label class="small fw-bold">Asunto:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control form-control-sm bg-light" id="emailAsunto" readonly>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailAsunto', this)">
+                                <i class="bi bi-clipboard"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Cuerpo:</label>
+                        <div class="input-group">
+                            <textarea class="form-control form-control-sm bg-light" id="emailCuerpo" rows="3" readonly>Hago entrega de las alertas CSIRT procesadas en la última semana. Gestión realizada por Sonda al día de hoy.</textarea>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailCuerpo', this)">
+                                <i class="bi bi-clipboard"></i> Copiar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-download"></i> Descargar Excel
                     </button>
                 </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="small fw-bold">Cuerpo:</label>
-                <div class="input-group">
-                    <textarea class="form-control form-control-sm bg-light" id="emailCuerpo" rows="3" readonly>Hago entrega de las alertas CSIRT procesadas en la última semana. Gestión realizada por Sonda al día de hoy.</textarea>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="copiarTexto('emailCuerpo', this)">
-                        <i class="bi bi-clipboard"></i> Copiar
-                    </button>
-                </div>
-            </div>
-
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-            <button type="submit" class="btn btn-success">
-                <i class="bi bi-download"></i> Descargar Excel
-            </button>
-          </div>
-      </form>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="modalScraping" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Iniciar Revisión de Alertas</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <form action="{{ url_for('csirt.procesar') }}" method="POST" id="formScraping">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <div class="modal-body">
-            <p class="small text-muted">
-                El sistema buscará alertas nuevas comparando con los últimos registros de la base de datos.
-            </p>
-            <div class="mb-3">
-                <label for="ticket" class="form-label">Ingrese N° de Ticket (RF) para esta gestión:</label>
-                <input type="text" 
-                    class="form-control" 
-                    id="ticket" 
-                    name="ticket" 
-                    placeholder="Ej: RF-20259999" 
-                    pattern="^RF-\d+$"
-                    title="El formato debe ser RF- seguido de números (Ej: RF-123456)"
-                    oninput="this.value = this.value.toUpperCase()"
-                    required>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Iniciar Revisión de Alertas</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
+            <form action="{{ url_for('csirt.procesar') }}" method="POST" id="formScraping">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <p class="small text-muted">
+                        El sistema buscará alertas nuevas comparando con los últimos registros de la base de datos.
+                    </p>
+                    <div class="mb-3">
+                        <label for="ticket" class="form-label">Ingrese N° de Ticket (RF) para esta gestión:</label>
+                        <input type="text" 
+                            class="form-control" 
+                            id="ticket" 
+                            name="ticket" 
+                            placeholder="Ej: RF-20259999" 
+                            pattern="^RF-\d+$"
+                            title="El formato debe ser RF- seguido de números (Ej: RF-123456)"
+                            oninput="this.value = this.value.toUpperCase()"
+                            required>
+                    </div>
 
-            {% if current_user.is_admin %}
-            <div class="mb-3 p-3 bg-light border rounded">
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="modo_prueba" name="modo_prueba">
-                    <label class="form-check-label text-warning fw-bold" for="modo_prueba">
-                        Activar Modo Prueba (Simulación)
-                    </label>
-                </div>
-                <div class="form-text mt-2">
-                    Si activas esto, el sistema buscará alertas pero <strong>NO guardará nada</strong> en la base de datos.
-                </div>
-            </div>
-            {% endif %}
+                    {% if current_user.is_admin %}
+                    <div class="mb-3 p-3 bg-light border rounded">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="modo_prueba" name="modo_prueba">
+                            <label class="form-check-label text-warning fw-bold" for="modo_prueba">
+                                Activar Modo Prueba (Simulación)
+                            </label>
+                        </div>
+                        <div class="form-text mt-2">
+                            Si activas esto, el sistema buscará alertas pero <strong>NO guardará nada</strong> en la base de datos.
+                        </div>
+                    </div>
+                    {% endif %}
 
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-            <button type="submit" class="btn btn-primary" id="btnBuscar">
-                <i class="bi bi-search"></i> Iniciar Búsqueda
-            </button>
-          </div>
-      </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnBuscar">
+                        <i class="bi bi-search"></i> Iniciar Búsqueda
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="modalConsola" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content bg-dark text-light">
-      <div class="modal-header border-secondary">
-        <h5 class="modal-title font-monospace">
-            <i class="bi bi-terminal-fill me-2"></i>Terminal de Actualización
-        </h5>
-        <button type="button" class="btn-close btn-close-white d-none" id="btnCloseConsola" data-bs-dismiss="modal" onclick="location.reload()"></button>
-      </div>
-      <div class="modal-body p-0">
-        <pre id="consolaOutput" class="p-3 m-0 text-success font-monospace" style="height: 400px; overflow-y: auto; white-space: pre-wrap;">Inicializando sistema...</pre>
-      </div>
-      <div class="modal-footer border-secondary">
-        <span id="statusSpinner" class="spinner-border spinner-border-sm text-light me-2" role="status"></span>
-        <span id="statusText" class="text-muted small">Procesando en tiempo real...</span>
-        <button type="button" class="btn btn-success d-none" id="btnFinalizar" onclick="location.reload()">Finalizar y Recargar</button>
-      </div>
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content bg-dark text-light">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title font-monospace">
+                    <i class="bi bi-terminal-fill me-2"></i>Terminal de Actualización
+                </h5>
+                <button type="button" class="btn-close btn-close-white d-none" id="btnCloseConsola" data-bs-dismiss="modal" onclick="location.reload()"></button>
+            </div>
+            <div class="modal-body p-0">
+                <pre id="consolaOutput" class="p-3 m-0 text-success font-monospace" style="height: 400px; overflow-y: auto; white-space: pre-wrap;">Inicializando sistema...</pre>
+            </div>
+            <div class="modal-footer border-secondary">
+                <span id="statusSpinner" class="spinner-border spinner-border-sm text-light me-2" role="status"></span>
+                <span id="statusText" class="text-muted small">Procesando en tiempo real...</span>
+                <button type="button" class="btn btn-success d-none" id="btnFinalizar" onclick="location.reload()">Finalizar y Recargar</button>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <script>

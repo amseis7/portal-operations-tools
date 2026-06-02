@@ -2,12 +2,12 @@ import requests
 import time
 import logging
 import base64
-import csv
+import json
 import zipfile
 import re
 from io import BytesIO
-from datetime import datetime
-from flask import flash, request
+from datetime import datetime, timedelta
+from flask import flash
 from flask_login import current_user
 from sqlalchemy import or_
 from app.extensions import db
@@ -15,34 +15,123 @@ from app.models import Ioc, VtIoc, Alerta, ExportTemplate, VtTicket
 
 logger = logging.getLogger(__name__)
 
-def buscar_resultado_previo(valor_hash):
-    # ... (Mismo código de antes) ...
-    existente = Ioc.query.filter(
-        or_(Ioc.vt_md5 == valor_hash, Ioc.vt_sha1 == valor_hash, Ioc.vt_sha256 == valor_hash, Ioc.valor == valor_hash),
-        Ioc.vt_last_check != None
+def detectar_tipo_hash(valor):
+    valor = valor.strip().lower()
+    if len(valor) == 32 and all(c in '0123456789abcdef' for c in valor):
+        return 'md5'
+    if len(valor) == 40 and all(c in '0123456789abcdef' for c in valor):
+        return 'sha1'
+    if len(valor) == 64 and all(c in '0123456789abcdef' for c in valor):
+        return 'sha256'
+    return None
+
+def buscar_hash_existente_cross_format(valor, dias_validez=14):
+    tipo = detectar_tipo_hash(valor)
+    if not tipo:
+        return None
+
+    fecha_limite = datetime.now() - timedelta(days=dias_validez)
+
+    resultado = VtIoc.query.filter(
+        or_(
+            VtIoc.vt_md5 == valor,
+            VtIoc.vt_sha1 == valor,
+            VtIoc.vt_sha256 == valor
+        ),
+        VtIoc.vt_last_check >= fecha_limite
+    ).order_by(VtIoc.vt_last_check.desc()).first()
+
+    if resultado:
+        return resultado
+
+    resultado = Ioc.query.filter(
+        or_(
+            Ioc.vt_md5 == valor,
+            Ioc.vt_sha1 == valor,
+            Ioc.vt_sha256 == valor
+        ),
+        Ioc.vt_last_check >= fecha_limite
     ).order_by(Ioc.vt_last_check.desc()).first()
 
-    if not existente:
-        existente = VtIoc.query.filter(
-            or_(VtIoc.vt_md5 == valor_hash, VtIoc.vt_sha1 == valor_hash, VtIoc.vt_sha256 == valor_hash, VtIoc.valor == valor_hash),
-            VtIoc.vt_last_check != None
-        ).order_by(VtIoc.vt_last_check.desc()).first()
-    return existente
+    if resultado:
+        return resultado
+
+    return None
+
+def buscar_resultado_freco_en_db(valor, dias_validez=14):
+    fecha_limite = datetime.now() - timedelta(days=dias_validez)
+
+    candidato = VtIoc.query.filter(
+        VtIoc.valor == valor,
+        VtIoc.vt_last_check >= fecha_limite
+    ).order_by(VtIoc.vt_last_check.desc()).first()
+
+    if candidato:
+        return candidato
+    
+    candidato_csirt = Ioc.query.filter(
+        Ioc.valor == valor,
+        Ioc.vt_last_check >= fecha_limite
+    ).order_by(Ioc.vt_last_check.desc()).first()
+
+    if candidato_csirt:
+        return candidato_csirt
+    
+    return None
 
 def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     """Consulta VT para un objeto (Ioc o VtIoc)."""
-    
+    logger.info(ioc_obj)
     if not forzar and ioc_obj.vt_last_check:
         tiempo = datetime.now() - ioc_obj.vt_last_check
         if tiempo.days < 7:
+            return True
+        
+    if not forzar:
+        resultado_previo = buscar_resultado_freco_en_db(ioc_obj.valor)
+
+        if resultado_previo:
+            ioc_obj.vt_last_check = resultado_previo.vt_last_check
+            ioc_obj.vt_reputation = resultado_previo.vt_reputation
+            ioc_obj.vt_positives = resultado_previo.vt_positives
+            ioc_obj.vt_total = resultado_previo.vt_total
+            ioc_obj.vt_permalink = resultado_previo.vt_permalink
+            ioc_obj.vt_md5 = resultado_previo.vt_md5
+            ioc_obj.vt_sha1 = resultado_previo.vt_sha1
+            ioc_obj.vt_sha256 = resultado_previo.vt_sha256
+
+            ioc_obj.vt_motores_json = resultado_previo.vt_motores_json
+
+            db.session.commit()
+            return True
+
+        resultado_cross = buscar_hash_existente_cross_format(ioc_obj.valor)
+        if resultado_cross:
+            ioc_obj.vt_last_check = resultado_cross.vt_last_check
+            ioc_obj.vt_reputation = resultado_cross.vt_reputation
+            ioc_obj.vt_positives = resultado_cross.vt_positives
+            ioc_obj.vt_total = resultado_cross.vt_total
+            ioc_obj.vt_permalink = resultado_cross.vt_permalink
+            ioc_obj.vt_md5 = resultado_cross.vt_md5
+            ioc_obj.vt_sha1 = resultado_cross.vt_sha1
+            ioc_obj.vt_sha256 = resultado_cross.vt_sha256
+            ioc_obj.vt_motores_json = resultado_cross.vt_motores_json
+
+            tipo_detectado = detectar_tipo_hash(ioc_obj.valor)
+            if tipo_detectado and tipo_detectado not in ['hash', ioc_obj.tipo.lower()]:
+                ioc_obj.tipo = tipo_detectado
+
+            db.session.commit()
+            logger.info(f"[VT CACHE CROSS] Hash {ioc_obj.valor} encontrado via cross-format ({tipo_detectado}), VT omitido")
             return True
         
     if not api_key:
         try:
             if current_user.is_authenticated:
                 api_key = current_user.get_vt_key()
-        except:
+        except Exception:
             pass
+        
     if not api_key: return False
     
     headers = {"x-apikey": api_key}
@@ -55,7 +144,8 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
     # 3. ENDPOINTS
     if tipo_db in ['hash', 'md5', 'sha1', 'sha256']:
         endpoint = f"{base_url}/files/{valor_original}"
-    elif tipo_db == 'ip':
+    #elif tipo_db == 'ip':
+    elif tipo_db in ['ip', 'smtp']:
         endpoint = f"{base_url}/ip_addresses/{valor_original}"
     elif tipo_db == 'dominio':
         valor_limpio = valor_original.replace("https://", "").replace("http://", "").split("/")[0]
@@ -64,9 +154,27 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
         try:
             url_id = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
             endpoint = f"{base_url}/urls/{url_id}"
-        except: return False
+        except Exception: return False
+    elif tipo_db == 'email':
+        logger.info(f"[VT SKIP] Ignoraldo email: {valor_original}")
+
+        ioc_obj.vt_last_check = datetime.now()
+        ioc_obj.vt_positives = 0
+        ioc_obj.vt_total = 0
+        ioc_obj.vt_reputation = 0
+
+        # Dejamos un mensaje interno para saber que fue omitido intencionalmente
+        ioc_obj.set_motores({"INFO": "Email ignorado (No analizable en VT)"})
+        
+        db.session.commit()
+        return True # Retornamos True para que el sistema sepa que "terminó" con este
     else:
-        return False 
+        # Si llega un tipo desconocido (ej: 'telefono'), también lo marcamos para no trabar la barra
+        logger.warning(f"[VT WARNING] Tipo no soportado: {tipo_db}")
+        ioc_obj.vt_last_check = datetime.now()
+        ioc_obj.set_motores({"ERROR": f"Tipo '{tipo_db}' no soportado por VT"})
+        db.session.commit()
+        return True
 
     # 4. EJECUCIÓN
     try:
@@ -74,7 +182,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
             response = requests.get(endpoint, headers=headers, timeout=15)
             
             if response.status_code == 429:
-                print(f"[VT LIMIT] Cuota excedida (429) para {valor_original}. Verificando cuota real...") # <--- DIAGNÓSTICO
+                logger.warning(f"[VT LIMIT] Cuota excedida (429) para {valor_original}. Verificando cuota real...") # <--- DIAGNÓSTICO
                 cuota = obtener_uso_api(api_key)
 
                 if cuota:
@@ -82,11 +190,11 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                     limite = cuota.get('diario_limite', 0)
 
                 if isinstance(limite, int) and usado >= limite:
-                    print(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
+                    logger.warning(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
                     # Lanzamos una excepción específica para detener el bucle en background
                     raise Exception("VT_QUOTA_EXCEEDED")
 
-                print(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
+                logger.info(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
                 time.sleep(60)
                 continue
             
@@ -117,6 +225,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                     id_ref = base64.urlsafe_b64encode(valor_original.encode()).decode().strip("=")
                 elif tipo_db == 'dominio': type_link = 'domain'; id_ref = endpoint.split('/')[-1]
                 elif tipo_db == 'ip': type_link = 'ip-address'
+                elif tipo_db == 'smtp': type_link = 'smtp'
 
                 ioc_obj.vt_permalink = f"https://www.virustotal.com/gui/{type_link}/{id_ref}"
 
@@ -153,7 +262,7 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                 return True
             
             else:
-                print(f"[VT ERROR] Fallo con código {response.status_code}: {response.text}")
+                logger.error(f"[VT ERROR] Fallo con código {response.status_code}: {response.text}")
                 return False
 
     except Exception as e:
@@ -185,8 +294,21 @@ def procesar_importacion_csirt(nombre_ticket_csirt, iocs_origen):
     vt_iocs_a_analizar = []
 
     for ioc_c in iocs_origen:
-        # Verificar duplicados en el destino
+        # Verificar duplicados en el destino (por valor exacto)
         existe = VtIoc.query.filter_by(ticket_id=caso_vt.id, valor=ioc_c.valor).first()
+
+        # Verificar duplicados cross-hash (mismo archivo, diferente formato de hash)
+        if not existe:
+            es_hash_tipo = ioc_c.tipo and ioc_c.tipo.lower() in ['hash', 'md5', 'sha1', 'sha256']
+            if es_hash_tipo:
+                existe = VtIoc.query.filter(
+                    VtIoc.ticket_id == caso_vt.id,
+                    or_(
+                        VtIoc.vt_md5 == ioc_c.valor,
+                        VtIoc.vt_sha1 == ioc_c.valor,
+                        VtIoc.vt_sha256 == ioc_c.valor
+                    )
+                ).first()
         
         if not existe:
             nuevo_vt_ioc = VtIoc(
@@ -247,6 +369,7 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
                 contenido_archivo.append(template.header_content)
             
             count_agregados = 0
+            hashes_archivo_ya_exportados = set()
             for ioc in iocs:
                 motores = ioc.get_motores()
                 estado_motor = motores.get(template.vt_engine_name, 'not_scanned')
@@ -258,6 +381,12 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
                 valor_final = ioc.valor
                 tipo_final = ioc.tipo
                 es_hash = ioc.tipo in ['hash', 'md5', 'sha1', 'sha256']
+                
+                if es_hash:
+                    clave_archivo = ioc.vt_sha256 or ioc.vt_sha1 or ioc.vt_md5 or ioc.valor.strip().lower()
+                    if clave_archivo in hashes_archivo_ya_exportados:
+                        continue
+                    hashes_archivo_ya_exportados.add(clave_archivo)
                 
                 if es_hash:
                     encontrado = False
@@ -353,9 +482,9 @@ def obtener_uso_api(api_key):
                 "mensual_limite": quotas_monthly.get("allowed", "N/A")
             }
         else:
-            logger.error(f"Error VT Quota: {response.status_code} - {response.text}")
+            logger.error(f"Error VT Quota: {response.status_code}")
             return None
 
     except Exception as e:
-        logger.error(f"Excepción consultando cuota VT: {e}")
+        logger.error("Excepción consultando cuota VT (conexión fallida)")
         return None

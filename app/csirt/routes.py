@@ -2,24 +2,26 @@ from sqlalchemy import func
 from flask import render_template, request, flash, redirect, url_for, send_file, stream_with_context
 from flask_login import login_required, current_user
 from app.csirt import bp
-from app.models import Alerta, Ioc, VtIoc, VtTicket
+from app.models.csirt import Alerta, Ioc
+from app.models.virustotal import VtTicket, VtIoc
 from app.extensions import db
 import csv
 import re
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import logging
 from werkzeug.wrappers import Response
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from io import StringIO, BytesIO
 from datetime import datetime, timedelta
 
 from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva, obtener_mapa_recurrencia
-from app.utils import admin_required
+from app.utils import admin_required, proteger_blueprint, generar_reporte_excel
+
+proteger_blueprint(bp, 'csirt')
 
 
 @bp.route('/')
-@login_required
 def index():
     tickets = db.session.query(
         Alerta.ticket,
@@ -31,7 +33,6 @@ def index():
     return render_template('csirt/index.html', tickets=tickets, titulo_navbar="Gestión CSIRT")
 
 @bp.route('/gestion/<ticket_id>')
-@login_required
 def ver_gestion(ticket_id):
     # Buscamos todas las alertas que tengan ese ticket
     alertas = Alerta.query.filter(
@@ -41,7 +42,6 @@ def ver_gestion(ticket_id):
     return render_template('csirt/detalle_gestion.html', alertas=alertas, ticket=ticket_id, titulo_navbar="Gestión CSIRT")
 
 @bp.route('/iocs/<ticket_id>')
-@login_required
 def ver_iocs(ticket_id):
     # 1. Query Base
     query = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id)
@@ -82,7 +82,6 @@ def ver_iocs(ticket_id):
     )
 
 @bp.route('/procesar', methods=['POST'])
-@login_required
 def procesar():
     ticket = request.form.get('ticket')
 
@@ -95,7 +94,7 @@ def procesar():
     
     # Llamamos a la lógica maestra
     responsable_real = current_user.nombre_completo or current_user.username
-    resultado = ejecutar_proceso_csirt(ticket, responsable_real, simulacion=modo_prueba)
+    resultado = ejecutar_proceso_csirt(ticket, responsable_real, simulacion=modo_prueba, user_id=current_user.id)
     
     if resultado['status'] == 'exito':
         flash(f"¡Proceso finalizado! {resultado['msg']}", 'success' if not modo_prueba else 'warning')
@@ -105,7 +104,6 @@ def procesar():
     return redirect(url_for('csirt.index'))
 
 @bp.route('/actualizar_iocs/<ticket_id>', methods=['POST'])
-@login_required
 def actualizar_iocs(ticket_id):
     try:
         cant_alertas, cant_iocs = actualizar_iocs_faltantes(ticket_id)
@@ -116,15 +114,13 @@ def actualizar_iocs(ticket_id):
             flash('No se encontraron IoCs nuevos o las alertas ya estaban completas.', 'info')
             
     except Exception as e:
-        flash(f'Ocurrió un error al actualizar: {str(e)}', 'danger')
+        logger.error(f"Error al actualizar IoCs del ticket {ticket_id}: {e}")
+        flash('Ocurrió un error interno al actualizar. Contacte al administrador.', 'danger')
         
     # Volvemos a la misma página de gestión
     return redirect(url_for('csirt.ver_gestion', ticket_id=ticket_id))
 
-# En app/csirt/routes.py
-
 @bp.route('/admin/exportar_todo_csv')
-@login_required
 def exportar_todo_csv():
     # 1. Seguridad: Solo admin
     if not current_user.is_admin:
@@ -163,7 +159,6 @@ def exportar_todo_csv():
     )
 
 @bp.route('/importar_historico', methods=['GET', 'POST'])
-@login_required
 @admin_required
 def importar_historico():
     # --- Verificacion de seguridad --- #
@@ -175,6 +170,17 @@ def importar_historico():
         file = request.files.get('archivo_csv')
         if not file:
             flash('sube un archivo CSV', 'warning')
+            return redirect(request.url)
+
+        if not file.filename.lower().endswith('.csv'):
+            flash('Solo se permiten archivos .csv', 'danger')
+            return redirect(request.url)
+
+        file.stream.seek(0, 2)
+        size = file.stream.tell()
+        file.stream.seek(0)
+        if size > 5 * 1024 * 1024:
+            flash('El archivo excede el límite de 5MB.', 'danger')
             return redirect(request.url)
         
         try:
@@ -234,14 +240,12 @@ def importar_historico():
 
         except Exception as e:
             db.session.rollback()
-            # Muestra el error detallado para depurar
-            flash(f'Error al importar: {str(e)}', 'danger')
+            logger.error(f"Error al importar CSV: {e}")
+            flash('Ocurrió un error interno al importar. Contacte al administrador.', 'danger')
 
     return render_template('csirt/importar.html')
 
-# --- NUEVA RUTA: Descargar CSV Masivo por Ticket ---
 @bp.route('/descargar_csv/<ticket_id>')
-@login_required
 def descargar_iocs_csv(ticket_id):
     # 1. Buscamos todos los IoCs asociados a alertas de este ticket
     iocs = db.session.query(Ioc).join(Alerta).filter(Alerta.ticket == ticket_id).order_by(Ioc.tipo).all()
@@ -271,7 +275,6 @@ def descargar_iocs_csv(ticket_id):
 
 # --- NUEVA RUTA: Ver IoCs de una ALERTA ESPECÍFICA ---
 @bp.route('/iocs_alerta/<int:alerta_id>')
-@login_required
 def ver_iocs_alerta(alerta_id):
     alerta = Alerta.query.get_or_404(alerta_id)
     
@@ -308,7 +311,6 @@ def ver_iocs_alerta(alerta_id):
     )
 
 @bp.route('/eliminar_ticket/<ticket_id>', methods=['POST'])
-@login_required
 @admin_required
 def eliminar_ticket(ticket_id):
     # 1. Seguridad: Solo admin puede borrar
@@ -331,14 +333,13 @@ def eliminar_ticket(ticket_id):
 
     except Exception as e:
         db.session.rollback()
-        flash(f'Error al eliminar: {str(e)}', 'danger')
+        logger.error(f"Error al eliminar ticket {ticket_id}: {e}")
+        flash('Ocurrió un error interno al eliminar. Contacte al administrador.', 'danger')
 
     return redirect(url_for('csirt.index'))
 
 @bp.route('/generar_reporte', methods=['POST'])
-@login_required
 def generar_reporte():
-    # 1. Obtener fechas
     fecha_inicio_str = request.form.get('fecha_inicio')
     fecha_fin_str = request.form.get('fecha_fin')
 
@@ -354,7 +355,6 @@ def generar_reporte():
         flash('Formato de fecha inválido.', 'danger')
         return redirect(url_for('csirt.index'))
 
-    # 2. Consultar BD
     alertas = Alerta.query.filter(
         Alerta.fecha_realizacion >= fecha_inicio,
         Alerta.fecha_realizacion <= fecha_fin_inclusive
@@ -364,110 +364,7 @@ def generar_reporte():
         flash(f'No se encontraron alertas entre {fecha_inicio_str} y {fecha_fin_str}.', 'info')
         return redirect(url_for('csirt.index'))
 
-    # 3. Preparar Excel
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Reporte Gestión"
-
-    # --- ESTILOS ---
-    header_fill = PatternFill(start_color="4F81BD", end_color="4F81BD", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
-    center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    left_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    thin_border = Border(
-        left=Side(style='thin'), right=Side(style='thin'), 
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
-
-    # --- ENCABEZADOS (Ordenados según tu solicitud) ---
-    headers = [
-        'Nº',
-        'Fecha',
-        'Detalle Incidente / Reporte de vulnerabilidades',
-        'Tipo (Phishing, virus, etc.)',
-        'Criticidad (Alta, Media, Baja)',
-        'Canal de información de obtención (Twitter, email, etc.)',
-        'Plan de acción',
-        'Fecha de implementación',
-        'Chequeo post remediación'
-    ]
-    ws.append(headers)
-
-    # Estilar Cabecera y definir anchos
-    column_widths = [5, 12, 40, 25, 15, 25, 25, 20, 25] # Anchos para col 1 a 9
-    
-    for col_num, cell in enumerate(ws[1], 1):
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = center_align
-        cell.border = thin_border
-        # Aplicar anchos
-        col_letter = openpyxl.utils.get_column_letter(col_num)
-        if col_num <= len(column_widths):
-            ws.column_dimensions[col_letter].width = column_widths[col_num-1]
-
-    # --- DICCIONARIO DE TIPOS ---
-    mapa_tipos = {
-        "8FPH": "Phishing",
-        "2CMV": "Malware",
-        "8FFR": "Sitios Fraudulentos",
-        "4IIA": "Ataques de Fuerza Bruta",
-        "4IIV": "Ataques de Fuerza Bruta",
-        "ACF": "Campaña Fraudulenta",
-        "AIA": "Investigacion de Amenazas",
-        "AVC": "Vulnerabilidad Critica"
-    }
-
-    # --- LLENADO DE DATOS ---
-    contador = 1
-    for alerta in alertas:
-        
-        # A. Lógica de Traducción de Tipo
-        # Buscamos si alguna de las claves (Ej: 8FPH) está contenida en el nombre de la alerta
-        tipo_reporte = "Otro / Desconocido"
-        nombre_upper = alerta.nombre_alerta.upper()
-        
-        for codigo, descripcion in mapa_tipos.items():
-            if codigo in nombre_upper:
-                tipo_reporte = descripcion
-                break
-        
-        # Si no encontró coincidencias exactas pero tenemos el tipo corto guardado
-        if tipo_reporte == "Otro / Desconocido" and alerta.tipo_alerta:
-             # Intento de fallback (Ej: si la BD tiene 'AIA' pero el nombre no)
-             tipo_reporte = mapa_tipos.get(alerta.tipo_alerta, alerta.tipo_alerta)
-
-        # C. Construcción de la Fila
-        row_data = [
-            contador,                                      # Nº
-            alerta.fecha_realizacion.strftime('%d/%m/%Y'), # Fecha
-            alerta.nombre_alerta,                          # Detalle
-            tipo_reporte,                                  # Tipo Traducido
-            "Alta",                                        # Criticidad
-            "CSIRT",                                       # Canal
-            "Bloqueo de IoC",                              # Plan de acción (Vacio para llenar manual)
-            alerta.fecha_realizacion.strftime('%d/%m/%Y'), # Fecha implementación (Vacio)
-            "OK"                                             # Chequeo post (Vacio)
-        ]
-        ws.append(row_data)
-        
-        # Estilar celdas de datos
-        current_row = ws.max_row
-        for col_idx, cell in enumerate(ws[current_row], 1):
-            cell.border = thin_border
-            # Alinear a la izquierda el Detalle y el Tipo, el resto centrado
-            if col_idx in [3, 4, 7, 9]: 
-                cell.alignment = left_align
-            else:
-                cell.alignment = center_align
-        
-        contador += 1
-
-    # Guardar y enviar
-    excel_file = BytesIO()
-    wb.save(excel_file)
-    excel_file.seek(0)
-
+    excel_file = generar_reporte_excel(alertas, fecha_inicio_str, fecha_fin_str)
     nombre_archivo = f"Reporte_CSIRT_{fecha_inicio_str}_al_{fecha_fin_str}.xlsx"
     return send_file(
         excel_file,
@@ -477,16 +374,15 @@ def generar_reporte():
     )
 
 @bp.route('/admin/stream_actualizacion')
-@login_required
 @admin_required
 def stream_actualizacion():
     # Esta respuesta mantiene la conexión abierta y envía texto plano
     return Response(stream_with_context(generador_actualizacion_masiva()), mimetype='text/plain')
 
 @bp.route('/buscar', methods=['GET'])
-@login_required
 def buscar_ioc():
     query_str = request.args.get('q', '').strip()
+    query_escaped = query_str.replace('%', r'\%').replace('_', r'\_')
 
     if not query_str:
         flash('Por favor ingrese un termino de busqueda.', 'warning')
@@ -495,14 +391,14 @@ def buscar_ioc():
     # 1. Búsqueda en CSIRT (Histórico de Tickets/Alertas)
     resultados_csirt = db.session.query(Ioc)\
         .join(Alerta)\
-        .filter(Ioc.valor.contains(query_str))\
+        .filter(Ioc.valor.contains(query_escaped))\
         .order_by(Alerta.fecha_realizacion.desc())\
         .all()
 
     # 2. Búsqueda en Casos VT (Investigaciones)
     resultados_vt = db.session.query(VtIoc)\
         .join(VtTicket)\
-        .filter(VtIoc.valor.contains(query_str))\
+        .filter(VtIoc.valor.contains(query_escaped))\
         .order_by(VtTicket.fecha_creacion.desc())\
         .all()
     

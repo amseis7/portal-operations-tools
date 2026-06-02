@@ -1,56 +1,56 @@
+import logging
+import os, sys
 from flask import Flask
-import os, sys, logging
 from config import Config
-from app.extensions import db, login_manager, csrf, migrate
-from sqlalchemy import text, inspect
+from app.extensions import db, login_manager, csrf, migrate, limiter
 from flask_apscheduler import APScheduler
 
-# Aceptamos instance_path como opcional (None por defecto)
+logger = logging.getLogger(__name__)
+
 def create_app(config_class=Config, instance_path=None):
     if instance_path:
         app = Flask(__name__, instance_path=instance_path)
     else:
-        # Si no (Docker/PyCharm), Flask usa su comportamiento estándar.
         app = Flask(__name__)
         
     app.config.from_object(config_class)
 
-    # Asegurar que la carpeta instance exista (Funciona para ambos)
     try:
         os.makedirs(app.instance_path)
     except OSError:
         pass
 
-    # Inicializar extensiones
     db.init_app(app)
     login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'  # <--- "Si no está logueado, mándalo aquí"
+    login_manager.login_view = 'auth.login'
     login_manager.login_message = "Por favor inicia sesión para acceder."
     login_manager.login_message_category = "warning"
     csrf.init_app(app)
+    limiter.init_app(app)
+    
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+        return response
     
     if getattr(sys, 'frozen', False):
-        # Si estamos corriendo desde el .exe, buscamos en la carpeta temporal
         migration_dir = os.path.join(sys._MEIPASS, 'migrations')
     else:
-        # Si estamos en desarrollo, usamos la carpeta normal
         migration_dir = 'migrations'
 
     try:
         migrate.init_app(app, db, directory=migration_dir)
-
-        with app.app_context():
-            db.create_all()
-
     except Exception as e:
-        print(f"Advertencia: No se pudo iniciar Flask-Migrate: {e}")
+        logger.warning(f"No se pudo iniciar Flask-Migrate: {e}")
     
-    # Scheduler
     scheduler = APScheduler()
     scheduler.init_app(app)
     scheduler.start()
     
-    # Tarea del vigilante
     from app.csirt.logic import vigilar_nuevas_alertas
     scheduler.add_job(
         id='vigilante_csirt',
@@ -60,7 +60,6 @@ def create_app(config_class=Config, instance_path=None):
         minutes=60
     )
 
-    # Blueprints
     from app.auth import bp as auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
 
@@ -73,9 +72,14 @@ def create_app(config_class=Config, instance_path=None):
     from app.virustotal import bp as vt_bp
     app.register_blueprint(vt_bp, url_prefix='/virustotal')
 
-    # El Portero (Redirección a Setup)
+    from app.tools_config import TOOLS
+
+    @app.context_processor
+    def inject_tools():
+        return dict(lista_herramientas=TOOLS)
+
     from flask import request, redirect, url_for
-    from app.models import User
+    from app.models.user import User
 
     @app.before_request
     def check_setup_needed():
@@ -85,7 +89,7 @@ def create_app(config_class=Config, instance_path=None):
             admin_count = User.query.filter_by(is_admin=True).count()
             if admin_count == 0:
                 return redirect(url_for('auth.setup'))
-        except:
+        except Exception:
             pass
 
     return app

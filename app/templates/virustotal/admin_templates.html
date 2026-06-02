@@ -27,7 +27,7 @@
 
                         <div class="mb-2">
                             <label class="form-label small fw-bold">Extensión</label>
-                            <select name="extension" class="form-select form-select-sm">
+                            <select name="extension" id="extension-nueva" class="form-select form-select-sm">
                                 <option value="csv">CSV</option>
                                 <option value="txt">TXT</option>
                                 <option value="xml">XML</option>
@@ -45,7 +45,10 @@
                         <div class="mb-2">
                             <label class="form-label small fw-bold">Plantilla Fila (Row)</label>
                             <textarea name="row_template" class="form-control form-control-sm font-monospace" rows="2" placeholder="Ej: {valor},Malware,Block" required></textarea>
-                            <div class="form-text small">Variables: {valor}, {tipo}, {md5}, {positives}, {estado_motor}</div>
+                            <div class="form-text small">
+                                Variables: {valor}, {tipo}, {tipo_real}, {md5}, {sha1}, {sha256},
+                                {positives}, {total}, {estado_motor}, {ticket}, {filename}
+                            </div>
                         </div>
 
                         <div class="mb-2">
@@ -55,7 +58,7 @@
                             <div class="form-text small">Separados por coma. Ej: "sha1" para TrendMicro.</div>
                         </div>
 
-                        <div class="mb-3">
+                        <div class="mb-3 footer-toggle-group" id="footer-group-nueva" style="display: none;">
                             <label class="form-label small fw-bold">Pie (Footer)</label>
                             <textarea name="footer" class="form-control form-control-sm font-monospace" rows="1" placeholder="Ej: </root> (Solo XML/JSON)"></textarea>
                         </div>
@@ -68,9 +71,9 @@
 
         <div class="col-md-8">
             <div class="card shadow-sm">
-                <div class="card-body p-0">
+                <div class="card-body p-0 table-responsive">
                     <table class="table table-hover mb-0 align-middle">
-                        <thead class="table-light">
+                        <thead class="table-dark text-nowrap">
                             <tr>
                                 <th>Plataforma</th>
                                 <th>Motor VT</th>
@@ -123,7 +126,7 @@
                                                         <div class="row mb-3">
                                                             <div class="col-md-4">
                                                                 <label class="form-label small fw-bold">Extensión</label>
-                                                                <select name="extension" class="form-select">
+                                                                <select name="extension" id="extension-editar-{{ t.id }}" class="form-select">
                                                                     <option value="csv" {% if t.file_extension == 'csv' %}selected{% endif %}>CSV</option>
                                                                     <option value="txt" {% if t.file_extension == 'txt' %}selected{% endif %}>TXT</option>
                                                                     <option value="xml" {% if t.file_extension == 'xml' %}selected{% endif %}>XML</option>
@@ -147,9 +150,13 @@
                                                         <div class="mb-3">
                                                             <label class="form-label small fw-bold">Fila (Row Template)</label>
                                                             <textarea name="row_template" class="form-control font-monospace small" rows="2" required>{{ t.row_template }}</textarea>
+                                                            <div class="form-text small">
+                                                                Variables: {valor}, {tipo}, {tipo_real}, {md5}, {sha1}, {sha256},
+                                                                {positives}, {total}, {estado_motor}, {ticket}, {filename}
+                                                            </div>
                                                         </div>
 
-                                                        <div class="mb-3">
+                                                        <div class="mb-3 footer-toggle-group" id="footer-group-editar-{{ t.id }}"{% if t.file_extension not in ['xml', 'json'] %} style="display: none;"{% endif %}>
                                                             <label class="form-label small fw-bold">Pie</label>
                                                             <textarea name="footer" class="form-control font-monospace small" rows="2">{{ t.footer_content }}</textarea>
                                                         </div>
@@ -163,7 +170,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    </td>
+                                </td>
                             </tr>
                             {% else %}
                             <tr><td colspan="5" class="text-center py-4 text-muted">No hay plantillas configuradas.</td></tr>
@@ -175,4 +182,23 @@
         </div>
     </div>
 </div>
+<script>
+(function() {
+    function toggleFooter(selectEl) {
+        var suffix = selectEl.id.replace('extension-', '');
+        var footerGroup = document.getElementById('footer-group-' + suffix);
+        if (!footerGroup) return;
+        var ext = selectEl.value;
+        footerGroup.style.display = (ext === 'xml' || ext === 'json') ? '' : 'none';
+    }
+
+    var selects = document.querySelectorAll('select[id^="extension-"]');
+    selects.forEach(function(sel) {
+        toggleFooter(sel);
+        sel.addEventListener('change', function() {
+            toggleFooter(sel);
+        });
+    });
+})();
+</script>
 {% endblock %}

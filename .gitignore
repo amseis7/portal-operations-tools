@@ -1,6 +1,8 @@
 # --- Python ---
 __pycache__/
 *.pyc
+build/Portal-Operations-Tools
+dist/
 
 # --- Entorno Virtual ---
 venv/
@@ -10,6 +12,7 @@ env/
 instance/
 *.db
 *.sqlite3
+.env
 
 # --- IDEs (Configuraciones de tu editor) ---
 .idea/
@@ -20,3 +23,14 @@ instance/
 
 # --- Logs ---
 *.log
+
+# --- Secrets ---
+*.pem
+*.crt
+certificado.py
+migrar DB modificada.txt
+Portal-Operations-Tools.spec
+Docker
+agency-agents/
+.opencode/
+.claude/
