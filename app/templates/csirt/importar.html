@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('csirt.index') }}">Gestión CSIRT</a></li>
+        <li class="breadcrumb-item active">Importar histórico</li>
+    </ol>
+</nav>
+{% endblock %}
+
 {% block content %}
 <h2>Importar Histórico CSIRT</h2>
 <p>Sube el archivo CSV exportado desde Google Sheets para poblar la base de datos.</p>

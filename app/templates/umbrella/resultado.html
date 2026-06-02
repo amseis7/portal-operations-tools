@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('umbrella.index') }}">Herramientas Umbrella</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id) }}">{{ herramienta.nombre }}</a></li>
+        <li class="breadcrumb-item active">Ejecución #{{ job.id }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>
+        <i class="bi bi-grid-3x3-gap text-warning"></i> Resultados — Ejecución #{{ job.id }}
+        {% if job.dry_run %}<span class="badge bg-secondary ms-2">DRY-RUN</span>{% endif %}
+    </h2>
+    <div class="d-flex gap-2">
+        {% if job.status == 'completed' and job.resultados %}
+        <a href="{{ url_for('umbrella.descargar_resultado', herramienta_id=herramienta.id, job_id=job.id) }}"
+           class="btn btn-success">
+            <i class="bi bi-download"></i> Descargar CSV
+        </a>
+        {% endif %}
+        <a href="{{ url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id) }}"
+           class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver
+        </a>
+    </div>
+</div>
+
+<!-- Si el job sigue corriendo, mostrar indicador de progreso -->
+{% if job.status == 'running' %}
+<div class="alert alert-warning d-flex align-items-center gap-3" id="runningAlert">
+    <span class="spinner-border spinner-border-sm text-warning flex-shrink-0"></span>
+    <span>El proceso está en ejecución. Esta página se actualizará automáticamente al finalizar.</span>
+</div>
+{% endif %}
+
+<!-- Tarjetas resumen -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-center border-success shadow-sm">
+            <div class="card-body">
+                <div class="display-5 fw-bold text-success" id="statLabeled">{{ job.labeled }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-check-circle"></i> Etiquetadas</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-secondary shadow-sm">
+            <div class="card-body">
+                <div class="display-5 fw-bold text-secondary" id="statSkipped">{{ job.skipped }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-skip-forward"></i> Ya tenían etiqueta</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-danger shadow-sm">
+            <div class="card-body">
+                <div class="display-5 fw-bold text-danger" id="statFailed">{{ job.failed }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-x-circle"></i> Fallidas</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center shadow-sm">
+            <div class="card-body">
+                <div class="display-5 fw-bold" id="statTotal">{{ job.total }}</div>
+                <div class="text-muted small mt-1"><i class="bi bi-list-ol"></i> Total procesadas</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Metadata -->
+<div class="card mb-4 shadow-sm">
+    <div class="card-header fw-bold">Detalles del trabajo</div>
+    <div class="card-body">
+        <dl class="row mb-0">
+            <dt class="col-sm-2">Archivo</dt><dd class="col-sm-4">{{ job.input_filename }}</dd>
+            <dt class="col-sm-2">Cliente</dt><dd class="col-sm-4">{{ herramienta.cliente.nombre }}</dd>
+            <dt class="col-sm-2">Etiqueta</dt><dd class="col-sm-4"><code>{{ job.label_name }}</code></dd>
+            <dt class="col-sm-2">Columna</dt><dd class="col-sm-4"><code>{{ job.column_name }}</code></dd>
+            <dt class="col-sm-2">Estado</dt>
+            <dd class="col-sm-4" id="metaEstado">
+                {% if job.status == 'completed' %}<span class="badge bg-success">Completado</span>
+                {% elif job.status == 'failed' %}<span class="badge bg-danger">Fallido</span>
+                {% elif job.status == 'running' %}
+                <span class="badge bg-warning text-dark">
+                    <span class="spinner-border spinner-border-sm"></span> Procesando
+                </span>
+                {% else %}<span class="badge bg-secondary">{{ job.status }}</span>{% endif %}
+            </dd>
+            <dt class="col-sm-2">Usuario</dt><dd class="col-sm-4">{{ job.ejecutor.nombre_completo if job.ejecutor else '—' }}</dd>
+            <dt class="col-sm-2">Fecha</dt><dd class="col-sm-4">{{ job.created_at.strftime('%d/%m/%Y %H:%M:%S') }}</dd>
+            {% if job.error_message %}
+            <dt class="col-sm-2 text-danger">Error</dt>
+            <dd class="col-sm-10 text-danger">{{ job.error_message }}</dd>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+
+<!-- Tabla de resultados -->
+{% if job.resultados %}
+<div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-bold">Detalle por aplicación</span>
+        <div class="d-flex gap-2 align-items-center">
+            <label class="small mb-0 text-muted">Filtrar:</label>
+            <select id="filtroEstado" class="form-select form-select-sm" style="width:auto;">
+                <option value="">Todos ({{ job.total }})</option>
+                <option value="labeled">Etiquetadas ({{ job.labeled }})</option>
+                <option value="skipped">Omitidas ({{ job.skipped }})</option>
+                <option value="failed">Fallidas ({{ job.failed }})</option>
+                {% if job.dry_run %}<option value="dry_run">Dry-run</option>{% endif %}
+            </select>
+        </div>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover table-sm mb-0 align-middle" id="tablaResultados">
+            <thead class="table-dark">
+                <tr>
+                    <th>#</th>
+                    <th>Aplicación</th>
+                    <th>Categoría</th>
+                    <th>Estado</th>
+                    <th>Etiqueta</th>
+                    <th>HTTP</th>
+                    <th>Mensaje</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in job.resultados %}
+                <tr data-status="{{ r.status }}">
+                    <td class="text-muted small">{{ loop.index }}</td>
+                    <td class="fw-semibold small">{{ r.app_name }}</td>
+                    <td><small class="text-muted">{{ r.category or '—' }}</small></td>
+                    <td>
+                        {% if r.status == 'labeled' %}<span class="badge bg-success">Etiquetada</span>
+                        {% elif r.status == 'skipped' %}<span class="badge bg-secondary">Omitida</span>
+                        {% elif r.status == 'failed' %}<span class="badge bg-danger">Fallida</span>
+                        {% elif r.status == 'dry_run' %}<span class="badge bg-info text-dark">Dry-run</span>
+                        {% else %}<span class="badge bg-light text-dark">{{ r.status }}</span>{% endif %}
+                    </td>
+                    <td><code class="small">{{ r.label or '—' }}</code></td>
+                    <td><small class="text-muted">{{ r.http_code or '—' }}</small></td>
+                    <td><small class="text-danger">{{ r.error_message or '' }}</small></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% elif job.status == 'running' %}
+<div class="alert alert-info">
+    <span class="spinner-border spinner-border-sm"></span>
+    Aún no hay resultados. El proceso está ejecutándose en segundo plano.
+</div>
+{% else %}
+<div class="alert alert-warning">
+    <i class="bi bi-info-circle"></i> No hay resultados registrados para esta ejecución.
+</div>
+{% endif %}
+
+<script>
+(function () {
+    const JOB_STATUS = "{{ job.status }}";
+    const JOB_ID     = {{ job.id }};
+    const HERR_ID    = {{ herramienta.id }};
+
+    // If the job is still running, poll the estado endpoint and reload when done
+    if (JOB_STATUS !== 'running') return;
+
+    const ESTADO_URL = `/umbrella/herramienta/${HERR_ID}/estado`;
+
+    const metaEstado  = document.getElementById('metaEstado');
+    const statLabeled = document.getElementById('statLabeled');
+    const statSkipped = document.getElementById('statSkipped');
+    const statFailed  = document.getElementById('statFailed');
+    const statTotal   = document.getElementById('statTotal');
+    const runningAlert= document.getElementById('runningAlert');
+
+    async function checkStatus() {
+        try {
+            const resp = await fetch(ESTADO_URL);
+            if (!resp.ok) return;
+            const jobs = await resp.json();
+            const job = jobs.find(j => j.id === JOB_ID);
+            if (!job) return;
+
+            // Update summary cards
+            statLabeled.textContent = job.labeled;
+            statSkipped.textContent = job.skipped;
+            statFailed.textContent  = job.failed;
+            statTotal.textContent   = job.total;
+
+            if (job.status !== 'running') {
+                // Reload the full page to show the complete results table
+                window.location.reload();
+            }
+        } catch (_) {}
+    }
+
+    const timer = setInterval(checkStatus, 3000);
+})();
+</script>
+
+<script>
+document.getElementById('filtroEstado')?.addEventListener('change', function () {
+    const val = this.value;
+    document.querySelectorAll('#tablaResultados tbody tr').forEach(tr => {
+        tr.style.display = (!val || tr.dataset.status === val) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

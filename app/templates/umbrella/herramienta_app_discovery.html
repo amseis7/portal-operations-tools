@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('umbrella.index') }}">Herramientas Umbrella</a></li>
+        <li class="breadcrumb-item">{{ herramienta.cliente.nombre }}</li>
+        <li class="breadcrumb-item active">{{ herramienta.nombre }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-grid-3x3-gap text-warning"></i> {{ herramienta.nombre }}</h2>
+    <span class="badge bg-warning text-dark fs-6">App Discovery</span>
+</div>
+
+<div class="row g-4">
+
+    <!-- ── Izquierda: Cargar + Preview + Ejecutar ─── -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold"><i class="bi bi-upload"></i> Cargar Excel</div>
+            <div class="card-body">
+                <form id="formEjecutar"
+                      action="{{ url_for('umbrella.ejecutar', herramienta_id=herramienta.id) }}"
+                      method="POST" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+                    <!-- Zona de carga -->
+                    <div id="dropZone"
+                         class="border border-2 rounded text-center p-4 mb-3"
+                         style="cursor:pointer; border-style:dashed !important; transition: background 0.2s;">
+                        <i class="bi bi-file-earmark-excel display-4 text-success" id="dropIcon"></i>
+                        <p class="mt-2 mb-1 text-muted" id="dropText">Arrastra el Excel aquí o haz clic para seleccionar</p>
+                        <small class="text-muted fw-semibold" id="dropFilename"></small>
+                        <input type="file" name="excel_file" id="excelFile" class="d-none" accept=".xlsx,.xls">
+                    </div>
+
+                    <!-- Columna -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Columna con nombres de apps</label>
+                        <input type="text" name="column_name" id="columnName"
+                               class="form-control form-control-sm" value="App">
+                        <div class="form-text text-muted" id="columnHelp"></div>
+                    </div>
+
+                    <!-- Etiqueta -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Etiqueta a asignar <span class="text-danger">*</span></label>
+                        <select name="label_name" class="form-select form-select-sm" required>
+                            {% for lbl in label_options %}
+                            <option value="{{ lbl }}" {% if lbl == 'notApproved' %}selected{% endif %}>{{ lbl }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Dry-run -->
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" name="dry_run" id="dryRunCheck" value="1">
+                        <label class="form-check-label small" for="dryRunCheck">
+                            Dry-run <span class="text-muted">(simular sin aplicar cambios)</span>
+                        </label>
+                    </div>
+
+                    <!-- Preview -->
+                    <div id="previewSection" class="d-none mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-bold small mb-0">
+                                Apps detectadas:
+                                <span class="badge bg-warning text-dark" id="appsCount">0</span>
+                            </label>
+                            <span id="previewSpinner" class="d-none">
+                                <span class="spinner-border spinner-border-sm text-warning"></span>
+                            </span>
+                        </div>
+                        <div id="appsList" class="border rounded bg-light"
+                             style="max-height:260px; overflow-y:auto; font-size:0.82rem;"></div>
+                        <div id="previewError" class="alert alert-danger mt-2 d-none py-2 mb-0"></div>
+                    </div>
+
+                    <!-- Ejecutar -->
+                    <button type="submit" class="btn btn-warning w-100 text-dark fw-bold"
+                            id="btnEjecutar" disabled>
+                        <i class="bi bi-play-fill"></i> Ejecutar etiquetado
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Derecha: Historial ────────────────────── -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header fw-bold d-flex align-items-center gap-2">
+                <i class="bi bi-clock-history"></i> Historial de ejecuciones
+                <span id="pollingIndicator" class="d-none ms-auto">
+                    <span class="spinner-border spinner-border-sm text-warning"></span>
+                    <small class="text-muted ms-1">Actualizando...</small>
+                </span>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover table-sm mb-0 align-middle" id="tablaJobs">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>#</th>
+                            <th>Archivo</th>
+                            <th>Etiqueta</th>
+                            <th>Dry</th>
+                            <th>Estado</th>
+                            <th class="text-center" title="Etiquetadas / Omitidas / Fallidas">✓ / ↷ / ✗</th>
+                            <th>Fecha</th>
+                            <th>Usuario</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        <tr data-job-id="{{ job.id }}" data-job-status="{{ job.status }}">
+                            <td class="text-muted small">{{ job.id }}</td>
+                            <td class="text-truncate" style="max-width:130px;" title="{{ job.input_filename }}">
+                                <small>{{ job.input_filename }}</small>
+                            </td>
+                            <td><code class="small">{{ job.label_name }}</code></td>
+                            <td>
+                                {% if job.dry_run %}
+                                <span class="badge bg-secondary">Sí</span>
+                                {% endif %}
+                            </td>
+                            <td class="job-status-cell">
+                                {% if job.status == 'completed' %}
+                                <span class="badge bg-success">OK</span>
+                                {% elif job.status == 'failed' %}
+                                <span class="badge bg-danger" title="{{ job.error_message or '' }}">Error</span>
+                                {% elif job.status == 'running' %}
+                                <span class="badge bg-warning text-dark">
+                                    <span class="spinner-border spinner-border-sm"></span> Procesando
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ job.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center job-counts-cell">
+                                <small>
+                                    <span class="text-success">{{ job.labeled }}</span> /
+                                    <span class="text-secondary">{{ job.skipped }}</span> /
+                                    <span class="text-danger">{{ job.failed }}</span>
+                                </small>
+                            </td>
+                            <td><small>{{ job.created_at.strftime('%d/%m %H:%M') }}</small></td>
+                            <td><small>{{ job.ejecutor.nombre_completo if job.ejecutor else '—' }}</small></td>
+                            <td class="job-actions-cell">
+                                <div class="d-flex gap-1">
+                                    {% if job.status != 'running' %}
+                                    <a href="{{ url_for('umbrella.ver_job', herramienta_id=herramienta.id, job_id=job.id) }}"
+                                       class="btn btn-outline-primary"
+                                       style="padding:1px 6px; font-size:0.75rem;" title="Ver detalle">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if current_user.is_admin %}
+                                    <button class="btn btn-outline-danger"
+                                        style="padding:1px 6px; font-size:0.75rem;"
+                                        data-bs-toggle="modal" data-bs-target="#modalEliminarJob"
+                                        data-job-id="{{ job.id }}" title="Eliminar">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr id="emptyRow">
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox"></i> Aún no hay ejecuciones. Sube un Excel para comenzar.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if current_user.is_admin %}
+<div class="modal fade" id="modalEliminarJob" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Eliminar ejecución</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">¿Eliminar esta ejecución y todos sus resultados?</div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formEliminarJob" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    const PREVIEW_URL  = "{{ url_for('umbrella.preview_excel', herramienta_id=herramienta.id) }}";
+    const ESTADO_URL   = "{{ url_for('umbrella.estado_herramienta', herramienta_id=herramienta.id) }}";
+    const JOB_BASE_URL = "{{ url_for('umbrella.ver_job', herramienta_id=herramienta.id, job_id=0) }}".replace('/0', '/');
+    const DEL_TPL      = "{{ url_for('umbrella.eliminar_job', job_id=0) }}";
+    const CSRF         = "{{ csrf_token() }}";
+    const IS_ADMIN     = {{ 'true' if current_user.is_admin else 'false' }};
+
+    // ── Drop zone ─────────────────────────────────────────────────────────
+    const dropZone      = document.getElementById('dropZone');
+    const fileInput     = document.getElementById('excelFile');
+    const columnName    = document.getElementById('columnName');
+    const btnEjecutar   = document.getElementById('btnEjecutar');
+    const previewSection= document.getElementById('previewSection');
+    const appsList      = document.getElementById('appsList');
+    const appsCount     = document.getElementById('appsCount');
+    const previewSpinner= document.getElementById('previewSpinner');
+    const previewError  = document.getElementById('previewError');
+    const dropText      = document.getElementById('dropText');
+    const dropFilename  = document.getElementById('dropFilename');
+    const dropIcon      = document.getElementById('dropIcon');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('bg-light'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('bg-light'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('bg-light');
+        if (e.dataTransfer.files.length) {
+            const dt = new DataTransfer();
+            dt.items.add(e.dataTransfer.files[0]);
+            fileInput.files = dt.files;
+            onFileSelected();
+        }
+    });
+    fileInput.addEventListener('change', onFileSelected);
+    columnName.addEventListener('change', () => { if (fileInput.files.length) previewFile(); });
+
+    function onFileSelected() {
+        if (!fileInput.files.length) return;
+        dropFilename.textContent = fileInput.files[0].name;
+        dropText.textContent = 'Archivo seleccionado:';
+        dropIcon.className = 'bi bi-file-earmark-check display-4 text-success';
+        previewFile();
+    }
+
+    async function previewFile() {
+        const file = fileInput.files[0];
+        if (!file) return;
+        previewSection.classList.remove('d-none');
+        previewSpinner.classList.remove('d-none');
+        previewError.classList.add('d-none');
+        appsList.innerHTML = '';
+        appsCount.textContent = '…';
+        btnEjecutar.disabled = true;
+
+        const fd = new FormData();
+        fd.append('excel_file', file);
+        fd.append('column_name', columnName.value || 'App');
+        fd.append('csrf_token', CSRF);
+
+        try {
+            const resp = await fetch(PREVIEW_URL, { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (data.error) {
+                previewError.textContent = data.error;
+                previewError.classList.remove('d-none');
+                appsCount.textContent = '0';
+                return;
+            }
+            appsCount.textContent = data.total;
+            if (data.columns?.length) {
+                document.getElementById('columnHelp').textContent =
+                    'Columnas disponibles: ' + data.columns.join(', ');
+            }
+            const ol = document.createElement('ol');
+            ol.className = 'list-group list-group-flush list-group-numbered';
+            data.apps.forEach(app => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item py-1 px-3 small';
+                li.textContent = app;
+                ol.appendChild(li);
+            });
+            appsList.appendChild(ol);
+            btnEjecutar.disabled = false;
+        } catch (_) {
+            previewError.textContent = 'Error de comunicación con el servidor.';
+            previewError.classList.remove('d-none');
+        } finally {
+            previewSpinner.classList.add('d-none');
+        }
+    }
+
+    // ── Status polling ─────────────────────────────────────────────────────
+    const pollingIndicator = document.getElementById('pollingIndicator');
+    let pollingTimer = null;
+
+    function hasRunningJobs() {
+        return document.querySelector('#tablaJobs [data-job-status="running"]') !== null;
+    }
+
+    function statusBadge(job) {
+        if (job.status === 'completed') return '<span class="badge bg-success">OK</span>';
+        if (job.status === 'failed')    return `<span class="badge bg-danger" title="${escHtml(job.error_message)}">Error</span>`;
+        if (job.status === 'running')   return '<span class="badge bg-warning text-dark"><span class="spinner-border spinner-border-sm"></span> Procesando</span>';
+        return `<span class="badge bg-secondary">${escHtml(job.status)}</span>`;
+    }
+
+    function actionButtons(job) {
+        let html = '<div class="d-flex gap-1">';
+        if (job.status !== 'running') {
+            html += `<a href="${JOB_BASE_URL}${job.id}" class="btn btn-outline-primary" style="padding:1px 6px;font-size:0.75rem;" title="Ver detalle"><i class="bi bi-eye"></i></a>`;
+        }
+        if (IS_ADMIN) {
+            html += `<button class="btn btn-outline-danger" style="padding:1px 6px;font-size:0.75rem;" data-bs-toggle="modal" data-bs-target="#modalEliminarJob" data-job-id="${job.id}" title="Eliminar"><i class="bi bi-trash"></i></button>`;
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function updateRow(job) {
+        const row = document.querySelector(`#tablaJobs tr[data-job-id="${job.id}"]`);
+        if (!row) return;
+        const prevStatus = row.dataset.jobStatus;
+        row.dataset.jobStatus = job.status;
+        row.querySelector('.job-status-cell').innerHTML = statusBadge(job);
+        row.querySelector('.job-counts-cell').innerHTML =
+            `<small><span class="text-success">${job.labeled}</span> / <span class="text-secondary">${job.skipped}</span> / <span class="text-danger">${job.failed}</span></small>`;
+        // Refresh actions only when status changed (avoids losing tooltip state)
+        if (prevStatus !== job.status) {
+            row.querySelector('.job-actions-cell').innerHTML = actionButtons(job);
+        }
+    }
+
+    async function pollEstado() {
+        try {
+            const resp = await fetch(ESTADO_URL);
+            if (!resp.ok) return;
+            const jobs = await resp.json();
+            jobs.forEach(updateRow);
+        } catch (_) {}
+
+        if (!hasRunningJobs()) {
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+            pollingIndicator.classList.add('d-none');
+        }
+    }
+
+    function startPolling() {
+        if (!hasRunningJobs() || pollingTimer) return;
+        pollingIndicator.classList.remove('d-none');
+        pollingTimer = setInterval(pollEstado, 3000);
+    }
+
+    // Kick off polling immediately if there are running jobs on page load
+    startPolling();
+
+    // Also start polling after form submission (new job just launched)
+    document.getElementById('formEjecutar').addEventListener('submit', () => {
+        // The redirect will handle it — but if someone stays, start polling
+        setTimeout(startPolling, 2000);
+    });
+
+    // ── Delete job modal ───────────────────────────────────────────────────
+    document.getElementById('modalEliminarJob')?.addEventListener('show.bs.modal', e => {
+        const jobId = e.relatedTarget.dataset.jobId;
+        document.getElementById('formEliminarJob').action =
+            DEL_TPL.replace('/0/', '/' + jobId + '/');
+    });
+
+    function escHtml(s) {
+        if (!s) return '';
+        return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+})();
+</script>
+{% endblock %}

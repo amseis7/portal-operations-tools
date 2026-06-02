@@ -72,6 +72,9 @@ def create_app(config_class=Config, instance_path=None):
     from app.virustotal import bp as vt_bp
     app.register_blueprint(vt_bp, url_prefix='/virustotal')
 
+    from app.umbrella import bp as umbrella_bp
+    app.register_blueprint(umbrella_bp, url_prefix='/umbrella')
+
     from app.tools_config import TOOLS
 
     @app.context_processor

@@ -13,5 +13,12 @@ TOOLS = {
         'endpoint': 'virustotal.index',
         'color': 'danger'
     },
+    'umbrella': {
+        'titulo': 'Cisco Umbrella',
+        'descripcion': 'App Discovery y etiquetado masivo de apps.',
+        'icono': 'bi-shield-check',
+        'endpoint': 'umbrella.index',
+        'color': 'warning'
+    },
     # ¡AQUÍ AGREGAS LA PRÓXIMA HERRAMIENTA CON UNA SOLA LÍNEA!
 }
