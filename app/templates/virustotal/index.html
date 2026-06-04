@@ -33,7 +33,7 @@
                     <tr>
                         <td>#{{ ticket.id }}</td>
                         <td><strong>{{ ticket.nombre }}</strong></td>
-                        <td style="max-width: 200px;" class="text-truncate d-inline-block w-100" title="{{ ticket.descripcion }}">{{ ticket.descripcion }}</td>
+                        <td style="max-width: 200px;" class="text-truncate" title="{{ ticket.descripcion }}">{{ ticket.descripcion }}</td>
                         <td>{{ ticket.creador.nombre_completo }}</td>
                         <td>{{ ticket.fecha_creacion.strftime('%d/%m/%Y') }}</td>
                         <td class="text-center">

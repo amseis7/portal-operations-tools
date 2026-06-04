@@ -25,7 +25,7 @@
             <div class="card-header fw-bold"><i class="bi bi-upload"></i> Cargar Excel</div>
             <div class="card-body">
                 <form id="formEjecutar"
-                      action="{{ url_for('umbrella.ejecutar', herramienta_id=herramienta.id) }}"
+                      action="{{ url_for('umbrella.ejecutar', herramienta_slug=herramienta.slug) }}"
                       method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
@@ -154,7 +154,7 @@
                             <td class="job-actions-cell">
                                 <div class="d-flex gap-1">
                                     {% if job.status != 'running' %}
-                                    <a href="{{ url_for('umbrella.ver_job', herramienta_id=herramienta.id, job_id=job.id) }}"
+                                    <a href="{{ url_for('umbrella.ver_job', herramienta_slug=herramienta.slug, job_id=job.id) }}"
                                        class="btn btn-outline-primary"
                                        style="padding:1px 6px; font-size:0.75rem;" title="Ver detalle">
                                         <i class="bi bi-eye"></i>
@@ -208,9 +208,9 @@
 
 <script>
 (function () {
-    const PREVIEW_URL  = "{{ url_for('umbrella.preview_excel', herramienta_id=herramienta.id) }}";
-    const ESTADO_URL   = "{{ url_for('umbrella.estado_herramienta', herramienta_id=herramienta.id) }}";
-    const JOB_BASE_URL = "{{ url_for('umbrella.ver_job', herramienta_id=herramienta.id, job_id=0) }}".replace('/0', '/');
+    const PREVIEW_URL  = "{{ url_for('umbrella.preview_excel', herramienta_slug=herramienta.slug) }}";
+    const ESTADO_URL   = "{{ url_for('umbrella.estado_herramienta', herramienta_slug=herramienta.slug) }}";
+    const JOB_BASE_URL = "{{ url_for('umbrella.ver_job', herramienta_slug=herramienta.slug, job_id=0) }}".replace('/0', '/');
     const DEL_TPL      = "{{ url_for('umbrella.eliminar_job', job_id=0) }}";
     const CSRF         = "{{ csrf_token() }}";
     const IS_ADMIN     = {{ 'true' if current_user.is_admin else 'false' }};

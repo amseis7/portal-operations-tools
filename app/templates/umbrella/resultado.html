@@ -4,7 +4,7 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
         <li class="breadcrumb-item"><a href="{{ url_for('umbrella.index') }}">Herramientas Umbrella</a></li>
-        <li class="breadcrumb-item"><a href="{{ url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id) }}">{{ herramienta.nombre }}</a></li>
+        <li class="breadcrumb-item"><a href="{{ url_for('umbrella.ver_herramienta', herramienta_slug=herramienta.slug) }}">{{ herramienta.nombre }}</a></li>
         <li class="breadcrumb-item active">Ejecución #{{ job.id }}</li>
     </ol>
 </nav>
@@ -19,12 +19,12 @@
     </h2>
     <div class="d-flex gap-2">
         {% if job.status == 'completed' and job.resultados %}
-        <a href="{{ url_for('umbrella.descargar_resultado', herramienta_id=herramienta.id, job_id=job.id) }}"
+        <a href="{{ url_for('umbrella.descargar_resultado', herramienta_slug=herramienta.slug, job_id=job.id) }}"
            class="btn btn-success">
             <i class="bi bi-download"></i> Descargar CSV
         </a>
         {% endif %}
-        <a href="{{ url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id) }}"
+        <a href="{{ url_for('umbrella.ver_herramienta', herramienta_slug=herramienta.slug) }}"
            class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Volver
         </a>

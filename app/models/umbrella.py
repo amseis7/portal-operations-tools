@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from flask import current_app
 from cryptography.fernet import Fernet
@@ -62,6 +63,14 @@ class UmbrellaCliente(db.Model):
         return f"<UmbrellaCliente {self.nombre}>"
 
 
+def _make_slug(nombre: str) -> str:
+    s = nombre.lower().strip()
+    s = re.sub(r'[^\w\s-]', '', s)
+    s = re.sub(r'[\s_]+', '-', s)
+    s = re.sub(r'-+', '-', s).strip('-')
+    return s[:100]
+
+
 class UmbrellaHerramienta(db.Model):
     __tablename__ = "umbrella_herramienta"
 
@@ -69,10 +78,19 @@ class UmbrellaHerramienta(db.Model):
     cliente_id = db.Column(db.Integer, db.ForeignKey("umbrella_cliente.id"), nullable=False, index=True)
     tipo = db.Column(db.String(50), nullable=False)
     nombre = db.Column(db.String(100), nullable=False)
+    slug = db.Column(db.String(120), unique=True, nullable=False, index=True)
     descripcion = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     jobs = db.relationship("UmbrellaJob", backref="herramienta", cascade="all, delete-orphan")
+
+    def generate_slug(self):
+        base = _make_slug(self.nombre)
+        slug, n = base, 1
+        while UmbrellaHerramienta.query.filter_by(slug=slug).filter(UmbrellaHerramienta.id != self.id).first():
+            slug = f"{base}-{n}"
+            n += 1
+        self.slug = slug
 
     @property
     def tipo_info(self) -> dict:

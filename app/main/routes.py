@@ -8,7 +8,8 @@ from sqlalchemy import or_
 @bp.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('main/dashboard.html')
+    nombre = current_user.nombre_completo.split()[0]
+    return render_template('main/dashboard.html', nombre=nombre)
 
 @bp.app_context_processor
 def inject_notifications():

@@ -243,9 +243,13 @@ def perfil():
 @bp.route('/admin/usuarios')
 @login_required
 @admin_required
-def admin_usuarios():    
+def admin_usuarios():
     usuarios = User.query.all()
-    return render_template('auth/admin_usuarios.html', usuarios=usuarios)
+    all_tools = UserTool.query.all()
+    tools_por_usuario = {}
+    for t in all_tools:
+        tools_por_usuario.setdefault(t.user_id, []).append(t.tool_name)
+    return render_template('auth/admin_usuarios.html', usuarios=usuarios, tools_por_usuario=tools_por_usuario)
 
 # --- ACCIÓN CREAR USUARIO ---
 @bp.route('/admin/usuarios/crear', methods=['POST'])

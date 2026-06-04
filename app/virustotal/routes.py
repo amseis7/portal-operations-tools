@@ -4,6 +4,7 @@ from app.virustotal.background import lanzar_analisis_background
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.utils import admin_required, proteger_blueprint
 from app.virustotal import bp
@@ -56,7 +57,7 @@ def validar_plantilla(form):
 # --- RUTAS DE GESTIÓN DE CASOS ---
 @bp.route('/')
 def index():
-    tickets = VtTicket.query.order_by(VtTicket.fecha_creacion.desc()).all()
+    tickets = VtTicket.query.options(joinedload(VtTicket.creador)).order_by(VtTicket.fecha_creacion.desc()).all()
     return render_template('virustotal/index.html', tickets=tickets, titulo_navbar="Investigaciones VT")
 
 @bp.route('/crear_caso', methods=['POST'])

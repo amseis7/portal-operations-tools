@@ -1,4 +1,5 @@
 from sqlalchemy import func
+from sqlalchemy.orm import contains_eager, joinedload
 from flask import render_template, request, flash, redirect, url_for, send_file, stream_with_context
 from flask_login import login_required, current_user
 from app.csirt import bp
@@ -391,6 +392,7 @@ def buscar_ioc():
     # 1. Búsqueda en CSIRT (Histórico de Tickets/Alertas)
     resultados_csirt = db.session.query(Ioc)\
         .join(Alerta)\
+        .options(contains_eager(Ioc.alerta))\
         .filter(Ioc.valor.contains(query_escaped))\
         .order_by(Alerta.fecha_realizacion.desc())\
         .all()
@@ -398,6 +400,7 @@ def buscar_ioc():
     # 2. Búsqueda en Casos VT (Investigaciones)
     resultados_vt = db.session.query(VtIoc)\
         .join(VtTicket)\
+        .options(contains_eager(VtIoc.ticket).joinedload(VtTicket.creador))\
         .filter(VtIoc.valor.contains(query_escaped))\
         .order_by(VtTicket.fecha_creacion.desc())\
         .all()

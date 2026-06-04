@@ -66,14 +66,14 @@
                         <small class="text-muted">{{ herramienta.jobs | length }} ejecución(es)</small>
                     </div>
                     <div class="card-footer py-2 d-flex justify-content-center gap-2">
-                        <a href="{{ url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id) }}"
+                        <a href="{{ url_for('umbrella.ver_herramienta', herramienta_slug=herramienta.slug) }}"
                            class="btn btn-sm btn-{{ tinfo.color }} text-dark">
                             <i class="bi bi-arrow-right-circle"></i> Abrir
                         </a>
                         {% if current_user.is_admin %}
                         <button class="btn btn-sm btn-outline-danger"
                             data-bs-toggle="modal" data-bs-target="#modalEliminarHerramienta"
-                            data-herramienta-id="{{ herramienta.id }}"
+                            data-herramienta-slug="{{ herramienta.slug }}"
                             data-herramienta-nombre="{{ herramienta.nombre }}">
                             <i class="bi bi-trash"></i>
                         </button>
@@ -247,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const btn = e.relatedTarget;
         $('spanHerramientaNombre').textContent = btn.dataset.herramientaNombre;
         $('formEliminarHerramienta').action =
-            "{{ url_for('umbrella.eliminar_herramienta', herramienta_id=0) }}".replace('/0', '/' + btn.dataset.herramientaId);
+            "{{ url_for('umbrella.eliminar_herramienta', herramienta_slug='__slug__') }}".replace('__slug__', btn.dataset.herramientaSlug);
     });
 });
 </script>

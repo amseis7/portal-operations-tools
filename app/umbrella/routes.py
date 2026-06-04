@@ -6,6 +6,7 @@ from flask import flash, jsonify, redirect, render_template, request, url_for, R
 from flask_login import current_user
 
 from app.extensions import db
+from sqlalchemy.orm import joinedload
 from app.models.umbrella import (
     TIPOS_HERRAMIENTA, UmbrellaAppResultado, UmbrellaCliente,
     UmbrellaHerramienta, UmbrellaJob,
@@ -132,19 +133,23 @@ def crear_herramienta():
         tipo=tipo,
         nombre=nombre,
         descripcion=request.form.get('descripcion', '').strip() or None,
+        slug='__tmp__',
     )
     db.session.add(herramienta)
+    db.session.flush()
+    herramienta.generate_slug()
     db.session.commit()
     flash(f'Herramienta "{nombre}" creada.', 'success')
-    return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta.id))
+    return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta.slug))
 
 
-@bp.route('/herramienta/<int:herramienta_id>/')
-def ver_herramienta(herramienta_id):
-    herramienta = UmbrellaHerramienta.query.get_or_404(herramienta_id)
+@bp.route('/herramienta/<herramienta_slug>/')
+def ver_herramienta(herramienta_slug):
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     jobs = (
         UmbrellaJob.query
-        .filter_by(herramienta_id=herramienta_id)
+        .options(joinedload(UmbrellaJob.ejecutor))
+        .filter_by(herramienta_id=herramienta.id)
         .order_by(UmbrellaJob.created_at.desc())
         .limit(50)
         .all()
@@ -159,10 +164,10 @@ def ver_herramienta(herramienta_id):
     )
 
 
-@bp.route('/herramienta/<int:herramienta_id>/eliminar', methods=['POST'])
+@bp.route('/herramienta/<herramienta_slug>/eliminar', methods=['POST'])
 @admin_required
-def eliminar_herramienta(herramienta_id):
-    herramienta = UmbrellaHerramienta.query.get_or_404(herramienta_id)
+def eliminar_herramienta(herramienta_slug):
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     nombre = herramienta.nombre
     db.session.delete(herramienta)
     db.session.commit()
@@ -172,9 +177,9 @@ def eliminar_herramienta(herramienta_id):
 
 # ─── APP DISCOVERY: PREVIEW (AJAX) ──────────────────────────────────────────
 
-@bp.route('/herramienta/<int:herramienta_id>/preview', methods=['POST'])
-def preview_excel(herramienta_id):
-    UmbrellaHerramienta.query.get_or_404(herramienta_id)
+@bp.route('/herramienta/<herramienta_slug>/preview', methods=['POST'])
+def preview_excel(herramienta_slug):
+    UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     archivo = request.files.get('excel_file')
     column = request.form.get('column_name', 'App').strip() or 'App'
 
@@ -192,9 +197,9 @@ def preview_excel(herramienta_id):
 
 # ─── APP DISCOVERY: EJECUTAR ─────────────────────────────────────────────────
 
-@bp.route('/herramienta/<int:herramienta_id>/ejecutar', methods=['POST'])
-def ejecutar(herramienta_id):
-    herramienta = UmbrellaHerramienta.query.get_or_404(herramienta_id)
+@bp.route('/herramienta/<herramienta_slug>/ejecutar', methods=['POST'])
+def ejecutar(herramienta_slug):
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     archivo = request.files.get('excel_file')
     label_name = request.form.get('label_name', '').strip()
     column_name = request.form.get('column_name', 'App').strip() or 'App'
@@ -202,28 +207,28 @@ def ejecutar(herramienta_id):
 
     if not archivo or archivo.filename == '':
         flash('Debes seleccionar un archivo Excel.', 'warning')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
     if label_name not in VALID_LABELS:
         flash(f'Etiqueta no válida: {label_name}', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
     # Decrypt credentials in request context (before background thread)
     cid = herramienta.cliente.get_client_id()
     csecret = herramienta.cliente.get_client_secret()
     if not cid or not csecret:
         flash('Credenciales Umbrella no configuradas para este cliente.', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
     # Parse Excel synchronously — this is fast (file is already in memory)
     try:
         app_names = read_apps(archivo.stream, column_name)
     except (ValueError, RuntimeError) as exc:
         flash(f'Error al leer el Excel: {exc}', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
     job = UmbrellaJob(
-        herramienta_id=herramienta_id,
+        herramienta_id=herramienta.id,
         usuario_id=current_user.id,
         input_filename=archivo.filename,
         label_name=label_name,
@@ -238,17 +243,18 @@ def ejecutar(herramienta_id):
     lanzar_job_background(app_names, job.id, cid, csecret, label_name, dry_run)
 
     flash(f'Proceso iniciado para {len(app_names)} apps. Los resultados se actualizan automáticamente.', 'info')
-    return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+    return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
 
 # ─── ESTADO (AJAX POLLING) ───────────────────────────────────────────────────
 
-@bp.route('/herramienta/<int:herramienta_id>/estado')
-def estado_herramienta(herramienta_id):
+@bp.route('/herramienta/<herramienta_slug>/estado')
+def estado_herramienta(herramienta_slug):
     """Returns current status of the 50 most recent jobs for polling."""
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     jobs = (
         UmbrellaJob.query
-        .filter_by(herramienta_id=herramienta_id)
+        .filter_by(herramienta_id=herramienta.id)
         .order_by(UmbrellaJob.created_at.desc())
         .limit(50)
         .all()
@@ -266,16 +272,16 @@ def estado_herramienta(herramienta_id):
 
 # ─── JOB DETAIL ─────────────────────────────────────────────────────────────
 
-@bp.route('/herramienta/<int:herramienta_id>/job/<int:job_id>')
-def ver_job(herramienta_id, job_id):
-    herramienta = UmbrellaHerramienta.query.get_or_404(herramienta_id)
+@bp.route('/herramienta/<herramienta_slug>/job/<int:job_id>')
+def ver_job(herramienta_slug, job_id):
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     job = UmbrellaJob.query.get_or_404(job_id)
-    if job.herramienta_id != herramienta_id:
+    if job.herramienta_id != herramienta.id:
         flash('Recurso no encontrado.', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
     if not current_user.is_admin and job.usuario_id != current_user.id:
         flash('No tienes permiso para ver este resultado.', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
     return render_template(
         'umbrella/resultado.html',
         herramienta=herramienta,
@@ -286,17 +292,17 @@ def ver_job(herramienta_id, job_id):
 
 # ─── DESCARGA CSV ────────────────────────────────────────────────────────────
 
-@bp.route('/herramienta/<int:herramienta_id>/job/<int:job_id>/descargar')
-def descargar_resultado(herramienta_id, job_id):
-    herramienta = UmbrellaHerramienta.query.get_or_404(herramienta_id)
+@bp.route('/herramienta/<herramienta_slug>/job/<int:job_id>/descargar')
+def descargar_resultado(herramienta_slug, job_id):
+    herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     job = UmbrellaJob.query.get_or_404(job_id)
 
-    if job.herramienta_id != herramienta_id:
+    if job.herramienta_id != herramienta.id:
         flash('Recurso no encontrado.', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
     if not current_user.is_admin and job.usuario_id != current_user.id:
         flash('No tienes permiso para descargar este resultado.', 'danger')
-        return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+        return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
     si = StringIO()
     writer = csv.writer(si)
@@ -327,8 +333,9 @@ def descargar_resultado(herramienta_id, job_id):
 @admin_required
 def eliminar_job(job_id):
     job = UmbrellaJob.query.get_or_404(job_id)
-    herramienta_id = job.herramienta_id
+    herramienta = UmbrellaHerramienta.query.get_or_404(job.herramienta_id)
+    herramienta_slug = herramienta.slug
     db.session.delete(job)
     db.session.commit()
     flash('Ejecución eliminada.', 'success')
-    return redirect(url_for('umbrella.ver_herramienta', herramienta_id=herramienta_id))
+    return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
