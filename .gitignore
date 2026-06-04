@@ -34,3 +34,7 @@ Docker
 agency-agents/
 .opencode/
 .claude/
+legacy/
+CLAUDE.md
+repomix-output.xml
+
