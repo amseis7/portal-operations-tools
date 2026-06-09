@@ -75,6 +75,9 @@ def create_app(config_class=Config, instance_path=None):
     from app.umbrella import bp as umbrella_bp
     app.register_blueprint(umbrella_bp, url_prefix='/umbrella')
 
+    from app.vault import bp as vault_bp
+    app.register_blueprint(vault_bp, url_prefix='/vault')
+
     from app.tools_config import TOOLS
 
     @app.context_processor
