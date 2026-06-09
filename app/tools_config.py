@@ -20,5 +20,11 @@ TOOLS = {
         'endpoint': 'umbrella.index',
         'color': 'warning'
     },
-    # ¡AQUÍ AGREGAS LA PRÓXIMA HERRAMIENTA CON UNA SOLA LÍNEA!
+    'vault': {
+        'titulo': 'Baúl de Contraseñas',
+        'descripcion': 'Gestión segura de credenciales cifradas.',
+        'icono': 'bi-safe',
+        'endpoint': 'vault.index',
+        'color': 'success'
+    },
 }

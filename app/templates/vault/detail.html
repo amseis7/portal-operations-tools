@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}{{ entry.title }} — Vault{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault de Credenciales</a></li>
+        <li class="breadcrumb-item active">{{ entry.title }}</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-7">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="mb-0">
+                <i class="bi bi-key-fill text-primary me-2"></i>{{ entry.title }}
+            </h2>
+            <a href="{{ url_for('vault.index') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Volver al listado
+            </a>
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-info-circle me-2"></i>Detalles de la credencial</span>
+                {% if entry.category == 'server' %}
+                    <span class="badge bg-primary">Servidor</span>
+                {% elif entry.category == 'platform' %}
+                    <span class="badge" style="background-color: #6f42c1;">Plataforma</span>
+                {% elif entry.category == 'api' %}
+                    <span class="badge bg-warning text-dark">API</span>
+                {% else %}
+                    <span class="badge bg-secondary">Otra</span>
+                {% endif %}
+            </div>
+
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Título</div>
+                    <div class="col-sm-8">{{ entry.title }}</div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Categoría</div>
+                    <div class="col-sm-8">
+                        {% if entry.category == 'server' %}Servidor
+                        {% elif entry.category == 'platform' %}Plataforma
+                        {% elif entry.category == 'api' %}API
+                        {% else %}Otra{% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Usuario</div>
+                    <div class="col-sm-8">
+                        <span class="font-monospace">{{ entry.username or '—' }}</span>
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Contraseña</div>
+                    <div class="col-sm-8">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span id="passwordDisplay" class="font-monospace text-muted">••••••••</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnReveal">
+                                <i class="bi bi-eye me-1"></i>Revelar
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopy" disabled title="Revela la contraseña primero">
+                                <i class="bi bi-clipboard me-1"></i>Copiar
+                            </button>
+                        </div>
+                        <div id="revealError" class="text-danger small mt-1 d-none">
+                            <i class="bi bi-exclamation-triangle"></i> No se pudo obtener la contraseña.
+                        </div>
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">URL</div>
+                    <div class="col-sm-8">
+                        {% if entry.url %}
+                        <a href="{{ entry.url }}" target="_blank" rel="noopener noreferrer" class="text-break">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>{{ entry.url }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Notas</div>
+                    <div class="col-sm-8">
+                        {% if notes %}
+                        <p class="mb-0" style="white-space: pre-wrap;">{{ notes }}</p>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Compartida</div>
+                    <div class="col-sm-8">
+                        {% if entry.shared %}
+                            <span class="badge bg-success"><i class="bi bi-people-fill me-1"></i>Sí, visible para el equipo</span>
+                        {% else %}
+                            <span class="badge bg-light text-dark border"><i class="bi bi-lock-fill me-1"></i>No, privada</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Propietario</div>
+                    <div class="col-sm-8">{{ entry.owner.username if entry.owner else '—' }}</div>
+                </div>
+                <hr class="my-2">
+
+                <div class="row">
+                    <div class="col-sm-4 text-muted fw-semibold">Creada</div>
+                    <div class="col-sm-8 small text-muted">
+                        {{ entry.created_at.strftime('%d/%m/%Y %H:%M') }}
+                    </div>
+                </div>
+            </div>
+
+            {% if current_user.is_admin or entry.owner_id == current_user.id %}
+            <div class="card-footer bg-light d-flex justify-content-end gap-2">
+                <a href="{{ url_for('vault.edit', entry_id=entry.id) }}" class="btn btn-warning text-dark">
+                    <i class="bi bi-pencil me-1"></i> Editar
+                </a>
+                <button type="button" class="btn btn-danger"
+                        data-bs-toggle="modal" data-bs-target="#modalConfirmarEliminar">
+                    <i class="bi bi-trash me-1"></i> Eliminar
+                </button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal Confirmar Eliminación -->
+{% if current_user.is_admin or entry.owner_id == current_user.id %}
+<div class="modal fade" id="modalConfirmarEliminar" tabindex="-1" aria-labelledby="modalConfirmarEliminarLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="modalConfirmarEliminarLabel">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro de que deseas eliminar la credencial
+                    <strong>{{ entry.title }}</strong>?
+                </p>
+                <p class="text-danger small">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form action="{{ url_for('vault.delete', entry_id=entry.id) }}" method="POST" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i> Eliminar
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    (function () {
+        var passwordDisplay = document.getElementById('passwordDisplay');
+        var btnReveal = document.getElementById('btnReveal');
+        var btnCopy = document.getElementById('btnCopy');
+        var revealError = document.getElementById('revealError');
+        var isRevealed = false;
+        var revealedPassword = null;
+
+        var csrfToken = '{{ csrf_token() }}';
+        var revealUrl = '{{ url_for("vault.reveal", entry_id=entry.id) }}';
+
+        if (btnReveal) {
+            btnReveal.addEventListener('click', function () {
+                if (isRevealed) {
+                    // Ocultar contraseña
+                    passwordDisplay.textContent = '••••••••';
+                    passwordDisplay.classList.add('text-muted');
+                    btnReveal.innerHTML = '<i class="bi bi-eye me-1"></i>Revelar';
+                    isRevealed = false;
+                    return;
+                }
+
+                // Si ya se obtuvo, solo mostrar sin nuevo fetch
+                if (revealedPassword !== null) {
+                    passwordDisplay.textContent = revealedPassword;
+                    passwordDisplay.classList.remove('text-muted');
+                    btnReveal.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Ocultar';
+                    isRevealed = true;
+                    return;
+                }
+
+                btnReveal.disabled = true;
+                btnReveal.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+                revealError.classList.add('d-none');
+
+                fetch(revealUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(function (response) {
+                    if (!response.ok) throw new Error('Error HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function (data) {
+                    if (data.password !== undefined) {
+                        revealedPassword = data.password;
+                        passwordDisplay.textContent = revealedPassword;
+                        passwordDisplay.classList.remove('text-muted');
+                        btnReveal.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Ocultar';
+                        btnReveal.disabled = false;
+                        btnCopy.disabled = false;
+                        btnCopy.removeAttribute('title');
+                        isRevealed = true;
+                    } else {
+                        throw new Error('Respuesta inesperada del servidor');
+                    }
+                })
+                .catch(function (err) {
+                    console.error('Error al revelar:', err);
+                    revealError.classList.remove('d-none');
+                    btnReveal.innerHTML = '<i class="bi bi-eye me-1"></i>Revelar';
+                    btnReveal.disabled = false;
+                });
+            });
+        }
+
+        if (btnCopy) {
+            btnCopy.addEventListener('click', function () {
+                if (!revealedPassword) return;
+
+                navigator.clipboard.writeText(revealedPassword).then(function () {
+                    var original = btnCopy.innerHTML;
+                    btnCopy.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copiado';
+                    btnCopy.classList.remove('btn-outline-secondary');
+                    btnCopy.classList.add('btn-success');
+                    setTimeout(function () {
+                        btnCopy.innerHTML = original;
+                        btnCopy.classList.remove('btn-success');
+                        btnCopy.classList.add('btn-outline-secondary');
+                    }, 1500);
+                }).catch(function () {
+                    // Fallback para navegadores sin clipboard API
+                    var tmp = document.createElement('textarea');
+                    tmp.value = revealedPassword;
+                    tmp.style.position = 'fixed';
+                    tmp.style.opacity = '0';
+                    document.body.appendChild(tmp);
+                    tmp.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tmp);
+                });
+            });
+        }
+    })();
+</script>
+{% endblock %}
