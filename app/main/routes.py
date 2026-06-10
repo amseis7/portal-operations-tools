@@ -2,6 +2,8 @@ from flask import render_template, redirect, request, url_for, flash
 from flask_login import login_required, current_user
 from app.main import bp
 from app.models import Notification, db
+from app.models.audit import AuditLog
+from app.utils import admin_required
 from sqlalchemy import or_
 
 @bp.route('/')
@@ -23,6 +25,18 @@ def inject_notifications():
         ).order_by(Notification.timestamp.desc()).all()
         return dict(mis_notificaciones=notificaciones, cantidad_notif=len(notificaciones))
     return dict(mis_notificaciones=[], cantidad_notif=0)
+
+@bp.route('/audit')
+@login_required
+@admin_required
+def audit():
+    module_filter = request.args.get('module', '')
+    query = AuditLog.query.order_by(AuditLog.timestamp.desc())
+    if module_filter:
+        query = query.filter(AuditLog.module == module_filter)
+    logs = query.limit(500).all()
+    return render_template('main/audit.html', logs=logs, module_filter=module_filter)
+
 
 @bp.route('/notificacion/leida/<int:notif_id>', methods=['POST'])
 @login_required

@@ -16,6 +16,7 @@ from app.umbrella.background import lanzar_job_background
 from app.umbrella.client import VALID_LABELS
 from app.umbrella.reader import read_apps, get_excel_columns
 from app.utils import admin_required, proteger_blueprint
+from app.models.audit import log_audit
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,8 @@ def crear_cliente():
     )
     cliente.set_credentials(client_id, client_secret)
     db.session.add(cliente)
+    db.session.flush()
+    log_audit('umbrella', 'create', 'cliente', cliente.id, nombre)
     db.session.commit()
     flash(f'Cliente "{nombre}" creado correctamente.', 'success')
     return redirect(url_for('umbrella.index'))
@@ -89,6 +92,7 @@ def editar_cliente(cliente_id):
         elif bool(new_id) != bool(new_secret):
             flash('Para actualizar credenciales debes ingresar ambos: Client ID y Client Secret.', 'warning')
 
+        log_audit('umbrella', 'edit', 'cliente', cliente_id, cliente.nombre)
         db.session.commit()
         flash(f'Cliente "{cliente.nombre}" actualizado.', 'success')
         return redirect(url_for('umbrella.index'))
@@ -105,6 +109,7 @@ def editar_cliente(cliente_id):
 def eliminar_cliente(cliente_id):
     cliente = UmbrellaCliente.query.get_or_404(cliente_id)
     nombre = cliente.nombre
+    log_audit('umbrella', 'delete', 'cliente', cliente_id, nombre)
     db.session.delete(cliente)
     db.session.commit()
     flash(f'Cliente "{nombre}" eliminado junto con todas sus herramientas.', 'success')
@@ -138,6 +143,7 @@ def crear_herramienta():
     db.session.add(herramienta)
     db.session.flush()
     herramienta.generate_slug()
+    log_audit('umbrella', 'create', 'herramienta', herramienta.id, nombre)
     db.session.commit()
     flash(f'Herramienta "{nombre}" creada.', 'success')
     return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta.slug))
@@ -169,6 +175,7 @@ def ver_herramienta(herramienta_slug):
 def eliminar_herramienta(herramienta_slug):
     herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     nombre = herramienta.nombre
+    log_audit('umbrella', 'delete', 'herramienta', herramienta.id, nombre)
     db.session.delete(herramienta)
     db.session.commit()
     flash(f'Herramienta "{nombre}" eliminada.', 'success')
@@ -238,6 +245,9 @@ def ejecutar(herramienta_slug):
         total=len(app_names),
     )
     db.session.add(job)
+    db.session.flush()
+    log_audit('umbrella', 'execute', 'herramienta', herramienta_slug, herramienta.nombre,
+              details=f'label={label_name}, apps={len(app_names)}, dry_run={dry_run}, job_id={job.id}')
     db.session.commit()
 
     lanzar_job_background(app_names, job.id, cid, csecret, label_name, dry_run)
@@ -304,6 +314,9 @@ def descargar_resultado(herramienta_slug, job_id):
         flash('No tienes permiso para descargar este resultado.', 'danger')
         return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
+    log_audit('umbrella', 'download', 'job', job_id, herramienta.nombre,
+              details=f'herramienta={herramienta_slug}')
+    db.session.commit()
     si = StringIO()
     writer = csv.writer(si)
     writer.writerow(['#', 'Aplicacion', 'Categoria', 'Estado', 'Etiqueta', 'HTTP', 'Mensaje'])
@@ -335,6 +348,8 @@ def eliminar_job(job_id):
     job = UmbrellaJob.query.get_or_404(job_id)
     herramienta = UmbrellaHerramienta.query.get_or_404(job.herramienta_id)
     herramienta_slug = herramienta.slug
+    log_audit('umbrella', 'delete', 'job', job_id, herramienta.nombre,
+              details=f'herramienta={herramienta_slug}')
     db.session.delete(job)
     db.session.commit()
     flash('Ejecución eliminada.', 'success')

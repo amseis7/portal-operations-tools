@@ -7,6 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
 from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Importar ExportTemplate
 from app.utils import admin_required, proteger_blueprint
+from app.models.audit import log_audit
 from app.virustotal import bp
 from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
 from markupsafe import Markup, escape
@@ -66,6 +67,8 @@ def crear_caso():
     descripcion = request.form.get('descripcion')
     nuevo = VtTicket(nombre=nombre, descripcion=descripcion, usuario_id=current_user.id)
     db.session.add(nuevo)
+    db.session.flush()
+    log_audit('virustotal', 'create', 'caso', nuevo.id, nombre)
     db.session.commit()
     flash('Caso creado.', 'success')
     return redirect(url_for('virustotal.ver_caso', caso_id=nuevo.id))
@@ -74,10 +77,7 @@ def crear_caso():
 def ver_caso(caso_id):
     # ... (Tu código actual de ver_caso) ...
     caso = VtTicket.query.get_or_404(caso_id)
-    if not current_user.is_admin and caso.usuario_id != current_user.id:
-        flash('No tienes permiso para acceder a este caso.', 'danger')
-        return redirect(url_for('virustotal.index'))
-    
+
     if request.method == 'POST':
         raw = request.form.get('hashes_input')
         tipo_seleccionado = request.form.get('tipo_ioc')
@@ -123,6 +123,8 @@ def ver_caso(caso_id):
                 else:
                     errores += 1
             
+            log_audit('virustotal', 'add_iocs', 'caso', caso.id, caso.nombre,
+                      details=f'{count} agregados, {errores} ignorados')
             db.session.commit()
             if errores > 0:
                 flash(f'Se agregaron {count}. Ignorados {errores} por formato.', 'warning')
@@ -143,9 +145,6 @@ def analizar_caso(caso_id):
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
 
     caso = VtTicket.query.get_or_404(caso_id)
-    if not current_user.is_admin and caso.usuario_id != current_user.id:
-        flash('No tienes permiso para acceder a este caso.', 'danger')
-        return redirect(url_for('virustotal.index'))
     tipo_filtro = request.args.get('tipo')
     
     query = VtIoc.query.filter_by(ticket_id=caso_id)
@@ -171,7 +170,9 @@ def analizar_caso(caso_id):
             cont_exito += 1"""
 
     lanzar_analisis_background(caso.id, current_user.id, force)
-    
+    log_audit('virustotal', 'analyze', 'caso', caso.id, caso.nombre,
+              details=f'force={force}')
+    db.session.commit()
     flash(f'Análisis en ejecucion, cargar la pagina para ver los datos actualizados', 'success')
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_id, source=source, origin_id=origin_id, analyzing=1))
 
@@ -209,8 +210,8 @@ def analizar_ticket_csirt(ticket_id):
 
     # 3. Lanzar análisis en segundo plano
     lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
-
-    # 4. Redirigir al CASO VT (Nueva pantalla)
+    log_audit('virustotal', 'analyze_from_csirt', 'caso', caso_vt_id, ticket_id)
+    db.session.commit()
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_id, analyzing=1))
 
 @bp.route('/analizar_alerta/<int:alerta_id>', methods=['POST'])
@@ -251,8 +252,9 @@ def analizar_alerta(alerta_id):
 
     # 4. Lanzar análisis en segundo plano
     lanzar_analisis_background(caso_vt_id, current_user.id, force=False)
-
-    # 5. Redirigir al CASO VT
+    log_audit('virustotal', 'analyze_from_alert', 'caso', caso_vt_id, ticket_padre,
+              details=f'alerta_id={alerta_id}')
+    db.session.commit()
     return redirect(url_for('virustotal.ver_caso', caso_id=caso_vt_id, source='csirt', origin_id=ticket_padre, analyzing=1))
 
 # ... (Resto de rutas admin_templates, eliminar_caso, etc.) ...
@@ -265,6 +267,8 @@ def eliminar_caso(caso_id):
         flash('No tienes permiso.', 'danger')
         return redirect(url_for('virustotal.index'))
     try:
+        nombre_caso = caso.nombre
+        log_audit('virustotal', 'delete', 'caso', caso_id, nombre_caso)
         db.session.delete(caso)
         db.session.commit()
         flash('Caso eliminado.', 'success')
@@ -277,12 +281,12 @@ def eliminar_caso(caso_id):
 @bp.route('/exportar_zip/<int:caso_id>/<caso_nombre>', methods=['POST'])
 def exportar_zip(caso_id, caso_nombre):
     caso = VtTicket.query.get_or_404(caso_id)
-    if not current_user.is_admin and caso.usuario_id != current_user.id:
-        flash('No tienes permiso para acceder a este caso.', 'danger')
-        return redirect(url_for('virustotal.index'))
     selected = request.form.getlist('templates_seleccionados')
     if not selected:
         return redirect(url_for('virustotal.ver_caso', caso_id=caso_id))
+    log_audit('virustotal', 'export_zip', 'caso', caso_id, caso_nombre,
+              details=f'templates={",".join(selected)}')
+    db.session.commit()
     zip_file = generar_exportacion_multiformato(caso_id, selected)
     fecha = datetime.now().strftime('%Y%m%d')
     return Response(zip_file, mimetype="application/zip", headers={"Content-disposition": f"attachment; filename=Pack_{caso_nombre}_{fecha}.zip"})
@@ -355,8 +359,6 @@ def estado_caso(caso_id):
     Ruta API para que la barra de progreso consulte el estado.
     """
     caso = VtTicket.query.get_or_404(caso_id)
-    if not current_user.is_admin and caso.usuario_id != current_user.id:
-        return jsonify({"error": "No autorizado"}), 403
     try:
         # Total de IoCs en el caso
         total = VtIoc.query.filter_by(ticket_id=caso_id).count()

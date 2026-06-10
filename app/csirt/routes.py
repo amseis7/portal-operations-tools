@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 
 from app.csirt.logic import ejecutar_proceso_csirt, actualizar_iocs_faltantes, generador_actualizacion_masiva, obtener_mapa_recurrencia
 from app.utils import admin_required, proteger_blueprint, generar_reporte_excel
+from app.models.audit import log_audit
 
 proteger_blueprint(bp, 'csirt')
 
@@ -101,7 +102,10 @@ def procesar():
         flash(f"¡Proceso finalizado! {resultado['msg']}", 'success' if not modo_prueba else 'warning')
     else:
         flash(f"Proceso finalizado. {resultado['msg']}", 'info')
-    
+
+    log_audit('csirt', 'scrape', 'ticket', ticket, ticket,
+              details=f"simulacion={modo_prueba} | {resultado['msg']}")
+    db.session.commit()
     return redirect(url_for('csirt.index'))
 
 @bp.route('/actualizar_iocs/<ticket_id>', methods=['POST'])
@@ -113,23 +117,25 @@ def actualizar_iocs(ticket_id):
             flash(f'Se actualizaron {cant_alertas} alertas con un total de {cant_iocs} IoCs nuevos.', 'success')
         else:
             flash('No se encontraron IoCs nuevos o las alertas ya estaban completas.', 'info')
-            
+        log_audit('csirt', 'update_iocs', 'ticket', ticket_id, ticket_id,
+                  details=f'{cant_alertas} alertas, {cant_iocs} IoCs nuevos')
+        db.session.commit()
     except Exception as e:
         logger.error(f"Error al actualizar IoCs del ticket {ticket_id}: {e}")
         flash('Ocurrió un error interno al actualizar. Contacte al administrador.', 'danger')
-        
-    # Volvemos a la misma página de gestión
+
     return redirect(url_for('csirt.ver_gestion', ticket_id=ticket_id))
 
 @bp.route('/admin/exportar_todo_csv')
 def exportar_todo_csv():
-    # 1. Seguridad: Solo admin
     if not current_user.is_admin:
         flash('Acceso denegado.', 'danger')
         return redirect(url_for('csirt.index'))
 
-    # 2. Consultar TODAS las alertas
     alertas = Alerta.query.order_by(Alerta.fecha_realizacion.desc()).all()
+    log_audit('csirt', 'export_csv', 'historico', None, 'Exportación total',
+              details=f'{len(alertas)} alertas')
+    db.session.commit()
 
     # 3. Crear CSV en memoria
     si = StringIO()
@@ -235,6 +241,8 @@ def importar_historico():
                     db.session.add(nueva_alerta)
                     contador += 1
             
+            log_audit('csirt', 'import_csv', None, None, file.filename,
+                      details=f'{contador} alertas importadas')
             db.session.commit()
             flash(f'Éxito: Se importaron {contador} alertas nuevas.', 'success')
             return redirect(url_for('csirt.index'))
@@ -254,6 +262,10 @@ def descargar_iocs_csv(ticket_id):
     if not iocs:
         flash(f'No hay IoCs registrados para el ticket {ticket_id}', 'warning')
         return redirect(url_for('csirt.index'))
+
+    log_audit('csirt', 'export_csv', 'ticket', ticket_id, ticket_id,
+              details=f'{len(iocs)} IoCs')
+    db.session.commit()
 
     # 2. Crear el archivo CSV en memoria (StringIO)
     si = StringIO()
@@ -327,9 +339,10 @@ def eliminar_ticket(ticket_id):
         # 3. Borrarlas (Los IoCs se borran en cascada automáticamente)
         for alerta in alertas_a_borrar:
             db.session.delete(alerta)
-        
+        log_audit('csirt', 'delete', 'ticket', ticket_id, ticket_id,
+                  details=f'{cantidad} alertas eliminadas')
         db.session.commit()
-        
+
         flash(f'Se eliminó el ticket {ticket_id} y sus {cantidad} alertas asociadas (con sus IoCs).', 'success')
 
     except Exception as e:
@@ -365,6 +378,10 @@ def generar_reporte():
         flash(f'No se encontraron alertas entre {fecha_inicio_str} y {fecha_fin_str}.', 'info')
         return redirect(url_for('csirt.index'))
 
+    log_audit('csirt', 'export_report', 'reporte', None,
+              f'{fecha_inicio_str} — {fecha_fin_str}',
+              details=f'{len(alertas)} alertas')
+    db.session.commit()
     excel_file = generar_reporte_excel(alertas, fecha_inicio_str, fecha_fin_str)
     nombre_archivo = f"Reporte_CSIRT_{fecha_inicio_str}_al_{fecha_fin_str}.xlsx"
     return send_file(
@@ -405,10 +422,12 @@ def buscar_ioc():
         .order_by(VtTicket.fecha_creacion.desc())\
         .all()
     
-    # Enviamos ambas listas a la plantilla
+    log_audit('csirt', 'search', 'ioc', None, query_str,
+              details=f'{len(resultados_csirt)} en CSIRT, {len(resultados_vt)} en VT')
+    db.session.commit()
     return render_template(
-        'csirt/resultados_busqueda.html', 
-        resultados_csirt=resultados_csirt, 
-        resultados_vt=resultados_vt, 
+        'csirt/resultados_busqueda.html',
+        resultados_csirt=resultados_csirt,
+        resultados_vt=resultados_vt,
         query=query_str
     )

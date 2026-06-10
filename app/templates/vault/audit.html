@@ -20,9 +20,12 @@
         <small class="text-muted">Registro de todas las acciones sobre credenciales</small>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2" title="Solo accesible para administradores">
+        <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
             <i class="bi bi-shield-lock-fill"></i> Solo Admin
         </span>
+        <a href="{{ url_for('main.audit', module='vault') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-journal-text me-1"></i> Ver en Auditoría Global
+        </a>
         <a href="{{ url_for('vault.index') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i> Volver al Vault
         </a>
@@ -60,16 +63,16 @@
                                 <span class="fw-semibold">{{ log.user.username if log.user else '—' }}</span>
                             </td>
                             <td>
-                                {% if log.entry %}
-                                <a href="{{ url_for('vault.detail', entry_id=log.entry_id) }}"
-                                   class="text-decoration-none">
-                                    <i class="bi bi-key me-1 text-secondary"></i>{{ log.entry.title }}
-                                </a>
-                                {% elif log.entry_title %}
+                                {% if log.action == 'delete' %}
                                 <span class="text-muted fst-italic">
-                                    <i class="bi bi-key me-1"></i>{{ log.entry_title }}
+                                    <i class="bi bi-key me-1"></i>{{ log.object_name or log.object_id or '—' }}
                                     <span class="badge bg-secondary ms-1" style="font-size: 0.7rem;">eliminada</span>
                                 </span>
+                                {% elif log.object_id %}
+                                <a href="{{ url_for('vault.detail', entry_id=log.object_id) }}"
+                                   class="text-decoration-none">
+                                    <i class="bi bi-key me-1 text-secondary"></i>{{ log.object_name or log.object_id }}
+                                </a>
                                 {% else %}
                                 <span class="text-muted">—</span>
                                 {% endif %}

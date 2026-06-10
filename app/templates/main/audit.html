@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Auditoría Global — Portal de Operaciones{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+        <li class="breadcrumb-item active">Auditoría Global</li>
+    </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">
+            <i class="bi bi-journal-text text-secondary me-2"></i>Auditoría Global
+        </h2>
+        <small class="text-muted">Registro de acciones en CSIRT, Análisis IoC, Cisco Umbrella y Vault</small>
+    </div>
+    <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
+        <i class="bi bi-shield-lock-fill"></i> Solo Admin
+    </span>
+</div>
+
+{# Filtro por módulo #}
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="row g-2 align-items-center">
+            <div class="col-auto">
+                <span class="text-muted small fw-semibold">Filtrar por módulo:</span>
+            </div>
+            <div class="col-auto">
+                <div class="btn-group btn-group-sm" role="group">
+                    <a href="{{ url_for('main.audit') }}"
+                       class="btn {{ 'btn-secondary' if not module_filter else 'btn-outline-secondary' }}">
+                        Todos
+                    </a>
+                    <a href="{{ url_for('main.audit', module='csirt') }}"
+                       class="btn {{ 'btn-primary' if module_filter == 'csirt' else 'btn-outline-primary' }}">
+                        <i class="bi bi-shield-lock me-1"></i>CSIRT
+                    </a>
+                    <a href="{{ url_for('main.audit', module='virustotal') }}"
+                       class="btn {{ 'btn-danger' if module_filter == 'virustotal' else 'btn-outline-danger' }}">
+                        <i class="bi bi-bug me-1"></i>Análisis IoC
+                    </a>
+                    <a href="{{ url_for('main.audit', module='umbrella') }}"
+                       class="btn {{ 'btn-warning text-dark' if module_filter == 'umbrella' else 'btn-outline-warning' }}">
+                        <i class="bi bi-shield-check me-1"></i>Umbrella
+                    </a>
+                    <a href="{{ url_for('main.audit', module='vault') }}"
+                       class="btn {{ 'btn-dark' if module_filter == 'vault' else 'btn-outline-dark' }}">
+                        <i class="bi bi-safe me-1"></i>Vault
+                    </a>
+                </div>
+            </div>
+            {% if logs %}
+            <div class="col-auto ms-auto">
+                <span class="badge bg-secondary">{{ logs | length }} registro{{ 's' if logs | length != 1 else '' }}</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle small">
+                <thead class="table-dark">
+                    <tr>
+                        <th class="text-nowrap">Fecha / Hora</th>
+                        <th>Usuario</th>
+                        <th class="text-center">Módulo</th>
+                        <th class="text-center">Acción</th>
+                        <th>Objeto</th>
+                        <th>Detalles</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if logs %}
+                        {% for log in logs %}
+                        <tr>
+                            <td class="text-nowrap text-muted">
+                                {{ log.timestamp.strftime('%d/%m/%Y %H:%M:%S') }}
+                            </td>
+                            <td class="fw-semibold">
+                                {{ log.user.username if log.user else '<sistema>' }}
+                            </td>
+                            <td class="text-center">
+                                {% if log.module == 'csirt' %}
+                                    <span class="badge bg-primary">CSIRT</span>
+                                {% elif log.module == 'virustotal' %}
+                                    <span class="badge bg-danger">IoC</span>
+                                {% elif log.module == 'umbrella' %}
+                                    <span class="badge bg-warning text-dark">Umbrella</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ log.module }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if log.action == 'delete' %}
+                                    <span class="badge bg-danger"><i class="bi bi-trash me-1"></i>{{ log.action }}</span>
+                                {% elif log.action == 'create' %}
+                                    <span class="badge bg-success"><i class="bi bi-plus-lg me-1"></i>{{ log.action }}</span>
+                                {% elif log.action in ('analyze', 'analyze_from_csirt', 'analyze_from_alert', 'scrape', 'execute') %}
+                                    <span class="badge bg-info text-dark"><i class="bi bi-play-fill me-1"></i>{{ log.action }}</span>
+                                {% elif log.action in ('export_csv', 'export_report', 'export_zip', 'download') %}
+                                    <span class="badge bg-secondary"><i class="bi bi-download me-1"></i>{{ log.action }}</span>
+                                {% elif log.action == 'import_csv' %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-upload me-1"></i>{{ log.action }}</span>
+                                {% elif log.action in ('edit', 'update_iocs', 'add_iocs') %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-pencil me-1"></i>{{ log.action }}</span>
+                                {% elif log.action == 'reveal' %}
+                                    <span class="badge bg-dark"><i class="bi bi-eye-fill me-1"></i>reveal</span>
+                                {% elif log.action == 'view' %}
+                                    <span class="badge bg-info text-dark"><i class="bi bi-eye me-1"></i>view</span>
+                                {% elif log.action == 'search' %}
+                                    <span class="badge bg-light text-dark border"><i class="bi bi-search me-1"></i>search</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ log.action }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if log.object_type %}
+                                    <span class="text-muted small">{{ log.object_type }}:</span>
+                                {% endif %}
+                                {% if log.object_name %}
+                                    <span class="font-monospace">{{ log.object_name }}</span>
+                                {% elif log.object_id %}
+                                    <span class="font-monospace text-muted">{{ log.object_id }}</span>
+                                {% else %}
+                                    <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted small" style="max-width: 250px;">
+                                <span class="text-truncate d-inline-block" style="max-width: 240px;"
+                                      title="{{ log.details or '' }}">
+                                    {{ log.details or '—' }}
+                                </span>
+                            </td>
+                            <td class="font-monospace text-muted small">
+                                {{ log.ip_address or '—' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7">
+                                <div class="text-center py-5 text-muted">
+                                    <i class="bi bi-journal-text" style="font-size: 3rem;"></i>
+                                    <p class="mt-3 mb-0 fw-semibold">Sin registros de auditoría.</p>
+                                    <p class="small">Las acciones sobre los módulos se registrarán aquí automáticamente.</p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

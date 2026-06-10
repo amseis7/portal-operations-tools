@@ -15,7 +15,7 @@ TOOLS = {
     },
     'umbrella': {
         'titulo': 'Cisco Umbrella',
-        'descripcion': 'App Discovery y etiquetado masivo de apps.',
+        'descripcion': 'Herramientas utiles y extraccion de datos.',
         'icono': 'bi-shield-check',
         'endpoint': 'umbrella.index',
         'color': 'warning'

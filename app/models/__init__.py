@@ -5,3 +5,4 @@ from .virustotal import VtTicket, VtIoc, ExportTemplate
 from .umbrella import UmbrellaCliente, UmbrellaHerramienta, UmbrellaJob, UmbrellaAppResultado
 from .notification import Notification
 from .mixins import VtInfoMixin
+from .audit import AuditLog, log_audit
