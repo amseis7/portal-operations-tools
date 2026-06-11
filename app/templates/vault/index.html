@@ -14,11 +14,6 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-safe text-primary"></i> Vault de Credenciales</h2>
     <div class="d-flex gap-2">
-        {% if current_user.is_admin %}
-        <a href="{{ url_for('vault.audit') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-clock-history me-1"></i> Auditoría
-        </a>
-        {% endif %}
         <a href="{{ url_for('vault.new') }}" class="btn btn-success">
             <i class="bi bi-plus-lg me-1"></i> Nueva credencial
         </a>

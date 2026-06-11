@@ -7,8 +7,7 @@ from app.vault import bp
 from app.vault.models import VaultEntry
 from app.vault.crypto import encrypt, decrypt
 from app.vault.forms import VaultEntryForm
-from app.utils import admin_required
-from app.models.audit import AuditLog, log_audit
+from app.models.audit import log_audit
 
 
 def _get_entry_or_404(entry_id):
@@ -127,11 +126,3 @@ def delete(entry_id):
     db.session.commit()
     flash('Entrada eliminada.', 'info')
     return redirect(url_for('vault.index'))
-
-
-@bp.route('/audit')
-@login_required
-@admin_required
-def audit():
-    logs = AuditLog.query.filter_by(module='vault').order_by(AuditLog.timestamp.desc()).all()
-    return render_template('vault/audit.html', logs=logs)
