@@ -57,7 +57,9 @@
                 <hr class="my-2">
 
                 <div class="row mb-3">
-                    <div class="col-sm-4 text-muted fw-semibold">Usuario</div>
+                    <div class="col-sm-4 text-muted fw-semibold">
+                        {% if entry.category == 'api' %}API Client{% else %}Usuario{% endif %}
+                    </div>
                     <div class="col-sm-8">
                         <span class="font-monospace">{{ entry.username or '—' }}</span>
                     </div>
@@ -65,7 +67,9 @@
                 <hr class="my-2">
 
                 <div class="row mb-3">
-                    <div class="col-sm-4 text-muted fw-semibold">Contraseña</div>
+                    <div class="col-sm-4 text-muted fw-semibold">
+                        {% if entry.category == 'api' %}API Secret{% else %}Contraseña{% endif %}
+                    </div>
                     <div class="col-sm-8">
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <span id="passwordDisplay" class="font-monospace text-muted">••••••••</span>

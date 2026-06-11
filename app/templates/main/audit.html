@@ -17,7 +17,7 @@
         <h2 class="mb-0">
             <i class="bi bi-journal-text text-secondary me-2"></i>Auditoría Global
         </h2>
-        <small class="text-muted">Registro de acciones en CSIRT, Análisis IoC, Cisco Umbrella y Vault</small>
+        <small class="text-muted">Registro de acciones en CSIRT, Análisis IoC, Cisco Umbrella, Vault y gestión de usuarios</small>
     </div>
     <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
         <i class="bi bi-shield-lock-fill"></i> Solo Admin
@@ -52,6 +52,10 @@
                     <a href="{{ url_for('main.audit', module='vault') }}"
                        class="btn {{ 'btn-dark' if module_filter == 'vault' else 'btn-outline-dark' }}">
                         <i class="bi bi-safe me-1"></i>Vault
+                    </a>
+                    <a href="{{ url_for('main.audit', module='auth') }}"
+                       class="btn {{ 'btn-success' if module_filter == 'auth' else 'btn-outline-success' }}">
+                        <i class="bi bi-people me-1"></i>Usuarios
                     </a>
                 </div>
             </div>
@@ -96,6 +100,8 @@
                                     <span class="badge bg-danger">IoC</span>
                                 {% elif log.module == 'umbrella' %}
                                     <span class="badge bg-warning text-dark">Umbrella</span>
+                                {% elif log.module == 'auth' %}
+                                    <span class="badge bg-success">Usuarios</span>
                                 {% else %}
                                     <span class="badge bg-secondary">{{ log.module }}</span>
                                 {% endif %}
@@ -119,6 +125,16 @@
                                     <span class="badge bg-info text-dark"><i class="bi bi-eye me-1"></i>view</span>
                                 {% elif log.action == 'search' %}
                                     <span class="badge bg-light text-dark border"><i class="bi bi-search me-1"></i>search</span>
+                                {% elif log.action == 'login' %}
+                                    <span class="badge bg-success"><i class="bi bi-box-arrow-in-right me-1"></i>login</span>
+                                {% elif log.action == 'login_failed' %}
+                                    <span class="badge bg-danger"><i class="bi bi-x-octagon me-1"></i>login fallido</span>
+                                {% elif log.action == 'logout' %}
+                                    <span class="badge bg-secondary"><i class="bi bi-box-arrow-right me-1"></i>logout</span>
+                                {% elif log.action in ('change_password', 'edit_profile') %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-person-gear me-1"></i>{{ log.action }}</span>
+                                {% elif log.action == 'setup' %}
+                                    <span class="badge bg-primary"><i class="bi bi-gear me-1"></i>setup</span>
                                 {% else %}
                                     <span class="badge bg-secondary">{{ log.action }}</span>
                                 {% endif %}

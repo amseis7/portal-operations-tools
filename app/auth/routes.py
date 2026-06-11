@@ -2,6 +2,7 @@ from flask import render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, current_user, login_required
 from urllib.parse import urlparse
 from app.models.user import User, UserTool
+from app.models.audit import log_audit
 from app.extensions import db, limiter
 from app.virustotal.logic import obtener_uso_api
 from app.auth import bp
@@ -80,7 +81,9 @@ def setup():
         from app.tools_config import TOOLS
         for tool_name in TOOLS.keys():
             db.session.add(UserTool(user_id=admin.id, tool_name=tool_name))
-        
+
+        log_audit('auth', 'setup', 'usuario', admin.id, username,
+                  details='Creación del administrador inicial del sistema')
         db.session.commit()
         
         flash('¡Sistema inicializado correctamente! Inicia sesión.', 'success')
@@ -122,8 +125,10 @@ def cambiar_password_inicial():
         current_user.set_password(new_pass)
         
         # 2. APAGAR LA BANDERA (Liberar al usuario)
-        current_user.must_change_password = False 
-        
+        current_user.must_change_password = False
+
+        log_audit('auth', 'change_password', 'usuario', current_user.id, current_user.username,
+                  details='Cambio de contraseña inicial obligatorio')
         db.session.commit()
         
         flash('¡Contraseña actualizada! Bienvenido al sistema.', 'success')
@@ -148,11 +153,17 @@ def login():
 
         # Verificar contraseña
         if user is None or not user.check_password(password):
+            log_audit('auth', 'login_failed', 'usuario', None, username,
+                      details='Intento de inicio de sesión fallido')
+            db.session.commit()
             flash('Usuario o contraseña invalidos', 'danger')
             return redirect(url_for('auth.login'))
-        
+
         # Login Exitoso
         login_user(user)
+        log_audit('auth', 'login', 'usuario', user.id, user.username,
+                  details='Inicio de sesión exitoso')
+        db.session.commit()
         flash(f'Bienvenido, {user.username}!', 'success')
 
         # Redirigir a la pagina que intentaba ver o al dashboard
@@ -185,12 +196,15 @@ def perfil():
 
             current_user.nombre_completo = nombre
             current_user.email = email
-            
-            if vt_key and "****" not in vt_key: # Evitamos guardar los asteriscos si el usuario no la cambió
+
+            vt_key_actualizada = bool(vt_key and "****" not in vt_key)
+            if vt_key_actualizada: # Evitamos guardar los asteriscos si el usuario no la cambió
                 current_user.set_vt_key(vt_key.strip()) # <--- Usamos el método seguro
 
             # Guardamos los cambios básicos INMEDIATAMENTE
             db.session.add(current_user)
+            log_audit('auth', 'edit_profile', 'usuario', current_user.id, current_user.username,
+                      details='Perfil actualizado' + (' (API key VT actualizada)' if vt_key_actualizada else ''))
             db.session.commit()
 
             # --- BLOQUE 2: CONTRASEÑA (Opcional) ---
@@ -217,6 +231,8 @@ def perfil():
                         return render_template('auth/perfil.html', datos_cuota=datos_cuota, has_vt_key=bool(current_user.get_vt_key()))
                     
                     current_user.set_password(new_pass)
+                    log_audit('auth', 'change_password', 'usuario', current_user.id, current_user.username,
+                              details='Cambio de contraseña desde el perfil')
                     db.session.commit() # Segundo commit solo para pass
                     flash('Contraseña actualizada correctamente.', 'success')
 
@@ -291,8 +307,11 @@ def crear_usuario():
     for tool_name in lista_herramientas:
         db.session.add(UserTool(user_id=nuevo_user.id, tool_name=tool_name))
 
+    log_audit('auth', 'create', 'usuario', nuevo_user.id, username,
+              details=f"Admin: {'sí' if is_admin else 'no'}; "
+                      f"Herramientas: {', '.join(lista_herramientas) if lista_herramientas else 'ninguna'}")
     db.session.commit()
-    
+
     flash(f'Usuario {nombre_completo} ({username}) creado correctamente.', 'success')
     return redirect(url_for('auth.admin_usuarios'))
 
@@ -317,12 +336,17 @@ def editar_usuarios(user_id):
 
     # 3. Lógica de Contraseña (Opcional)
     new_password = request.form.get('password')
-    if new_password and new_password.strip():
+    password_cambiada = bool(new_password and new_password.strip())
+    if password_cambiada:
         user.set_password(new_password)
         flash(f'Datos y contraseña de {user.username} actualizados.', 'success')
     else:
         flash(f'Datos de {user.username} actualizados (contraseña sin cambios).', 'success')
 
+    log_audit('auth', 'edit', 'usuario', user.id, user.username,
+              details=f"Admin: {'sí' if user.is_admin else 'no'}; "
+                      f"Herramientas: {', '.join(lista_herramientas) if lista_herramientas else 'ninguna'}; "
+                      f"Contraseña: {'actualizada' if password_cambiada else 'sin cambios'}")
     db.session.commit()
     return redirect(url_for('auth.admin_usuarios'))
 
@@ -337,13 +361,18 @@ def eliminar_usuario(user_id):
         flash('No puedes eliminarte a ti mismo.', 'danger')
         return redirect(url_for('auth.admin_usuarios'))
 
+    username_eliminado = user.username
     db.session.delete(user)
+    log_audit('auth', 'delete', 'usuario', user_id, username_eliminado)
     db.session.commit()
-    flash(f'Usuario {user.username} eliminado.', 'success')
+    flash(f'Usuario {username_eliminado} eliminado.', 'success')
     return redirect(url_for('auth.admin_usuarios'))
 
 @bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
+    log_audit('auth', 'logout', 'usuario', current_user.id, current_user.username,
+              details='Cierre de sesión')
+    db.session.commit()
     logout_user()
     return redirect(url_for('auth.login'))

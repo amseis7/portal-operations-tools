@@ -147,5 +147,27 @@
             });
         }
     })();
+
+    // Etiquetas dinámicas según la categoría (API / Token → API Client / API Secret)
+    (function () {
+        var category = document.getElementById('category');
+        var userLabel = document.querySelector('label[for="username"]');
+        var passLabel = document.querySelector('label[for="password"]');
+        var userInput = document.getElementById('username');
+        var passInput = document.getElementById('passwordInput');
+
+        if (!category || !userLabel || !passLabel) return;
+
+        function applyLabels() {
+            var isApi = category.value === 'api';
+            userLabel.textContent = isApi ? 'API Client' : 'Usuario';
+            passLabel.textContent = isApi ? 'API Secret' : 'Contraseña';
+            if (userInput) userInput.placeholder = isApi ? 'Ej: client_id / access key' : 'Ej: admin';
+            if (passInput) passInput.placeholder = isApi ? 'API Secret' : 'Contraseña';
+        }
+
+        category.addEventListener('change', applyLabels);
+        applyLabels();
+    })();
 </script>
 {% endblock %}
