@@ -1,173 +1,183 @@
 {% extends "base.html" %}
-
 {% block title %}Nueva Credencial — Vault{% endblock %}
 
 {% block breadcrumb %}
 <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault de Credenciales</a></li>
-        <li class="breadcrumb-item active">Nueva Credencial</li>
-    </ol>
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault</a></li>
+    <li class="breadcrumb-item active">Nueva Credencial</li>
+  </ol>
 </nav>
 {% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8 col-lg-6">
-
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="mb-0">
-                <i class="bi bi-plus-circle-fill text-success me-2"></i>Nueva Credencial
-            </h2>
-            <a href="{{ url_for('vault.index') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left me-1"></i> Volver al listado
-            </a>
-        </div>
-
-        <div class="card shadow-sm">
-            <div class="card-header bg-dark text-white">
-                <i class="bi bi-key me-2"></i>Datos de la credencial
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('vault.new') }}" novalidate>
-                    {{ form.hidden_tag() }}
-
-                    <!-- Título -->
-                    <div class="mb-3">
-                        {{ form.title.label(class="form-label fw-bold") }}
-                        {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
-                                      placeholder="Ej: Servidor de Producción DB01") }}
-                        {% for error in form.title.errors %}
-                        <div class="invalid-feedback">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Categoría -->
-                    <div class="mb-3">
-                        {{ form.category.label(class="form-label fw-bold") }}
-                        {{ form.category(class="form-select" + (" is-invalid" if form.category.errors else "")) }}
-                        {% for error in form.category.errors %}
-                        <div class="invalid-feedback">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Usuario -->
-                    <div class="mb-3">
-                        {{ form.username.label(class="form-label fw-bold") }}
-                        {{ form.username(class="form-control font-monospace" + (" is-invalid" if form.username.errors else ""),
-                                         placeholder="Ej: admin") }}
-                        {% for error in form.username.errors %}
-                        <div class="invalid-feedback">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Contraseña -->
-                    <div class="mb-3">
-                        {{ form.password.label(class="form-label fw-bold") }}
-                        <div class="input-group">
-                            {{ form.password(class="form-control font-monospace" + (" is-invalid" if form.password.errors else ""),
-                                             id="passwordInput",
-                                             type="password",
-                                             placeholder="Contraseña") }}
-                            <button class="btn btn-outline-secondary" type="button" id="btnTogglePassword" title="Mostrar/Ocultar contraseña">
-                                <i class="bi bi-eye" id="eyeIcon"></i>
-                            </button>
-                            {% for error in form.password.errors %}
-                            <div class="invalid-feedback">{{ error }}</div>
-                            {% endfor %}
-                        </div>
-                    </div>
-
-                    <!-- URL -->
-                    <div class="mb-3">
-                        {{ form.url.label(class="form-label fw-bold") }}
-                        {{ form.url(class="form-control" + (" is-invalid" if form.url.errors else ""),
-                                    placeholder="https://...") }}
-                        {% for error in form.url.errors %}
-                        <div class="invalid-feedback">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Notas -->
-                    <div class="mb-3">
-                        {{ form.notes.label(class="form-label fw-bold") }}
-                        {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""),
-                                      rows=3,
-                                      placeholder="Notas adicionales, instrucciones de acceso, etc.") }}
-                        {% for error in form.notes.errors %}
-                        <div class="invalid-feedback">{{ error }}</div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Compartir -->
-                    <div class="mb-4">
-                        <div class="form-check">
-                            {{ form.shared(class="form-check-input") }}
-                            {{ form.shared.label(class="form-check-label fw-bold") }}
-                        </div>
-                        <div class="form-text">Si activas esta opción, todos los miembros del equipo podrán ver esta credencial.</div>
-                    </div>
-
-                    <hr>
-
-                    <div class="d-flex justify-content-end gap-2">
-                        <a href="{{ url_for('vault.index') }}" class="btn btn-secondary">
-                            <i class="bi bi-x-lg me-1"></i> Cancelar
-                        </a>
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-save me-1"></i> Guardar
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
+  <div class="col-md-9 col-lg-7">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2 class="mb-0"><i class="bi bi-plus-circle-fill text-success me-2"></i>Nueva Credencial</h2>
+      <a href="{{ url_for('vault.index') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left me-1"></i>Volver
+      </a>
     </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-dark text-white"><i class="bi bi-key me-2"></i>Datos de la credencial</div>
+      <div class="card-body">
+        <form method="POST" action="{{ url_for('vault.new') }}" novalidate>
+          {{ form.hidden_tag() }}
+          <input type="hidden" id="custom_fields_json" name="custom_fields_json" value="[]">
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-8">
+              {{ form.title.label(class="form-label fw-bold") }}
+              {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else ""),
+                            placeholder="Ej: Servidor de Producción DB01") }}
+              {% for e in form.title.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-4">
+              {{ form.category.label(class="form-label fw-bold") }}
+              {{ form.category(class="form-select" + (" is-invalid" if form.category.errors else "")) }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.group_id.label(class="form-label fw-bold") }}
+              {{ form.group_id(class="form-select form-select-sm") }}
+            </div>
+            <div class="col-md-6">
+              {{ form.expires_at.label(class="form-label fw-bold") }}
+              {{ form.expires_at(class="form-control form-control-sm", type="date") }}
+              <div class="form-text">Dejar vacío si no expira.</div>
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.username.label(class="form-label fw-bold", id="lbl_username") }}
+              {{ form.username(class="form-control font-monospace" + (" is-invalid" if form.username.errors else ""),
+                               placeholder="Ej: admin") }}
+              {% for e in form.username.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold" id="lbl_password">Contraseña</label>
+              <div class="input-group">
+                {{ form.password(class="form-control font-monospace" + (" is-invalid" if form.password.errors else ""),
+                                 id="passwordInput", type="password", placeholder="Contraseña") }}
+                <button class="btn btn-outline-secondary" type="button" id="btnTogglePassword">
+                  <i class="bi bi-eye" id="eyeIcon"></i>
+                </button>
+              </div>
+              {% for e in form.password.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            {{ form.url.label(class="form-label fw-bold") }}
+            {{ form.url(class="form-control" + (" is-invalid" if form.url.errors else ""),
+                        placeholder="https://...") }}
+            {% for e in form.url.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            {{ form.notes.label(class="form-label fw-bold") }}
+            {{ form.notes(class="form-control" + (" is-invalid" if form.notes.errors else ""),
+                          rows=3, placeholder="Notas adicionales...") }}
+          </div>
+
+          <!-- Campos personalizados -->
+          <div class="mb-3">
+            <label class="form-label fw-bold">Campos personalizados</label>
+            <div id="cfContainer"></div>
+            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="btnAddCf">
+              <i class="bi bi-plus me-1"></i>Agregar campo
+            </button>
+          </div>
+
+          <div class="mb-4">
+            <div class="form-check">
+              {{ form.shared(class="form-check-input") }}
+              {{ form.shared.label(class="form-check-label fw-bold") }}
+            </div>
+            <div class="form-text">Si activas esta opción, todos los analistas pueden ver esta credencial.</div>
+          </div>
+
+          <hr>
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('vault.index') }}" class="btn btn-secondary">
+              <i class="bi bi-x-lg me-1"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-save me-1"></i>Guardar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-    (function () {
-        var passwordInput = document.getElementById('passwordInput');
-        var btnToggle = document.getElementById('btnTogglePassword');
-        var eyeIcon = document.getElementById('eyeIcon');
+(function(){
+  var container = document.getElementById('cfContainer');
+  var jsonInput = document.getElementById('custom_fields_json');
+  var fields = [];
 
-        if (btnToggle && passwordInput) {
-            btnToggle.addEventListener('click', function () {
-                if (passwordInput.type === 'password') {
-                    passwordInput.type = 'text';
-                    eyeIcon.classList.remove('bi-eye');
-                    eyeIcon.classList.add('bi-eye-slash');
-                    btnToggle.title = 'Ocultar contraseña';
-                } else {
-                    passwordInput.type = 'password';
-                    eyeIcon.classList.remove('bi-eye-slash');
-                    eyeIcon.classList.add('bi-eye');
-                    btnToggle.title = 'Mostrar contraseña';
-                }
-            });
-        }
-    })();
+  function render() {
+    container.innerHTML = '';
+    fields.forEach(function(f, i) {
+      var row = document.createElement('div');
+      row.className = 'input-group mb-2';
+      row.innerHTML =
+        '<input type="text" class="form-control cf-key" placeholder="Clave" value="'+escHtml(f.key)+'" maxlength="100">'
+        +'<input type="text" class="form-control cf-value" placeholder="Valor" value="'+escHtml(f.value)+'">'
+        +'<div class="input-group-text"><input class="form-check-input mt-0 cf-protected" type="checkbox" title="Protegido"'+(f.protected?' checked':'')+'>  <i class="bi bi-shield-lock ms-1 text-muted" title="Marcar como protegido"></i></div>'
+        +'<button type="button" class="btn btn-outline-danger cf-del" data-idx="'+i+'"><i class="bi bi-trash"></i></button>';
+      container.appendChild(row);
+    });
+    container.querySelectorAll('.cf-del').forEach(function(btn){
+      btn.addEventListener('click', function(){ fields.splice(parseInt(this.dataset.idx),1); render(); });
+    });
+  }
 
-    // Etiquetas dinámicas según la categoría (API / Token → API Client / API Secret)
-    (function () {
-        var category = document.getElementById('category');
-        var userLabel = document.querySelector('label[for="username"]');
-        var passLabel = document.querySelector('label[for="password"]');
-        var userInput = document.getElementById('username');
-        var passInput = document.getElementById('passwordInput');
+  function serialize() {
+    var result = [];
+    container.querySelectorAll('.input-group').forEach(function(row){
+      var key = row.querySelector('.cf-key').value.trim();
+      if (!key) return;
+      result.push({key:key, value:row.querySelector('.cf-value').value, protected:row.querySelector('.cf-protected').checked});
+    });
+    jsonInput.value = JSON.stringify(result);
+  }
 
-        if (!category || !userLabel || !passLabel) return;
+  function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-        function applyLabels() {
-            var isApi = category.value === 'api';
-            userLabel.textContent = isApi ? 'API Client' : 'Usuario';
-            passLabel.textContent = isApi ? 'API Secret' : 'Contraseña';
-            if (userInput) userInput.placeholder = isApi ? 'Ej: client_id / access key' : 'Ej: admin';
-            if (passInput) passInput.placeholder = isApi ? 'API Secret' : 'Contraseña';
-        }
-
-        category.addEventListener('change', applyLabels);
-        applyLabels();
-    })();
+  document.getElementById('btnAddCf').addEventListener('click', function(){ fields.push({key:'',value:'',protected:false}); render(); });
+  document.querySelector('form').addEventListener('submit', serialize);
+  render();
+})();
+</script>
+<script>
+(function(){
+  var inp = document.getElementById('passwordInput');
+  var btn = document.getElementById('btnTogglePassword');
+  var ico = document.getElementById('eyeIcon');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    ico.className = show ? 'bi bi-eye-slash' : 'bi bi-eye';
+  });
+})();
+</script>
+<script>
+(function(){
+  var cat = document.getElementById('category');
+  var lblU = document.getElementById('lbl_username');
+  var lblP = document.getElementById('lbl_password');
+  if (!cat) return;
+  function upd(){ var api=cat.value==='api'; lblU.textContent=api?'API Client':'Usuario'; lblP.textContent=api?'API Secret':'Contraseña'; }
+  cat.addEventListener('change', upd); upd();
+})();
 </script>
 {% endblock %}
