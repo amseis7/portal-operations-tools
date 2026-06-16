@@ -14,7 +14,8 @@ class VaultSyncService:
     Sync runs in a background daemon thread to avoid blocking HTTP responses.
     """
 
-    _lock = threading.Lock()
+    def __init__(self):
+        self._lock = threading.Lock()
 
     def trigger_async(self, app):
         """Dispatch sync in a background thread. Safe to call after db.session.commit()."""
@@ -55,40 +56,43 @@ class VaultSyncService:
 
             # Add entries
             for entry in VaultEntry.query.all():
-                kp_group = kp_groups.get(entry.group_id) or ungrouped
-                e = kp.add_entry(
-                    kp_group,
-                    title=entry.title,
-                    username=entry.username,
-                    password=decrypt(entry.password_enc),
-                    url=entry.url or "",
-                    notes=decrypt(entry.notes_enc) if entry.notes_enc else "",
-                )
                 try:
-                    e.uuid = UUID(entry.uuid)
-                except Exception:
-                    pass  # Keep generated UUID if stored one is malformed
-
-                if entry.expires_at:
-                    e.expiry_time = entry.expires_at
-                    e.expires = True
-
-                for field in entry.custom_fields:
+                    kp_group = kp_groups.get(entry.group_id) or ungrouped
+                    e = kp.add_entry(
+                        kp_group,
+                        title=entry.title,
+                        username=entry.username,
+                        password=decrypt(entry.password_enc),
+                        url=entry.url or "",
+                        notes=decrypt(entry.notes_enc) if entry.notes_enc else "",
+                    )
                     try:
-                        e.set_custom_property(
-                            field.field_key,
-                            decrypt(field.field_value_enc),
-                            protect=field.is_protected,
-                        )
-                    except Exception:
-                        pass
+                        e.uuid = UUID(entry.uuid)
+                    except Exception as exc:
+                        current_app.logger.warning("Vault sync: malformed uuid %r on entry %d: %s", entry.uuid, entry.id, exc)
+
+                    if entry.expires_at:
+                        e.expiry_time = entry.expires_at
+                        e.expires = True
+
+                    for field in entry.custom_fields:
+                        try:
+                            e.set_custom_property(
+                                field.field_key,
+                                decrypt(field.field_value_enc),
+                                protect=field.is_protected,
+                            )
+                        except Exception as exc:
+                            current_app.logger.warning("Vault sync: skipping field %r on entry %d: %s", field.field_key, entry.id, exc)
+                except Exception as exc:
+                    current_app.logger.warning("Vault sync: skipping entry %d (%r): %s", entry.id, entry.title, exc)
 
             kp.save()
-            # Re-apply read-only after writing
-            os.chmod(path, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
-
         except Exception as exc:
             current_app.logger.error("Vault kdbx sync failed: %s", exc)
+        finally:
+            if os.path.exists(path):
+                os.chmod(path, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
 
 
 vault_sync = VaultSyncService()
