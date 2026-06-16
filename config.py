@@ -19,7 +19,17 @@ class Config:
     CREDENTIAL_MANAGER_KEY = os.environ.get('CREDENTIAL_MANAGER_KEY')
     if not CREDENTIAL_MANAGER_KEY:
         raise RuntimeError("ERROR CRÍTICO: La variable de entorno CREDENTIAL_MANAGER_KEY no está definida.")
-    
+
+    # Key para el módulo Vault (Debe estar en .env para prod)
+    VAULT_KEY = os.environ.get('VAULT_KEY')
+    if not VAULT_KEY:
+        raise RuntimeError("ERROR CRÍTICO: La variable de entorno VAULT_KEY no está definida.")
+
+    # Ruta de red al archivo .kdbx para sync con SharePoint (opcional)
+    VAULT_KDBX_PATH = os.environ.get('VAULT_KDBX_PATH', '')
+    # Master password del archivo .kdbx generado (opcional)
+    VAULT_KDBX_PASSWORD = os.environ.get('VAULT_KDBX_PASSWORD', '')
+
     # --- LÓGICA HÍBRIDA (La magia) ---
     # Preguntamos: ¿Estamos empaquetados en un EXE?
     if getattr(sys, 'frozen', False):
