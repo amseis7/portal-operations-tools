@@ -4,241 +4,311 @@
 
 {% block breadcrumb %}
 <nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item active">Vault de Credenciales</li>
-    </ol>
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item active">Vault de Credenciales</li>
+  </ol>
 </nav>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2><i class="bi bi-safe text-primary"></i> Vault de Credenciales</h2>
-    <div class="d-flex gap-2">
-        <a href="{{ url_for('vault.new') }}" class="btn btn-success">
-            <i class="bi bi-plus-lg me-1"></i> Nueva credencial
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="bi bi-safe text-primary me-2"></i>Vault de Credenciales</h2>
+  <div class="d-flex gap-2 align-items-center">
+    {% if current_user.is_admin %}
+    <a href="{{ url_for('vault.import_kdbx') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-upload me-1"></i>Importar .kdbx
+    </a>
+    {% endif %}
+    <a href="{{ url_for('vault.new') }}" class="btn btn-success btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Nueva credencial
+    </a>
+  </div>
+</div>
+
+<div class="row g-3">
+
+  <!-- SIDEBAR: Grupos -->
+  <div class="col-12 col-lg-3">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <span class="fw-semibold"><i class="bi bi-folder2 me-1"></i>Grupos</span>
+        {% if current_user.is_admin %}
+        <button class="btn btn-sm btn-outline-primary py-0 px-1" data-bs-toggle="collapse"
+                data-bs-target="#collapseNuevoGrupo" title="Nuevo grupo">
+          <i class="bi bi-plus"></i>
+        </button>
+        {% endif %}
+      </div>
+
+      {% if current_user.is_admin %}
+      <div class="collapse" id="collapseNuevoGrupo">
+        <div class="card-body border-bottom py-2">
+          <form method="POST" action="{{ url_for('vault.group_new') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-2">
+              <input type="text" class="form-control form-control-sm" name="name"
+                     placeholder="Nombre del grupo" required maxlength="120">
+            </div>
+            <div class="mb-2">
+              <select class="form-select form-select-sm" name="parent_id">
+                <option value="">— Sin padre (raíz) —</option>
+                {% for g, depth in group_tree %}
+                <option value="{{ g.id }}">{{ '  ' * depth }}{{ g.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn btn-sm btn-primary w-100">Crear grupo</button>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="list-group list-group-flush" id="groupTree">
+        <a href="{{ url_for('vault.index') }}"
+           class="list-group-item list-group-item-action py-2 {% if not selected_group %}active{% endif %}">
+          <i class="bi bi-collection me-1"></i> Todas
         </a>
-    </div>
-</div>
-
-<div class="card shadow-sm mb-3">
-    <div class="card-body py-2">
-        <div class="row g-2 align-items-center">
-            <div class="col-md-4">
-                <div class="input-group">
-                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                    <input type="text" class="form-control" id="searchInput"
-                           placeholder="Buscar por título o usuario...">
-                </div>
-            </div>
-            <div class="col-md-3">
-                <select class="form-select" id="filterCategory">
-                    <option value="">Todas las categorías</option>
-                    <option value="server">Servidor</option>
-                    <option value="platform">Plataforma</option>
-                    <option value="api">API</option>
-                    <option value="other">Otra</option>
-                </select>
-            </div>
+        {% for g, depth in group_tree %}
+        <div class="d-flex align-items-center">
+          <a href="{{ url_for('vault.index', group=g.id) }}"
+             class="list-group-item list-group-item-action py-2 flex-grow-1 border-0
+                    {% if selected_group == g.id %}active{% endif %}"
+             style="padding-left: {{ 1 + depth * 1.2 }}rem;">
+            <i class="bi bi-folder{% if selected_group == g.id %}-fill{% endif %} me-1"></i>
+            {{ g.name }}
+          </a>
+          {% if current_user.is_admin %}
+          <form method="POST" action="{{ url_for('vault.group_delete', group_id=g.id) }}"
+                onsubmit="return confirm('¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo.');"
+                class="m-0 me-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Eliminar grupo">
+              <i class="bi bi-x"></i>
+            </button>
+          </form>
+          {% endif %}
         </div>
+        {% endfor %}
+        {% if not group_tree %}
+        <div class="list-group-item text-muted small py-2">Sin grupos creados</div>
+        {% endif %}
+      </div>
     </div>
-</div>
+  </div>
 
-<div class="card shadow-sm">
-    <div class="card-body p-0">
+  <!-- MAIN: Tabla de credenciales -->
+  <div class="col-12 col-lg-9">
+    <!-- Filtros -->
+    <div class="card shadow-sm mb-3">
+      <div class="card-body py-2">
+        <div class="row g-2">
+          <div class="col-md-5">
+            <div class="input-group input-group-sm">
+              <span class="input-group-text"><i class="bi bi-search"></i></span>
+              <input type="text" class="form-control" id="searchInput"
+                     placeholder="Buscar por título o usuario...">
+            </div>
+          </div>
+          <div class="col-md-3">
+            <select class="form-select form-select-sm" id="filterCategory">
+              <option value="">Todas las categorías</option>
+              <option value="server">Servidor</option>
+              <option value="platform">Plataforma</option>
+              <option value="api">API</option>
+              <option value="other">Otra</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <select class="form-select form-select-sm" id="filterExpiry">
+              <option value="">Todas las expiraciones</option>
+              <option value="expired">Expiradas</option>
+              <option value="soon">Expiran en 7 días</option>
+              <option value="ok">Vigentes</option>
+              <option value="none">Sin fecha</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla -->
+    <div class="card shadow-sm">
+      <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover table-striped mb-0 align-middle" id="vaultTable">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Título</th>
-                        <th>Categoría</th>
-                        <th>Usuario</th>
-                        <th>URL</th>
-                        <th class="text-center">Compartida</th>
-                        <th class="text-center">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% if entries %}
-                        {% for entry in entries %}
-                        <tr class="vault-row"
-                            data-title="{{ entry.title | lower }}"
-                            data-username="{{ entry.username | lower }}"
-                            data-category="{{ entry.category }}">
-                            <td>
-                                <strong>
-                                    <a href="{{ url_for('vault.detail', entry_id=entry.id) }}"
-                                       class="text-decoration-none text-dark">
-                                        <i class="bi bi-key me-1 text-secondary"></i>{{ entry.title }}
-                                    </a>
-                                </strong>
-                            </td>
-                            <td>
-                                {% if entry.category == 'server' %}
-                                    <span class="badge bg-primary">Servidor</span>
-                                {% elif entry.category == 'platform' %}
-                                    <span class="badge bg-purple" style="background-color: #6f42c1;">Plataforma</span>
-                                {% elif entry.category == 'api' %}
-                                    <span class="badge bg-warning text-dark">API</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Otra</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="font-monospace small">{{ entry.username or '—' }}</span>
-                            </td>
-                            <td>
-                                {% if entry.url %}
-                                <a href="{{ entry.url }}" target="_blank" rel="noopener noreferrer"
-                                   class="text-truncate d-inline-block text-decoration-none"
-                                   style="max-width: 200px;" title="{{ entry.url }}">
-                                    <i class="bi bi-link-45deg"></i> {{ entry.url }}
-                                </a>
-                                {% else %}
-                                <span class="text-muted">—</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                {% if entry.shared %}
-                                    <span class="badge bg-success" title="Visible para todo el equipo">
-                                        <i class="bi bi-people-fill"></i> Sí
-                                    </span>
-                                {% else %}
-                                    <span class="badge bg-light text-dark border" title="Solo tú puedes verla">
-                                        <i class="bi bi-lock-fill"></i> No
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                <div class="d-flex justify-content-center gap-1">
-                                    <a href="{{ url_for('vault.detail', entry_id=entry.id) }}"
-                                       class="btn btn-sm btn-primary" title="Ver detalles">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                    {% if current_user.is_admin or entry.owner_id == current_user.id %}
-                                    <a href="{{ url_for('vault.edit', entry_id=entry.id) }}"
-                                       class="btn btn-sm btn-warning text-dark" title="Editar">
-                                        <i class="bi bi-pencil"></i>
-                                    </a>
-                                    <button type="button" class="btn btn-sm btn-danger"
-                                            title="Eliminar"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#modalEliminar"
-                                            data-entry-id="{{ entry.id }}"
-                                            data-entry-title="{{ entry.title }}">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
+          <table class="table table-hover table-striped mb-0 align-middle" id="vaultTable">
+            <thead class="table-dark">
+              <tr>
+                <th>Título</th>
+                <th>Categoría</th>
+                <th>Grupo</th>
+                <th>Expiración</th>
+                <th class="text-center">Compartida</th>
+                <th class="text-center">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if entries %}
+                {% for entry in entries %}
+                {% set days_left = ((entry.expires_at - now).days) if entry.expires_at else None %}
+                <tr class="vault-row"
+                    data-title="{{ entry.title | lower }}"
+                    data-username="{{ entry.username | lower }}"
+                    data-category="{{ entry.category }}"
+                    data-expiry="{% if not entry.expires_at %}none{% elif days_left < 0 %}expired{% elif days_left <= 7 %}soon{% else %}ok{% endif %}">
+                  <td>
+                    <a href="{{ url_for('vault.detail', entry_id=entry.id) }}"
+                       class="text-decoration-none fw-semibold text-dark">
+                      <i class="bi bi-key me-1 text-secondary"></i>{{ entry.title }}
+                    </a>
+                  </td>
+                  <td>
+                    {% if entry.category == 'server' %}
+                      <span class="badge bg-primary">Servidor</span>
+                    {% elif entry.category == 'platform' %}
+                      <span class="badge" style="background-color:#6f42c1;">Plataforma</span>
+                    {% elif entry.category == 'api' %}
+                      <span class="badge bg-warning text-dark">API</span>
                     {% else %}
-                        <tr id="emptyStateRow">
-                            <td colspan="6">
-                                <div class="text-center py-5 text-muted">
-                                    <i class="bi bi-safe" style="font-size: 3rem;"></i>
-                                    <p class="mt-3 mb-0 fw-semibold">No hay credenciales guardadas.</p>
-                                    <p class="small">Haz clic en "Nueva credencial" para agregar la primera.</p>
-                                </div>
-                            </td>
-                        </tr>
+                      <span class="badge bg-secondary">Otra</span>
                     {% endif %}
-                    <tr id="noResultsRow" class="d-none">
-                        <td colspan="6" class="text-center py-4 text-muted">
-                            <i class="bi bi-search me-2"></i>No se encontraron resultados para los filtros aplicados.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                  </td>
+                  <td>
+                    {% if entry.group %}
+                      <span class="badge bg-light text-dark border">
+                        <i class="bi bi-folder me-1"></i>{{ entry.group.name }}
+                      </span>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if not entry.expires_at %}
+                      <span class="text-muted small">—</span>
+                    {% elif days_left < 0 %}
+                      <span class="badge bg-danger" title="Expirada el {{ entry.expires_at.strftime('%d/%m/%Y') }}">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Expirada
+                      </span>
+                    {% elif days_left <= 7 %}
+                      <span class="badge bg-warning text-dark" title="{{ days_left }} día(s) restantes">
+                        <i class="bi bi-clock-fill me-1"></i>{{ days_left }}d
+                      </span>
+                    {% else %}
+                      <span class="small text-muted">{{ entry.expires_at.strftime('%d/%m/%Y') }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if entry.shared %}
+                      <span class="badge bg-success"><i class="bi bi-people-fill"></i> Sí</span>
+                    {% else %}
+                      <span class="badge bg-light text-dark border"><i class="bi bi-lock-fill"></i> No</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    <div class="d-flex justify-content-center gap-1">
+                      <a href="{{ url_for('vault.detail', entry_id=entry.id) }}"
+                         class="btn btn-sm btn-primary" title="Ver">
+                        <i class="bi bi-eye"></i>
+                      </a>
+                      {% if current_user.is_admin or entry.owner_id == current_user.id %}
+                      <a href="{{ url_for('vault.edit', entry_id=entry.id) }}"
+                         class="btn btn-sm btn-warning text-dark" title="Editar">
+                        <i class="bi bi-pencil"></i>
+                      </a>
+                      <button type="button" class="btn btn-sm btn-danger" title="Eliminar"
+                              data-bs-toggle="modal" data-bs-target="#modalEliminar"
+                              data-entry-id="{{ entry.id }}" data-entry-title="{{ entry.title }}">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr id="emptyStateRow">
+                  <td colspan="6">
+                    <div class="text-center py-5 text-muted">
+                      <i class="bi bi-safe" style="font-size:3rem;"></i>
+                      <p class="mt-3 fw-semibold">No hay credenciales guardadas.</p>
+                      <p class="small">Haz clic en "Nueva credencial" para agregar la primera.</p>
+                    </div>
+                  </td>
+                </tr>
+              {% endif %}
+              <tr id="noResultsRow" class="d-none">
+                <td colspan="6" class="text-center py-4 text-muted">
+                  <i class="bi bi-search me-2"></i>No hay resultados para los filtros aplicados.
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+      </div>
     </div>
+  </div>
 </div>
 
 <!-- Modal Confirmar Eliminación -->
 <div class="modal fade" id="modalEliminar" tabindex="-1" aria-labelledby="modalEliminarLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="modalEliminarLabel">Confirmar Eliminación</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <p>¿Estás seguro de que deseas eliminar la credencial
-                    <strong><span id="modalEliminarTitulo"></span></strong>?
-                </p>
-                <p class="text-danger small">Esta acción no se puede deshacer.</p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <form id="formEliminar" method="POST">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="bi bi-trash me-1"></i> Eliminar
-                    </button>
-                </form>
-            </div>
-        </div>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="modalEliminarLabel">Confirmar Eliminación</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>¿Eliminar la credencial <strong><span id="modalEliminarTitulo"></span></strong>?</p>
+        <p class="text-danger small">Esta acción no se puede deshacer.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="formEliminar" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i>Eliminar</button>
+        </form>
+      </div>
     </div>
+  </div>
 </div>
 
 <script>
-    // Filtro y búsqueda en tiempo real
-    (function () {
-        var searchInput = document.getElementById('searchInput');
-        var filterCategory = document.getElementById('filterCategory');
-        var rows = document.querySelectorAll('.vault-row');
-        var noResultsRow = document.getElementById('noResultsRow');
+(function () {
+  var search = document.getElementById('searchInput');
+  var filterCat = document.getElementById('filterCategory');
+  var filterExp = document.getElementById('filterExpiry');
+  var rows = document.querySelectorAll('.vault-row');
+  var noResults = document.getElementById('noResultsRow');
 
-        function applyFilters() {
-            var query = searchInput.value.trim().toLowerCase();
-            var category = filterCategory.value;
-            var visibleCount = 0;
+  function applyFilters() {
+    var q = search.value.trim().toLowerCase();
+    var cat = filterCat.value;
+    var exp = filterExp.value;
+    var visible = 0;
+    rows.forEach(function (row) {
+      var match = (q === '' || row.dataset.title.includes(q) || row.dataset.username.includes(q))
+                && (cat === '' || row.dataset.category === cat)
+                && (exp === '' || row.dataset.expiry === exp);
+      row.classList.toggle('d-none', !match);
+      if (match) visible++;
+    });
+    if (noResults) noResults.classList.toggle('d-none', visible > 0 || rows.length === 0);
+  }
 
-            rows.forEach(function (row) {
-                var title = row.getAttribute('data-title') || '';
-                var username = row.getAttribute('data-username') || '';
-                var rowCategory = row.getAttribute('data-category') || '';
+  [search, filterCat, filterExp].forEach(function(el) {
+    if (el) el.addEventListener('input', applyFilters);
+    if (el) el.addEventListener('change', applyFilters);
+  });
+})();
 
-                var matchesSearch = query === '' || title.includes(query) || username.includes(query);
-                var matchesCategory = category === '' || rowCategory === category;
-
-                if (matchesSearch && matchesCategory) {
-                    row.classList.remove('d-none');
-                    visibleCount++;
-                } else {
-                    row.classList.add('d-none');
-                }
-            });
-
-            if (noResultsRow) {
-                if (visibleCount === 0 && rows.length > 0) {
-                    noResultsRow.classList.remove('d-none');
-                } else {
-                    noResultsRow.classList.add('d-none');
-                }
-            }
-        }
-
-        if (searchInput) searchInput.addEventListener('input', applyFilters);
-        if (filterCategory) filterCategory.addEventListener('change', applyFilters);
-    })();
-
-    // Modal de eliminación dinámico
-    (function () {
-        var modalEl = document.getElementById('modalEliminar');
-        if (!modalEl) return;
-
-        modalEl.addEventListener('show.bs.modal', function (event) {
-            var btn = event.relatedTarget;
-            var entryId = btn.getAttribute('data-entry-id');
-            var entryTitle = btn.getAttribute('data-entry-title');
-
-            document.getElementById('modalEliminarTitulo').textContent = entryTitle;
-            document.getElementById('formEliminar').setAttribute(
-                'action',
-                '{{ url_for("vault.delete", entry_id=0) }}'.replace('/0/', '/' + entryId + '/')
-            );
-        });
-    })();
+(function () {
+  var modal = document.getElementById('modalEliminar');
+  if (!modal) return;
+  modal.addEventListener('show.bs.modal', function (e) {
+    var btn = e.relatedTarget;
+    document.getElementById('modalEliminarTitulo').textContent = btn.dataset.entryTitle;
+    document.getElementById('formEliminar').action =
+      '{{ url_for("vault.delete", entry_id=0) }}'.replace('/0/', '/' + btn.dataset.entryId + '/');
+  });
+})();
 </script>
 {% endblock %}
