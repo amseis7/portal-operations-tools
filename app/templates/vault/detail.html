@@ -56,6 +56,39 @@
                 </div>
                 <hr class="my-2">
 
+                <!-- Grupo -->
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Grupo</div>
+                    <div class="col-sm-8">
+                        {% if entry.group %}
+                            <span class="badge bg-light text-dark border">
+                                <i class="bi bi-folder me-1"></i>{{ entry.group.name }}
+                            </span>
+                        {% else %}
+                            <span class="text-muted">Sin grupo</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
+                <!-- Expiración -->
+                {% set days_left = ((entry.expires_at - now).days) if entry.expires_at else None %}
+                <div class="row mb-3">
+                    <div class="col-sm-4 text-muted fw-semibold">Expira</div>
+                    <div class="col-sm-8">
+                        {% if not entry.expires_at %}
+                            <span class="text-muted">Sin fecha de expiración</span>
+                        {% elif days_left < 0 %}
+                            <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i>Expirada el {{ entry.expires_at.strftime('%d/%m/%Y') }}</span>
+                        {% elif days_left <= 7 %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-clock-fill me-1"></i>Expira en {{ days_left }} día(s) — {{ entry.expires_at.strftime('%d/%m/%Y') }}</span>
+                        {% else %}
+                            <span>{{ entry.expires_at.strftime('%d/%m/%Y') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <hr class="my-2">
+
                 <div class="row mb-3">
                     <div class="col-sm-4 text-muted fw-semibold">
                         {% if entry.category == 'api' %}API Client{% else %}Usuario{% endif %}
@@ -138,6 +171,35 @@
                     </div>
                 </div>
             </div>
+
+            {% if custom_fields %}
+            <div class="card shadow-sm mt-3">
+                <div class="card-header py-2 fw-semibold">
+                    <i class="bi bi-list-columns me-1"></i>Campos personalizados
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                        <tbody>
+                            {% for field in custom_fields %}
+                            <tr>
+                                <th class="text-muted fw-normal ps-3" style="width:35%">{{ field.key }}</th>
+                                <td>
+                                    {% if field.protected %}
+                                        <span class="font-monospace">••••••••</span>
+                                        <span class="badge bg-light text-muted border ms-1">
+                                            <i class="bi bi-shield-lock"></i>
+                                        </span>
+                                    {% else %}
+                                        <span class="font-monospace">{{ field.value }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
 
             {% if current_user.is_admin or entry.owner_id == current_user.id %}
             <div class="card-footer bg-light d-flex justify-content-end gap-2">
