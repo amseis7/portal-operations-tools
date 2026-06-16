@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Revisar importación — Vault{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault</a></li>
+    <li class="breadcrumb-item"><a href="{{ url_for('vault.import_kdbx') }}">Importar KeePass</a></li>
+    <li class="breadcrumb-item active">Revisar</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<!-- Progreso del wizard -->
+<div class="d-flex align-items-center mb-4 gap-3" style="max-width:500px;">
+  <span class="badge bg-success rounded-pill px-3 py-2"><i class="bi bi-check me-1"></i>1 Subir</span>
+  <div class="flex-grow-1 border-top border-2 border-success"></div>
+  <span class="badge bg-primary rounded-pill px-3 py-2">2 Revisar</span>
+  <div class="flex-grow-1 border-top border-2"></div>
+  <span class="badge bg-light text-dark border rounded-pill px-3 py-2">3 Confirmar</span>
+</div>
+
+<form method="POST" action="{{ url_for('vault.import_confirm') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+  <!-- Entradas nuevas -->
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">
+        <i class="bi bi-plus-circle text-success me-1"></i>
+        Entradas nuevas ({{ new_entries | length }})
+      </span>
+      {% if new_entries %}
+      <div>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSelectAll">Seleccionar todas</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary ms-1" id="btnDeselectAll">Ninguna</button>
+      </div>
+      {% endif %}
+    </div>
+    <div class="card-body p-0">
+      {% if new_entries %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:2rem;"></th>
+              <th>Título</th>
+              <th>Usuario</th>
+              <th>Grupo (kdbx)</th>
+              <th>Expira</th>
+              <th>Campos extra</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in new_entries %}
+            <tr>
+              <td class="text-center">
+                <input class="form-check-input new-check" type="checkbox"
+                       name="import_new" value="{{ e.uuid }}" checked>
+              </td>
+              <td class="fw-semibold">{{ e.title }}</td>
+              <td class="font-monospace small">{{ e.username or '—' }}</td>
+              <td class="small text-muted">{{ e.group_path or '—' }}</td>
+              <td class="small">{{ e.expires_at or '—' }}</td>
+              <td class="small text-muted">{{ e.custom_fields | length }} campo(s)</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-check-circle me-1"></i>No hay entradas nuevas en el archivo.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Conflictos -->
+  {% if conflicts %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header">
+      <span class="fw-semibold">
+        <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+        Conflictos — UUID ya existe ({{ conflicts | length }})
+      </span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Título</th>
+              <th>Vault actual</th>
+              <th>KeePass importado</th>
+              <th style="width:11rem;">¿Cuál conservar?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in conflicts %}
+            <tr class="align-middle">
+              <td class="fw-semibold">{{ c.kdbx.title }}</td>
+              <td class="small text-muted">
+                Usuario: {{ c.vault.username }}<br>
+                Modificado: {{ c.vault.updated_at }}
+              </td>
+              <td class="small text-muted">
+                Usuario: {{ c.kdbx.username }}<br>
+                Expira: {{ c.kdbx.expires_at or '—' }}
+              </td>
+              <td>
+                <div class="d-flex flex-column gap-1">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio"
+                           name="conflict_{{ c.kdbx.uuid }}" value="vault" checked
+                           id="cv_{{ loop.index }}">
+                    <label class="form-check-label small" for="cv_{{ loop.index }}">
+                      <i class="bi bi-database me-1 text-primary"></i>Conservar Vault
+                    </label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio"
+                           name="conflict_{{ c.kdbx.uuid }}" value="kdbx"
+                           id="ck_{{ loop.index }}">
+                    <label class="form-check-label small" for="ck_{{ loop.index }}">
+                      <i class="bi bi-file-earmark-lock me-1 text-warning"></i>Usar KeePass
+                    </label>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="d-flex justify-content-between">
+    <a href="{{ url_for('vault.import_kdbx') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Volver a subir
+    </a>
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-check-lg me-1"></i>Confirmar importación
+    </button>
+  </div>
+</form>
+
+<script>
+(function(){
+  var all = document.querySelectorAll('.new-check');
+  var btnAll = document.getElementById('btnSelectAll');
+  var btnNone = document.getElementById('btnDeselectAll');
+  if (btnAll) btnAll.addEventListener('click', function(){ all.forEach(function(c){ c.checked=true; }); });
+  if (btnNone) btnNone.addEventListener('click', function(){ all.forEach(function(c){ c.checked=false; }); });
+})();
+</script>
+{% endblock %}

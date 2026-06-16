@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Importar .kdbx — Vault{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault</a></li>
+    <li class="breadcrumb-item active">Importar KeePass</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-5">
+
+    <!-- Progreso del wizard -->
+    <div class="d-flex align-items-center mb-4 gap-3">
+      <span class="badge bg-primary rounded-pill px-3 py-2">1 Subir</span>
+      <div class="flex-grow-1 border-top border-2"></div>
+      <span class="badge bg-light text-dark border rounded-pill px-3 py-2">2 Revisar</span>
+      <div class="flex-grow-1 border-top border-2"></div>
+      <span class="badge bg-light text-dark border rounded-pill px-3 py-2">3 Confirmar</span>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header bg-dark text-white">
+        <i class="bi bi-upload me-2"></i>Importar archivo KeePass (.kdbx)
+      </div>
+      <div class="card-body">
+        <div class="alert alert-info py-2 small">
+          <i class="bi bi-info-circle me-1"></i>
+          Solo administradores pueden importar. Las credenciales nuevas quedarán como propias.
+          Los conflictos de UUID se resolverán en el siguiente paso.
+        </div>
+
+        <form method="POST" action="{{ url_for('vault.import_kdbx') }}"
+              enctype="multipart/form-data" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div class="mb-3">
+            <label for="kdbx_file" class="form-label fw-bold">Archivo .kdbx</label>
+            <input type="file" class="form-control" id="kdbx_file" name="kdbx_file"
+                   accept=".kdbx" required>
+            <div class="form-text">Selecciona el archivo KeePass a importar.</div>
+          </div>
+
+          <div class="mb-4">
+            <label for="kdbx_password" class="form-label fw-bold">Contraseña maestra del archivo</label>
+            <div class="input-group">
+              <input type="password" class="form-control" id="kdbx_password" name="kdbx_password"
+                     placeholder="Contraseña del archivo .kdbx" required>
+              <button class="btn btn-outline-secondary" type="button" id="btnTogglePw">
+                <i class="bi bi-eye" id="pwEye"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('vault.index') }}" class="btn btn-secondary">
+              <i class="bi bi-x-lg me-1"></i>Cancelar
+            </a>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-arrow-right me-1"></i>Siguiente
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var inp=document.getElementById('kdbx_password'),btn=document.getElementById('btnTogglePw'),ico=document.getElementById('pwEye');
+  btn.addEventListener('click',function(){var s=inp.type==='password';inp.type=s?'text':'password';ico.className=s?'bi bi-eye-slash':'bi bi-eye';});
+})();
+</script>
+{% endblock %}
