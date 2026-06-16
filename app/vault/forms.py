@@ -1,5 +1,8 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SelectField, TextAreaField, BooleanField, SubmitField
+from wtforms import (
+    StringField, PasswordField, SelectField, TextAreaField,
+    BooleanField, SubmitField,
+)
 from wtforms.validators import DataRequired, Length, Optional, URL
 
 
@@ -18,6 +21,11 @@ class VaultEntryForm(FlaskForm):
         ],
         validators=[DataRequired()],
     )
+    group_id = SelectField(
+        "Grupo",
+        validators=[Optional()],
+        default="",
+    )
     username = StringField(
         "Usuario",
         validators=[DataRequired(), Length(max=120)],
@@ -29,6 +37,10 @@ class VaultEntryForm(FlaskForm):
     url = StringField(
         "URL",
         validators=[Optional(), URL(), Length(max=250)],
+    )
+    expires_at = StringField(
+        "Fecha de expiración",
+        validators=[Optional()],
     )
     notes = TextAreaField(
         "Notas",
