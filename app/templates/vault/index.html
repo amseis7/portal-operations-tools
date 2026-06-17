@@ -68,12 +68,28 @@
            class="list-group-item list-group-item-action py-2 {% if not selected_group %}active{% endif %}">
           <i class="bi bi-collection me-1"></i> Todas
         </a>
+        {# Compute which groups have children so we can show the toggle chevron #}
+        {% set ns = namespace(parent_ids=[]) %}
         {% for g, depth in group_tree %}
-        <div class="d-flex align-items-center">
+          {% if g.parent_id %}{% set ns.parent_ids = ns.parent_ids + [g.parent_id] %}{% endif %}
+        {% endfor %}
+        {% for g, depth in group_tree %}
+        <div class="d-flex align-items-center group-tree-item"
+             data-gid="{{ g.id }}" data-pid="{{ g.parent_id or '' }}">
+          <span style="width:{{ depth * 1.1 }}rem;flex-shrink:0;"></span>
+          {% if g.id in ns.parent_ids %}
+          <button class="btn btn-link p-0 me-1 text-muted group-toggle"
+                  style="width:1.1rem;line-height:1;flex-shrink:0;"
+                  title="Plegar/desplegar subgrupos">
+            <i class="bi bi-chevron-down small"></i>
+          </button>
+          {% else %}
+          <span style="width:1.1rem;flex-shrink:0;" class="me-1"></span>
+          {% endif %}
           <a href="{{ url_for('vault.index', group=g.id) }}"
              class="list-group-item list-group-item-action py-2 flex-grow-1 border-0
                     {% if selected_group == g.id %}active{% endif %}"
-             style="padding-left: {{ 1 + depth * 1.2 }}rem;">
+             style="padding-left:0.5rem;">
             <i class="bi bi-folder{% if selected_group == g.id %}-fill{% endif %} me-1"></i>
             {{ g.name }}
           </a>
@@ -298,6 +314,63 @@
     if (el) el.addEventListener('input', applyFilters);
     if (el) el.addEventListener('change', applyFilters);
   });
+})();
+
+(function () {
+  var STORAGE_KEY = 'vault_collapsed_groups';
+  var collapsed = new Set(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'));
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...collapsed]));
+  }
+
+  // Returns true if any ancestor of gid is in the collapsed set
+  function isHidden(gid) {
+    var el = document.querySelector('[data-gid="' + gid + '"]');
+    if (!el) return false;
+    var pid = el.dataset.pid;
+    if (!pid) return false;
+    var pidNum = parseInt(pid);
+    return collapsed.has(pidNum) || isHidden(pidNum);
+  }
+
+  function updateVisibility() {
+    document.querySelectorAll('.group-tree-item').forEach(function (el) {
+      var gid = parseInt(el.dataset.gid);
+      el.classList.toggle('d-none', isHidden(gid));
+      var ico = el.querySelector('.group-toggle i');
+      if (ico) {
+        ico.className = collapsed.has(gid) ? 'bi bi-chevron-right small' : 'bi bi-chevron-down small';
+      }
+    });
+  }
+
+  // Ensure the currently selected group and its ancestors are expanded on page load
+  var selectedGid = {{ selected_group | tojson }};
+  if (selectedGid) {
+    (function expand(gid) {
+      var el = document.querySelector('[data-gid="' + gid + '"]');
+      if (!el) return;
+      var pid = el.dataset.pid;
+      if (!pid) return;
+      var pidNum = parseInt(pid);
+      collapsed.delete(pidNum);
+      expand(pidNum);
+    })(selectedGid);
+    save();
+  }
+
+  document.querySelectorAll('.group-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var gid = parseInt(this.closest('.group-tree-item').dataset.gid);
+      if (collapsed.has(gid)) { collapsed.delete(gid); } else { collapsed.add(gid); }
+      save();
+      updateVisibility();
+    });
+  });
+
+  updateVisibility();
 })();
 
 (function () {
