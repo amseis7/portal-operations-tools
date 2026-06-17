@@ -408,10 +408,22 @@ def import_preview():
     with open(tmp_json, encoding="utf-8") as f:
         data = json_mod.load(f)
 
+    # Deduplicate group paths for display in preview
+    seen_paths: set = set()
+    group_paths = []
+    for entry in data["new"] + [c["kdbx"] for c in data["conflicts"]]:
+        path = entry.get("group_path") or []
+        if path:
+            key = tuple(path)
+            if key not in seen_paths:
+                seen_paths.add(key)
+                group_paths.append(path)
+
     return render_template(
         "vault/import_preview.html",
         new_entries=data["new"],
         conflicts=data["conflicts"],
+        group_paths=group_paths,
     )
 
 

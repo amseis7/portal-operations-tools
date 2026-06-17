@@ -25,15 +25,13 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
 
   <!-- Nota grupos -->
-  {% set all_paths = (new_entries | map(attribute='group_path') | list) + (conflicts | map(attribute='kdbx') | map(attribute='group_path') | list) %}
-  {% set unique_paths = all_paths | select | unique | list %}
-  {% if unique_paths %}
+  {% if group_paths %}
   <div class="alert alert-info py-2 small mb-3">
     <i class="bi bi-folder-plus me-1"></i>
     <strong>Grupos del archivo:</strong>
     Los siguientes grupos serán creados automáticamente si no existen en el Vault:
     <ul class="mb-0 mt-1">
-      {% for path in unique_paths %}
+      {% for path in group_paths %}
       <li><i class="bi bi-folder me-1 text-warning"></i>{{ path | join(' / ') }}</li>
       {% endfor %}
     </ul>
