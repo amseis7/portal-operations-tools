@@ -310,27 +310,38 @@ def import_kdbx():
         return render_template("vault/import.html")
 
     file = request.files.get("kdbx_file")
-    password = request.form.get("kdbx_password", "")
+    password = request.form.get("kdbx_password", "") or None
+    keyfile_upload = request.files.get("kdbx_keyfile")
 
     if not file or not file.filename.endswith(".kdbx"):
         flash("Debes subir un archivo .kdbx válido.", "danger")
         return redirect(url_for("vault.import_kdbx"))
 
-    tmp_kdbx = os.path.join(
-        current_app.instance_path,
-        f"import_{uuid_mod.uuid4().hex}.kdbx",
-    )
+    if not password and (not keyfile_upload or not keyfile_upload.filename):
+        flash("Debes proporcionar una contraseña, un archivo de clave, o ambos.", "danger")
+        return redirect(url_for("vault.import_kdbx"))
+
+    uid = uuid_mod.uuid4().hex
+    tmp_kdbx = os.path.join(current_app.instance_path, f"import_{uid}.kdbx")
+    tmp_key = None
+
     file.save(tmp_kdbx)
+
+    if keyfile_upload and keyfile_upload.filename:
+        tmp_key = os.path.join(current_app.instance_path, f"import_{uid}.keyx")
+        keyfile_upload.save(tmp_key)
 
     try:
         from pykeepass import PyKeePass
-        kp = PyKeePass(tmp_kdbx, password=password)
+        kp = PyKeePass(tmp_kdbx, password=password, keyfile=tmp_key)
     except Exception:
-        flash("No se pudo abrir el archivo. Verifica que la contraseña sea correcta.", "danger")
+        flash("No se pudo abrir el archivo. Verifica la contraseña y/o el archivo de clave.", "danger")
         return redirect(url_for("vault.import_kdbx"))
     finally:
         if os.path.exists(tmp_kdbx):
             os.remove(tmp_kdbx)
+        if tmp_key and os.path.exists(tmp_key):
+            os.remove(tmp_key)
 
     existing_by_uuid = {e.uuid: e for e in VaultEntry.query.all()}
 

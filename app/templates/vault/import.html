@@ -45,15 +45,31 @@
             <div class="form-text">Selecciona el archivo KeePass a importar.</div>
           </div>
 
-          <div class="mb-4">
-            <label for="kdbx_password" class="form-label fw-bold">Contraseña maestra del archivo</label>
+          <div class="mb-3">
+            <label for="kdbx_password" class="form-label fw-bold">Contraseña maestra</label>
             <div class="input-group">
               <input type="password" class="form-control" id="kdbx_password" name="kdbx_password"
-                     placeholder="Contraseña del archivo .kdbx" required>
+                     placeholder="Dejar vacío si solo usa archivo de clave">
               <button class="btn btn-outline-secondary" type="button" id="btnTogglePw">
                 <i class="bi bi-eye" id="pwEye"></i>
               </button>
             </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="kdbx_keyfile" class="form-label fw-bold">
+              Archivo de clave <span class="text-muted fw-normal">(opcional — .keyx / .key)</span>
+            </label>
+            <input type="file" class="form-control" id="kdbx_keyfile" name="kdbx_keyfile"
+                   accept=".keyx,.key,.xml">
+            <div class="form-text">
+              Solo si tu base de datos KeePass requiere un archivo de clave además de (o en vez de) la contraseña.
+            </div>
+          </div>
+
+          <div class="alert alert-secondary py-2 small mb-3">
+            <i class="bi bi-shield-lock me-1"></i>
+            <strong>Combinaciones válidas:</strong> solo contraseña · solo archivo de clave · contraseña + archivo de clave
           </div>
 
           <div class="d-flex justify-content-end gap-2">
