@@ -351,7 +351,7 @@ def import_kdbx():
     for kp_entry in kp.entries:
         entry_uuid = str(kp_entry.uuid) if kp_entry.uuid else str(uuid_mod.uuid4())
         custom = {k: v for k, v in (kp_entry.custom_properties or {}).items()}
-        group_path = " / ".join(kp_entry.group.path) if kp_entry.group and hasattr(kp_entry.group, "path") else ""
+        group_path = [g for g in kp_entry.group.path if g] if kp_entry.group and hasattr(kp_entry.group, "path") else []
 
         entry_data = {
             "uuid": entry_uuid,
@@ -461,6 +461,23 @@ def import_confirm():
     return redirect(url_for("vault.index"))
 
 
+def _get_or_create_group_chain(path_list):
+    """Find or create VaultGroup hierarchy from a list of names. Returns leaf group id or None."""
+    if not path_list:
+        return None
+    parent_id = None
+    for name in path_list:
+        if not name:
+            continue
+        group = VaultGroup.query.filter_by(name=name, parent_id=parent_id).first()
+        if not group:
+            group = VaultGroup(name=name, parent_id=parent_id)
+            db.session.add(group)
+            db.session.flush()
+        parent_id = group.id
+    return parent_id
+
+
 def _create_entry_from_import(data):
     expires_at = None
     if data.get("expires_at"):
@@ -480,6 +497,7 @@ def _create_entry_from_import(data):
         shared=False,
         owner_id=current_user.id,
         expires_at=expires_at,
+        group_id=_get_or_create_group_chain(data.get("group_path") or []),
     )
     db.session.add(entry)
     db.session.flush()
@@ -499,6 +517,7 @@ def _update_entry_from_import(entry, data):
     entry.password_enc = encrypt(data["password"])
     entry.url = data["url"] or None
     entry.notes_enc = encrypt(data["notes"]) if data.get("notes") else None
+    entry.group_id = _get_or_create_group_chain(data.get("group_path") or [])
     if data.get("expires_at"):
         try:
             entry.expires_at = datetime.strptime(data["expires_at"], "%Y-%m-%d")
