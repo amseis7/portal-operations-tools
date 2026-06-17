@@ -151,7 +151,7 @@
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
   document.getElementById('btnAddCf').addEventListener('click', function(){ fields.push({key:'',value:'',protected:false}); render(); });
-  document.querySelector('form').addEventListener('submit', serialize);
+  document.getElementById('custom_fields_json').closest('form').addEventListener('submit', serialize);
   render();
 })();
 </script>
