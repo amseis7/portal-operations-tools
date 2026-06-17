@@ -123,13 +123,27 @@ def index():
         entries = base_q.order_by(VaultEntry.created_at.desc()).all()
 
     now = datetime.utcnow()
+    sync_configured = bool(current_app.config.get("VAULT_KDBX_PATH"))
     return render_template(
         "vault/index.html",
         entries=entries,
         group_tree=group_tree,
         selected_group=selected_group,
         now=now,
+        sync_configured=sync_configured,
+        sync_last_at=vault_sync.last_sync_at,
+        sync_last_ok=vault_sync.last_sync_ok,
+        sync_last_entries=vault_sync.last_sync_entries,
     )
+
+
+@bp.route("/sync-ahora", methods=["POST"])
+@login_required
+@admin_required
+def sync_ahora():
+    vault_sync.trigger_async(current_app._get_current_object())
+    flash("Sincronización con KeePass iniciada en segundo plano.", "info")
+    return redirect(url_for("vault.index"))
 
 
 @bp.route("/new", methods=["GET", "POST"])
@@ -279,6 +293,7 @@ def group_new():
     group = VaultGroup(name=name, parent_id=parent_id or None)
     db.session.add(group)
     db.session.commit()
+    vault_sync.trigger_async(current_app._get_current_object())
     flash(f'Grupo "{name}" creado.', "success")
     return redirect(url_for("vault.index"))
 
@@ -294,6 +309,7 @@ def group_delete(group_id):
     VaultGroup.query.filter_by(parent_id=group_id).update({"parent_id": None})
     db.session.delete(group)
     db.session.commit()
+    vault_sync.trigger_async(current_app._get_current_object())
     flash(f'Grupo "{group.name}" eliminado. Las entradas y subgrupos quedaron sin grupo.', "info")
     return redirect(url_for("vault.index"))
 

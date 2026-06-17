@@ -1,6 +1,7 @@
 import os
 import stat
 import threading
+from datetime import datetime
 from uuid import UUID
 
 from flask import current_app
@@ -9,13 +10,16 @@ from app.vault.crypto import decrypt
 
 
 class VaultSyncService:
-    """Exports all vault entries to a .kdbx file on a network path (SharePoint).
+    """Exports all vault entries to a .kdbx file on a network path.
     The file is set read-only after writing so KeePass opens it in read-only mode.
     Sync runs in a background daemon thread to avoid blocking HTTP responses.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
+        self.last_sync_at = None      # datetime UTC of last attempt
+        self.last_sync_ok = None      # True=success, False=error, None=never
+        self.last_sync_entries = 0    # number of entries written
 
     def trigger_async(self, app):
         """Dispatch sync in a background thread. Safe to call after db.session.commit()."""
@@ -37,6 +41,7 @@ class VaultSyncService:
 
         path = current_app.config["VAULT_KDBX_PATH"]
         password = current_app.config["VAULT_KDBX_PASSWORD"]
+        entry_count = 0
 
         try:
             # Lift read-only attribute so we can overwrite the file
@@ -84,13 +89,20 @@ class VaultSyncService:
                             )
                         except Exception as exc:
                             current_app.logger.warning("Vault sync: skipping field %r on entry %d: %s", field.field_key, entry.id, exc)
+
+                    entry_count += 1
                 except Exception as exc:
                     current_app.logger.warning("Vault sync: skipping entry %d (%r): %s", entry.id, entry.title, exc)
 
             kp.save()
+            self.last_sync_ok = True
+            self.last_sync_entries = entry_count
+            current_app.logger.info("Vault kdbx sync OK — %d entradas → %s", entry_count, path)
         except Exception as exc:
             current_app.logger.error("Vault kdbx sync failed: %s", exc)
+            self.last_sync_ok = False
         finally:
+            self.last_sync_at = datetime.utcnow()
             if os.path.exists(path):
                 os.chmod(path, stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
 

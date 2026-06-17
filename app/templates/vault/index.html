@@ -27,7 +27,7 @@
 
 <div class="row g-3">
 
-  <!-- SIDEBAR: Grupos -->
+  <!-- SIDEBAR: Grupos + Sync -->
   <div class="col-12 col-lg-3">
     <div class="card shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center py-2">
@@ -110,6 +110,42 @@
         {% endif %}
       </div>
     </div>
+
+    {% if current_user.is_admin and sync_configured %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold small"><i class="bi bi-arrow-repeat me-1"></i>Sync KeePass</span>
+        {% if sync_last_ok == true %}
+          <i class="bi bi-check-circle-fill text-success" title="Última sync exitosa"></i>
+        {% elif sync_last_ok == false %}
+          <i class="bi bi-x-circle-fill text-danger" title="Última sync con error — revisar logs"></i>
+        {% else %}
+          <i class="bi bi-dash-circle text-muted" title="Sin sync registrada aún"></i>
+        {% endif %}
+      </div>
+      <div class="card-body py-2 px-3">
+        <div class="small mb-2">
+          {% if sync_last_at %}
+            <div class="text-muted">Última: <strong>{{ sync_last_at.strftime('%d/%m %H:%M') }}</strong> UTC</div>
+            {% if sync_last_ok %}
+            <div class="text-success">{{ sync_last_entries }} entrada(s) escritas</div>
+            {% else %}
+            <div class="text-danger">Error — revisar logs del servidor</div>
+            {% endif %}
+          {% else %}
+            <div class="text-muted">Sin sincronización registrada.</div>
+            <div class="text-muted" style="font-size:.75rem;">Se sincroniza automáticamente al guardar cambios.</div>
+          {% endif %}
+        </div>
+        <form method="POST" action="{{ url_for('vault.sync_ahora') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+            <i class="bi bi-arrow-repeat me-1"></i>Sync ahora
+          </button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <!-- MAIN: Tabla de credenciales -->
