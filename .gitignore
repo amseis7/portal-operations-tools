@@ -27,6 +27,7 @@ instance/
 # --- Secrets ---
 *.pem
 *.crt
+certificado/
 certificado.py
 migrar DB modificada.txt
 Portal-Operations-Tools.spec
