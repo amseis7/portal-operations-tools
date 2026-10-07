@@ -3,10 +3,19 @@ import os
 import socket
 import logging
 from dotenv import load_dotenv
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+load_dotenv(os.path.join(BASE_DIR, '.env'))
+
 from cheroot.wsgi import Server as WSGIServer
 from cheroot.ssl.builtin import BuiltinSSLAdapter
 from flask_migrate import upgrade, stamp
 from sqlalchemy import inspect
+
 from app import create_app, db
 from app.models import User
 
@@ -15,15 +24,8 @@ logger = logging.getLogger(__name__)
 PORT = 8443
 THREADS = 10
 
-CERT_FILE = 'certificado\cert.pem'
-KEY_FILE = 'certificado\key.pem'
-
-if getattr(sys, 'frozen', False):
-    BASE_DIR = os.path.dirname(sys.executable)
-else:
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+CERT_FILE = os.path.join('certificado', 'cert.pem')
+KEY_FILE = os.path.join('certificado', 'key.pem')
 
 INSTANCE_PATH = os.path.join(BASE_DIR, 'instance')
 
