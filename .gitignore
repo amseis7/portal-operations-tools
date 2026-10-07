@@ -50,8 +50,8 @@ Portal-Operations-Tools.spec
 Docker
 agency-agents/
 .opencode/
-.claude/
+#.claude/
 legacy/
-CLAUDE.md
+#CLAUDE.md
 repomix-output.xml
 SPECKIT_vault_csirt.md
