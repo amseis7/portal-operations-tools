@@ -32,15 +32,12 @@
     <div class="card shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center py-2">
         <span class="fw-semibold"><i class="bi bi-folder2 me-1"></i>Grupos</span>
-        {% if current_user.is_admin %}
         <button class="btn btn-sm btn-outline-primary py-0 px-1" data-bs-toggle="collapse"
                 data-bs-target="#collapseNuevoGrupo" title="Nuevo grupo">
           <i class="bi bi-plus"></i>
         </button>
-        {% endif %}
       </div>
 
-      {% if current_user.is_admin %}
       <div class="collapse" id="collapseNuevoGrupo">
         <div class="card-body border-bottom py-2">
           <form method="POST" action="{{ url_for('vault.group_new') }}">
@@ -61,7 +58,6 @@
           </form>
         </div>
       </div>
-      {% endif %}
 
       <div class="list-group list-group-flush" id="groupTree">
         <a href="{{ url_for('vault.index') }}"
@@ -93,7 +89,6 @@
             <i class="bi bi-folder{% if selected_group == g.id %}-fill{% endif %} me-1"></i>
             {{ g.name }}
           </a>
-          {% if current_user.is_admin %}
           <form method="POST" action="{{ url_for('vault.group_delete', group_id=g.id) }}"
                 onsubmit="return confirm('¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo.');"
                 class="m-0 me-1">
@@ -102,7 +97,6 @@
               <i class="bi bi-x"></i>
             </button>
           </form>
-          {% endif %}
         </div>
         {% endfor %}
         {% if not group_tree %}
@@ -110,6 +104,17 @@
         {% endif %}
       </div>
     </div>
+
+    {% if current_user.is_admin and not sync_configured %}
+    <div class="card shadow-sm mt-3 border-dashed">
+      <div class="card-body py-2 px-3 text-center">
+        <div class="text-muted small mb-2"><i class="bi bi-arrow-repeat me-1"></i>Sync KeePass no configurado</div>
+        <a href="{{ url_for('vault.sync_settings') }}" class="btn btn-sm btn-outline-secondary w-100">
+          <i class="bi bi-gear me-1"></i>Configurar sync
+        </a>
+      </div>
+    </div>
+    {% endif %}
 
     {% if current_user.is_admin and sync_configured %}
     <div class="card shadow-sm mt-3">
@@ -137,12 +142,17 @@
             <div class="text-muted" style="font-size:.75rem;">Se sincroniza automáticamente al guardar cambios.</div>
           {% endif %}
         </div>
-        <form method="POST" action="{{ url_for('vault.sync_ahora') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-          <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
-            <i class="bi bi-arrow-repeat me-1"></i>Sync ahora
-          </button>
-        </form>
+        <div class="d-flex gap-1">
+          <form method="POST" action="{{ url_for('vault.sync_ahora') }}" class="flex-grow-1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+              <i class="bi bi-arrow-repeat me-1"></i>Sync ahora
+            </button>
+          </form>
+          <a href="{{ url_for('vault.sync_settings') }}" class="btn btn-sm btn-outline-secondary" title="Configurar sync">
+            <i class="bi bi-gear"></i>
+          </a>
+        </div>
       </div>
     </div>
     {% endif %}
@@ -261,7 +271,6 @@
                          class="btn btn-sm btn-primary" title="Ver">
                         <i class="bi bi-eye"></i>
                       </a>
-                      {% if current_user.is_admin or entry.owner_id == current_user.id %}
                       <a href="{{ url_for('vault.edit', entry_id=entry.id) }}"
                          class="btn btn-sm btn-warning text-dark" title="Editar">
                         <i class="bi bi-pencil"></i>
@@ -271,7 +280,6 @@
                               data-entry-id="{{ entry.id }}" data-entry-title="{{ entry.title }}">
                         <i class="bi bi-trash"></i>
                       </button>
-                      {% endif %}
                     </div>
                   </td>
                 </tr>

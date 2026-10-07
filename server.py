@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 PORT = 8443
 THREADS = 10
 
-CERT_FILE = 'cert.pem'
-KEY_FILE = 'key.pem'
+CERT_FILE = 'certificado\cert.pem'
+KEY_FILE = 'certificado\key.pem'
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -123,6 +123,9 @@ if __name__ == "__main__":
         cert_path = os.path.join(BASE_DIR, CERT_FILE)
         key_path = os.path.join(BASE_DIR, KEY_FILE)
 
+        print(os.path.exists(cert_path))
+        print(os.path.exists(key_path))
+
         usar_ssl = False
         if os.path.exists(cert_path) and os.path.exists(key_path):
             usar_ssl = True
@@ -146,6 +149,7 @@ if __name__ == "__main__":
 
         _diag(f"Iniciando WSGIServer en 0.0.0.0:{PORT}")
         server = WSGIServer(('0.0.0.0', PORT), app, numthreads=THREADS)
+        server.socket_timeout = 60  # subir a 60 s para uploads/imports pesados (default: 10 s)
 
         if usar_ssl:
             server.ssl_adapter = BuiltinSSLAdapter(cert_path, key_path)

@@ -13,7 +13,7 @@ from werkzeug.exceptions import NotFound
 from app.extensions import db
 from app.utils import admin_required
 from app.vault import bp
-from app.vault.models import VaultEntry, VaultGroup, VaultEntryField
+from app.vault.models import VaultEntry, VaultGroup, VaultEntryField, VaultSyncConfig
 from app.vault.crypto import encrypt, decrypt
 from app.vault.forms import VaultEntryForm
 from app.vault.sync import vault_sync
@@ -123,7 +123,10 @@ def index():
         entries = base_q.order_by(VaultEntry.created_at.desc()).all()
 
     now = datetime.utcnow()
-    sync_configured = bool(current_app.config.get("VAULT_KDBX_PATH"))
+    db_cfg = VaultSyncConfig.query.first()
+    sync_configured = bool(
+        (db_cfg and db_cfg.kdbx_path) or current_app.config.get("VAULT_KDBX_PATH")
+    )
     return render_template(
         "vault/index.html",
         entries=entries,
@@ -218,8 +221,6 @@ def reveal(entry_id):
 @login_required
 def edit(entry_id):
     entry = _get_entry_or_404(entry_id)
-    if not (current_user.is_admin or entry.owner_id == current_user.id):
-        abort(403)
 
     form = VaultEntryForm(obj=entry)
     _populate_group_choices(form)
@@ -264,8 +265,6 @@ def edit(entry_id):
 @login_required
 def delete(entry_id):
     entry = _get_entry_or_404(entry_id)
-    if not (current_user.is_admin or entry.owner_id == current_user.id):
-        abort(403)
     title, eid = entry.title, entry.id
     log_audit("vault", "delete", "entry", eid, title)
     db.session.delete(entry)
@@ -278,12 +277,11 @@ def delete(entry_id):
 
 
 # ---------------------------------------------------------------------------
-# Group management (admin only)
+# Group management
 # ---------------------------------------------------------------------------
 
 @bp.route("/grupos/nuevo", methods=["POST"])
 @login_required
-@admin_required
 def group_new():
     name = request.form.get("name", "").strip()
     parent_id = request.form.get("parent_id", type=int)
@@ -300,7 +298,6 @@ def group_new():
 
 @bp.route("/grupos/<int:group_id>/eliminar", methods=["POST"])
 @login_required
-@admin_required
 def group_delete(group_id):
     group = db.session.get(VaultGroup, group_id)
     if group is None:
@@ -489,6 +486,47 @@ def import_confirm():
     return redirect(url_for("vault.index"))
 
 
+@bp.route("/configuracion", methods=["GET", "POST"])
+@login_required
+@admin_required
+def sync_settings():
+    cfg = VaultSyncConfig.query.first()
+
+    if request.method == "POST":
+        path = request.form.get("kdbx_path", "").strip()
+        password = request.form.get("kdbx_password", "").strip()
+        keyfile_path = request.form.get("kdbx_keyfile_path", "").strip()
+
+        if not path:
+            flash("La ruta del archivo .kdbx es obligatoria.", "danger")
+            return redirect(url_for("vault.sync_settings"))
+        if not password and not keyfile_path:
+            flash("Debes proporcionar una contraseña, una ruta de keyfile, o ambas.", "danger")
+            return redirect(url_for("vault.sync_settings"))
+
+        if cfg is None:
+            cfg = VaultSyncConfig()
+            db.session.add(cfg)
+
+        cfg.kdbx_path = path
+        cfg.kdbx_password_enc = encrypt(password) if password else None
+        cfg.kdbx_keyfile_path = keyfile_path or None
+        db.session.commit()
+
+        log_audit("vault", "edit", "sync_config", 0, "Configuración de sync actualizada")
+        flash("Configuración de sync guardada.", "success")
+        return redirect(url_for("vault.index"))
+
+    current_password = ""
+    if cfg and cfg.kdbx_password_enc:
+        try:
+            current_password = decrypt(cfg.kdbx_password_enc)
+        except Exception:
+            current_password = ""
+
+    return render_template("vault/sync_settings.html", cfg=cfg, current_password=current_password)
+
+
 def _get_or_create_group_chain(path_list):
     """Find or create VaultGroup hierarchy from a list of names. Returns leaf group id or None."""
     if not path_list:
@@ -522,7 +560,7 @@ def _create_entry_from_import(data):
         password_enc=encrypt(data["password"]),
         url=data["url"] or None,
         notes_enc=encrypt(data["notes"]) if data.get("notes") else None,
-        shared=False,
+        shared=True,
         owner_id=current_user.id,
         expires_at=expires_at,
         group_id=_get_or_create_group_chain(data.get("group_path") or []),

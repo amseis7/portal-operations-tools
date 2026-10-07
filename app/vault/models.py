@@ -76,6 +76,20 @@ class VaultEntryField(db.Model):
         return f"<VaultEntryField entry={self.entry_id} key={self.field_key}>"
 
 
+class VaultSyncConfig(db.Model):
+    """Single-row table storing the KeePass sync target configuration."""
+    __tablename__ = "vault_sync_config"
+
+    id = db.Column(db.Integer, primary_key=True)
+    kdbx_path = db.Column(db.String(500), nullable=False, default='')
+    kdbx_password_enc = db.Column(db.Text, nullable=True)
+    kdbx_keyfile_path = db.Column(db.String(500), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<VaultSyncConfig path={self.kdbx_path!r}>"
+
+
 class VaultAuditLog(db.Model):
     __tablename__ = "vault_audit_log"
 

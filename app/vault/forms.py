@@ -28,7 +28,7 @@ class VaultEntryForm(FlaskForm):
     )
     username = StringField(
         "Usuario",
-        validators=[DataRequired(), Length(max=120)],
+        validators=[Optional(), Length(max=120)],
     )
     password = PasswordField(
         "Contraseña",
@@ -46,5 +46,5 @@ class VaultEntryForm(FlaskForm):
         "Notas",
         validators=[Optional(), Length(max=2000)],
     )
-    shared = BooleanField("Compartir con todos los analistas", default=False)
+    shared = BooleanField("Compartir con todos los analistas", default=True)
     submit = SubmitField("Guardar")

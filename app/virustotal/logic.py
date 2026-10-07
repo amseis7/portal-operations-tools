@@ -415,7 +415,14 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
                 val_md5 = ioc.vt_md5 or (ioc.valor if ioc.tipo == 'md5' or len(ioc.valor)==32 else '')
                 val_sha1 = ioc.vt_sha1 or (ioc.valor if ioc.tipo == 'sha1' or len(ioc.valor)==40 else '')
                 val_sha256 = ioc.vt_sha256 or (ioc.valor if ioc.tipo == 'sha256' or len(ioc.valor)==64 else '')
-                
+
+                val_md5 = val_md5.lower() if val_md5 else ''
+                val_sha1 = val_sha1.lower() if val_sha1 else ''
+                val_sha256 = val_sha256.lower() if val_sha256 else ''
+
+                if not val_md5 and not val_sha1 and not val_sha256:
+                    continue
+
                 nombre_archivo_vt = motores.get('filename', 'Desconocido')
                 if nombre_archivo_vt == '-': nombre_archivo_vt = 'Desconocido'
 
@@ -437,6 +444,8 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
                     linea = template.row_template.format(**variables)
                     
                     linea = re.sub(r'<([a-zA-Z0-9]+)>0x</\1>\s*', '', linea)
+                    linea = re.sub(r'[ \t]*<[a-zA-Z0-9]+/>\n?', '', linea)
+                    linea = re.sub(r'[ \t]*<([a-zA-Z0-9]+)></\1>\n?', '', linea)
 
                     if linea.strip():
                         contenido_archivo.append(linea)

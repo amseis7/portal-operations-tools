@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración Sync KeePass — Portal de Operaciones{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('vault.index') }}">Vault</a></li>
+    <li class="breadcrumb-item active">Configuración Sync KeePass</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header py-2">
+        <span class="fw-semibold"><i class="bi bi-gear me-1"></i>Sincronización con KeePass</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">
+          El vault exporta automáticamente todas las credenciales a un archivo <code>.kdbx</code>
+          en la ruta indicada cada vez que se crea, edita o elimina una entrada.
+          KeePass abrirá ese archivo en modo <strong>solo lectura</strong>.
+        </p>
+
+        <form method="POST" action="{{ url_for('vault.sync_settings') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Ruta del archivo .kdbx <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="kdbx_path"
+                   value="{{ cfg.kdbx_path if cfg else '' }}"
+                   placeholder="\\servidor\sharepoint\vault\portal.kdbx"
+                   required>
+            <div class="form-text">Ruta local o de red donde se escribirá el archivo .kdbx.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Contraseña maestra</label>
+            <input type="password" class="form-control" name="kdbx_password"
+                   value="{{ current_password }}"
+                   placeholder="Dejar en blanco para no cambiarla">
+            <div class="form-text">Contraseña para abrir el .kdbx en KeePass. Opcional si se usa keyfile.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Ruta del archivo de clave (.keyx / .key)</label>
+            <input type="text" class="form-control" name="kdbx_keyfile_path"
+                   value="{{ cfg.kdbx_keyfile_path if cfg else '' }}"
+                   placeholder="C:\claves\portal.keyx">
+            <div class="form-text">
+              Ruta al archivo <code>.keyx</code> o <code>.key</code> en el servidor.
+              Opcional si se usa contraseña.
+            </div>
+          </div>
+
+          <div class="alert alert-info small py-2 mb-3">
+            <i class="bi bi-info-circle me-1"></i>
+            Al menos uno de los dos (contraseña o keyfile) debe estar configurado.
+            Se puede usar ambos a la vez para máxima seguridad.
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i>Guardar configuración
+            </button>
+            <a href="{{ url_for('vault.index') }}" class="btn btn-outline-secondary">Cancelar</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if cfg and cfg.kdbx_path %}
+    <div class="card shadow-sm mt-3">
+      <div class="card-body py-2 px-3">
+        <div class="small text-muted mb-1"><strong>Configuración actual:</strong></div>
+        <div class="small"><i class="bi bi-file-earmark-lock me-1"></i>{{ cfg.kdbx_path }}</div>
+        {% if cfg.kdbx_keyfile_path %}
+        <div class="small mt-1"><i class="bi bi-key me-1"></i>Keyfile: {{ cfg.kdbx_keyfile_path }}</div>
+        {% endif %}
+        {% if cfg.kdbx_password_enc %}
+        <div class="small mt-1"><i class="bi bi-lock me-1"></i>Contraseña: <span class="text-muted">configurada</span></div>
+        {% endif %}
+        {% if cfg.updated_at %}
+        <div class="small text-muted mt-1">Actualizada: {{ cfg.updated_at.strftime('%d/%m/%Y %H:%M') }}</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

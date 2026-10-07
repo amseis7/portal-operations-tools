@@ -23,10 +23,16 @@ class VaultSyncService:
 
     def trigger_async(self, app):
         """Dispatch sync in a background thread. Safe to call after db.session.commit()."""
-        path = app.config.get("VAULT_KDBX_PATH", "")
-        password = app.config.get("VAULT_KDBX_PASSWORD", "")
-        if not path or not password:
-            return  # Sync not configured — skip silently
+        from app.vault.models import VaultSyncConfig
+        cfg = VaultSyncConfig.query.first()
+        path = (cfg.kdbx_path if cfg else '') or app.config.get("VAULT_KDBX_PATH", "")
+        has_auth = bool(
+            (cfg and cfg.kdbx_password_enc) or
+            (cfg and cfg.kdbx_keyfile_path) or
+            app.config.get("VAULT_KDBX_PASSWORD", "")
+        )
+        if not path or not has_auth:
+            return
         t = threading.Thread(target=self._run, args=(app,), daemon=True)
         t.start()
 
@@ -36,11 +42,22 @@ class VaultSyncService:
                 self._export()
 
     def _export(self):
-        from app.vault.models import VaultEntry, VaultGroup
+        from app.vault.models import VaultEntry, VaultGroup, VaultSyncConfig
         from pykeepass import create_database
 
-        path = current_app.config["VAULT_KDBX_PATH"]
-        password = current_app.config["VAULT_KDBX_PASSWORD"]
+        cfg = VaultSyncConfig.query.first()
+        path = (cfg.kdbx_path if cfg else '') or current_app.config.get("VAULT_KDBX_PATH", "")
+        password = None
+        keyfile = None
+
+        if cfg:
+            if cfg.kdbx_password_enc:
+                password = decrypt(cfg.kdbx_password_enc)
+            keyfile = cfg.kdbx_keyfile_path or None
+
+        if not password:
+            password = current_app.config.get("VAULT_KDBX_PASSWORD", "") or None
+
         entry_count = 0
 
         try:
@@ -48,16 +65,16 @@ class VaultSyncService:
             if os.path.exists(path):
                 os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
 
-            kp = create_database(path, password=password)
+            kp = create_database(path, password=password, keyfile=keyfile)
 
             # Build KeePass group hierarchy
             kp_groups = {}
             groups = VaultGroup.query.order_by(VaultGroup.id).all()
             for g in groups:
                 parent_kp = kp_groups.get(g.parent_id) or kp.root_group
-                kp_groups[g.id] = kp.add_group(parent_kp, g.name, icon=g.icon_id)
+                kp_groups[g.id] = kp.add_group(parent_kp, g.name)
 
-            ungrouped = kp.add_group(kp.root_group, "Sin Grupo", icon=48)
+            ungrouped = kp.add_group(kp.root_group, "Sin Grupo")
 
             # Add entries
             for entry in VaultEntry.query.all():

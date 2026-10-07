@@ -1,28 +1,44 @@
 # --- Python ---
 __pycache__/
 *.pyc
-build/Portal-Operations-Tools
-dist/
+*.py[cod]
+*$py.class
 
 # --- Entorno Virtual ---
 venv/
+.venv/
 env/
 
 # --- Base de Datos y Archivos Sensibles ---
 instance/
 *.db
+*.db.old
 *.sqlite3
+*.sqlite
+*.kdbx
 .env
 
+
 # --- IDEs (Configuraciones de tu editor) ---
-.idea/
 .vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
 # --- Docker ---
 *.tar
 
 # --- Logs ---
 *.log
+
+# Build
+build/
+dist/
+*.spec
+
+# Temporary files
+*.tmp
+*.temp
 
 # --- Secrets ---
 *.pem

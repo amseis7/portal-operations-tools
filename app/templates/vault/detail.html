@@ -201,7 +201,6 @@
             </div>
             {% endif %}
 
-            {% if current_user.is_admin or entry.owner_id == current_user.id %}
             <div class="card-footer bg-light d-flex justify-content-end gap-2">
                 <a href="{{ url_for('vault.edit', entry_id=entry.id) }}" class="btn btn-warning text-dark">
                     <i class="bi bi-pencil me-1"></i> Editar
@@ -211,13 +210,11 @@
                     <i class="bi bi-trash me-1"></i> Eliminar
                 </button>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
 <!-- Modal Confirmar Eliminación -->
-{% if current_user.is_admin or entry.owner_id == current_user.id %}
 <div class="modal fade" id="modalConfirmarEliminar" tabindex="-1" aria-labelledby="modalConfirmarEliminarLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -243,7 +240,6 @@
         </div>
     </div>
 </div>
-{% endif %}
 
 <script>
     (function () {

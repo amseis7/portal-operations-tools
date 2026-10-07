@@ -10,10 +10,11 @@ services:
     ports:
       - "8080:8080"
 
-    enviroment:
+    environment:
       - SECRET_KEY=${SECRET_KEY}
       - SECRET_KEY_DB=${SECRET_KEY_DB}
       - CREDENTIAL_MANAGER_KEY=${CREDENTIAL_MANAGER_KEY}
+      - VAULT_KEY=${VAULT_KEY}
     
     # Persistencia de Datos (El volumen mágico)
     volumes:

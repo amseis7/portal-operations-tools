@@ -121,6 +121,15 @@
   var jsonInput = document.getElementById('custom_fields_json');
   var fields = {{ existing_cf | tojson }};
 
+  function syncFromDOM() {
+    container.querySelectorAll('.input-group').forEach(function(row, i) {
+      if (!fields[i]) return;
+      fields[i].key = row.querySelector('.cf-key').value;
+      fields[i].value = row.querySelector('.cf-value').value;
+      fields[i].protected = row.querySelector('.cf-protected').checked;
+    });
+  }
+
   function render() {
     container.innerHTML = '';
     fields.forEach(function(f, i) {
@@ -134,7 +143,7 @@
       container.appendChild(row);
     });
     container.querySelectorAll('.cf-del').forEach(function(btn){
-      btn.addEventListener('click', function(){ fields.splice(parseInt(this.dataset.idx),1); render(); });
+      btn.addEventListener('click', function(){ syncFromDOM(); fields.splice(parseInt(this.dataset.idx),1); render(); });
     });
   }
 
@@ -150,7 +159,7 @@
 
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-  document.getElementById('btnAddCf').addEventListener('click', function(){ fields.push({key:'',value:'',protected:false}); render(); });
+  document.getElementById('btnAddCf').addEventListener('click', function(){ syncFromDOM(); fields.push({key:'',value:'',protected:false}); render(); });
   document.getElementById('custom_fields_json').closest('form').addEventListener('submit', serialize);
   render();
 })();
