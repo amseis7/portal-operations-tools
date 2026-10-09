@@ -1,7 +1,6 @@
 import json as json_mod
 import os
 import uuid as uuid_mod
-from collections import defaultdict, deque
 from datetime import datetime
 
 from flask import (
@@ -71,6 +70,23 @@ def _build_group_tree(groups):
     return result
 
 
+def _build_existing_cf(entry):
+    """Build the custom-fields list rendered into edit.html's embedded
+    JS/JSON — includes each row's real id so the page can round-trip it
+    back on submit (debt #38). Shared between the GET render and the 409
+    conflict re-render so both always reflect entry's actual current
+    state."""
+    return [
+        {
+            "id": f.id,
+            "key": f.field_key,
+            "value": "" if f.is_protected else decrypt(f.field_value_enc),
+            "protected": f.is_protected,
+        }
+        for f in entry.custom_fields
+    ]
+
+
 def _populate_group_choices(form):
     """Fill form.group_id.choices from DB."""
     groups = VaultGroup.query.order_by(VaultGroup.name).all()
@@ -91,53 +107,107 @@ def _parse_expires_at(value):
         return None
 
 
-def _save_custom_fields(entry, cf_json_str):
-    """Replace all custom fields for an entry from JSON string.
+class CustomFieldConflict(Exception):
+    """Raised by _diff_custom_fields() when the submitted custom-fields
+    payload is structurally invalid, carries a duplicate id, or references
+    an id that does not belong to the entry being edited (unknown, stale,
+    or foreign). The whole submit must be rejected — no partial apply, no
+    silent fallback to treating the item as new."""
 
-    A blank submitted value for a key that previously held a protected
-    field preserves that field's existing ciphertext verbatim, regardless
-    of the new protected flag (unchecking "Protegido" while leaving the
-    value blank must keep the secret, only clearing the flag).
 
-    VaultEntryField has no UNIQUE(entry_id, field_key) constraint, so
-    multiple fields can legitimately share the same field_key, each with
-    its own distinct ciphertext. existing_protected therefore maps each
-    key to a FIFO queue of its prior ciphertexts (one entry per
-    occurrence), and a blank resubmission consumes one ciphertext from
-    that queue per matching key — never collapsing separate occurrences
-    onto a single shared value.
+def _diff_custom_fields(entry, cf_json_str):
+    """Parse and validate a submitted custom-fields payload against
+    entry's CURRENT VaultEntryField rows, classifying each submitted item
+    as an update (matched by id), a new field (no id), or implicitly
+    marking existing rows for deletion (never mentioned, or mentioned with
+    a blanked-out key). Matches by VaultEntryField.id, not by field_key
+    string equality, so renames, duplicate keys, and reordering can never
+    cause ciphertext to be lost or swapped between rows (debt #38).
+
+    Pure function: never touches db.session. Raises CustomFieldConflict on
+    any structurally invalid payload, duplicate id, or id that is not a
+    current field of THIS entry — validation runs for every item carrying
+    a non-null id regardless of whether that item's key is blank, so a
+    blank key can never be used to smuggle a duplicate or foreign id past
+    this check.
     """
     try:
-        fields = json_mod.loads(cf_json_str or "[]")
+        items = json_mod.loads(cf_json_str or "[]")
     except (ValueError, TypeError):
-        fields = []
+        raise CustomFieldConflict()
+    if not isinstance(items, list):
+        raise CustomFieldConflict()
 
-    existing_protected = defaultdict(deque)
-    for f in entry.custom_fields:
-        if f.is_protected:
-            existing_protected[f.field_key].append(f.field_value_enc)
+    existing_by_id = {f.id: f for f in entry.custom_fields}
+    seen_ids = set()
+    updates, new_items, delete_ids = [], [], set()
 
-    VaultEntryField.query.filter_by(entry_id=entry.id).delete()
+    for raw in items:
+        if not isinstance(raw, dict):
+            raise CustomFieldConflict()
 
-    for item in fields:
-        key = str(item.get("key", "")).strip()
-        if not key:
-            continue
-        value = str(item.get("value", ""))
-        protected = bool(item.get("protected", False))
+        raw_id = raw.get("id")
+        key = str(raw.get("key", "")).strip()
+        value = str(raw.get("value", ""))
+        protected = bool(raw.get("protected", False))
 
-        if not value and existing_protected.get(key):
-            value_enc = existing_protected[key].popleft()
+        if raw_id is None:
+            if key:
+                new_items.append((key, value, protected))
+            continue  # blank key + no id: genuinely inert, nothing to validate
+
+        # Strict type check — never coerce. bool is an int subclass in
+        # Python, so it must be excluded explicitly; a float must not
+        # silently truncate to a matching int id.
+        if isinstance(raw_id, bool) or not isinstance(raw_id, int):
+            raise CustomFieldConflict()
+
+        if raw_id in seen_ids:
+            raise CustomFieldConflict()
+        seen_ids.add(raw_id)
+
+        field = existing_by_id.get(raw_id)
+        if field is None:
+            raise CustomFieldConflict()
+
+        if key:
+            updates.append((field, key, value, protected))
         else:
-            value_enc = encrypt(value)
+            # Existing row, key blanked out by the user: explicit delete,
+            # not "leave unchanged".
+            delete_ids.add(raw_id)
 
-        field = VaultEntryField(
-            entry_id=entry.id,
-            field_key=key,
-            field_value_enc=value_enc,
-            is_protected=protected,
-        )
-        db.session.add(field)
+    # Rows never mentioned in the payload at all (user removed the row
+    # from the DOM entirely) are also deleted.
+    delete_ids |= (set(existing_by_id) - seen_ids)
+    return updates, new_items, delete_ids
+
+
+def _apply_custom_fields(entry, updates, new_items, delete_ids):
+    """Apply a successful _diff_custom_fields() classification. Only ever
+    called after _diff_custom_fields() returns without raising."""
+    for field, key, value, protected in updates:
+        if not value and field.is_protected:  # pre-edit flag, read before overwritten
+            field.field_key = key
+            field.is_protected = protected
+            # field.field_value_enc intentionally untouched: blank value on
+            # a previously-protected field preserves its existing ciphertext.
+        else:
+            field.field_key = key
+            field.field_value_enc = encrypt(value)
+            field.is_protected = protected
+
+    for key, value, protected in new_items:
+        db.session.add(VaultEntryField(
+            entry_id=entry.id, field_key=key,
+            field_value_enc=encrypt(value), is_protected=protected,
+        ))
+
+    if delete_ids:
+        VaultEntryField.query.filter(
+            VaultEntryField.entry_id == entry.id,
+            VaultEntryField.id.in_(delete_ids),
+        ).delete(synchronize_session=False)
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +288,17 @@ def new():
         db.session.add(entry)
         db.session.flush()
 
-        _save_custom_fields(entry, request.form.get("custom_fields_json", "[]"))
+        try:
+            updates, new_items, delete_ids = _diff_custom_fields(
+                entry, request.form.get("custom_fields_json", "[]")
+            )
+        except CustomFieldConflict:
+            db.session.rollback()
+            flash("No se pudieron guardar los cambios: los datos enviados "
+                  "no son válidos. Vuelva a intentarlo.", "danger")
+            return render_template("vault/new.html", form=form), 409
+
+        _apply_custom_fields(entry, updates, new_items, delete_ids)
         log_audit("vault", "create", "entry", entry.id, entry.title)
         db.session.commit()
 
@@ -276,6 +356,23 @@ def edit(entry_id):
         form.expires_at.data = entry.expires_at.strftime("%Y-%m-%d") if entry.expires_at else ""
 
     if form.validate_on_submit():
+        # Validate custom fields BEFORE touching any entry attribute or
+        # flushing — so "no mutation happens until validation fully
+        # passes" is literally true, not merely true because a later
+        # rollback happens to undo it (debt #38 fix, Global Constraint 5).
+        try:
+            updates, new_items, delete_ids = _diff_custom_fields(
+                entry, request.form.get("custom_fields_json", "[]")
+            )
+        except CustomFieldConflict:
+            flash("No se pudieron guardar los cambios: los datos de la "
+                  "entrada cambiaron. Recargue la página e intente "
+                  "nuevamente.", "danger")
+            return render_template(
+                "vault/edit.html", form=form, entry=entry,
+                existing_cf=_build_existing_cf(entry),
+            ), 409
+
         entry.title = form.title.data
         entry.category = form.category.data
         entry.username = form.username.data
@@ -289,7 +386,7 @@ def edit(entry_id):
         entry.notes_enc = encrypt(form.notes.data) if form.notes.data else None
 
         db.session.flush()
-        _save_custom_fields(entry, request.form.get("custom_fields_json", "[]"))
+        _apply_custom_fields(entry, updates, new_items, delete_ids)
         log_audit("vault", "edit", "entry", entry.id, entry.title)
         db.session.commit()
 
@@ -298,15 +395,7 @@ def edit(entry_id):
         flash("Entrada actualizada.", "success")
         return redirect(url_for("vault.detail", entry_id=entry.id))
 
-    existing_cf = [
-        {
-            "key": f.field_key,
-            "value": "" if f.is_protected else decrypt(f.field_value_enc),
-            "protected": f.is_protected,
-        }
-        for f in entry.custom_fields
-    ]
-    return render_template("vault/edit.html", form=form, entry=entry, existing_cf=existing_cf)
+    return render_template("vault/edit.html", form=form, entry=entry, existing_cf=_build_existing_cf(entry))
 
 
 @bp.route("/<int:entry_id>/delete", methods=["POST"])

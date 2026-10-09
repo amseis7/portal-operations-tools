@@ -150,18 +150,21 @@
   }
 
   function serialize() {
-    var result = [];
-    container.querySelectorAll('.input-group').forEach(function(row){
-      var key = row.querySelector('.cf-key').value.trim();
-      if (!key) return;
-      result.push({key:key, value:row.querySelector('.cf-value').value, protected:row.querySelector('.cf-protected').checked});
-    });
+    // id has no DOM input (never exposed as an editable/visible field) —
+    // it only ever lives on the `fields` array objects, kept index-aligned
+    // with the DOM rows by render()'s full redraw and cf-del's splice.
+    // syncFromDOM() must run first so key/value/protected reflect the
+    // latest typed edits before reading id off the same objects.
+    syncFromDOM();
+    var result = fields
+      .map(function(f){ return {id: f.id, key: f.key.trim(), value: f.value, protected: f.protected}; })
+      .filter(function(f){ return f.key; });
     jsonInput.value = JSON.stringify(result);
   }
 
   function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 
-  document.getElementById('btnAddCf').addEventListener('click', function(){ syncFromDOM(); fields.push({key:'',value:'',protected:false}); render(); });
+  document.getElementById('btnAddCf').addEventListener('click', function(){ syncFromDOM(); fields.push({id:null,key:'',value:'',protected:false}); render(); });
   document.getElementById('custom_fields_json').closest('form').addEventListener('submit', serialize);
   render();
 })();
