@@ -1696,3 +1696,535 @@ P3 performance optimizations
 ```
 
 Priorities should be revisited when production requirements, deployment architecture, or threat model change.
+
+---
+
+# 36. Knowledge Base Has No Full-Text Search
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Search
+```
+
+Current behavior:
+
+Search uses an escaped `LIKE` match over title/problem/solution. No SQLite
+FTS5 or external search index exists.
+
+Risk:
+
+Relevance degrades as the number of articles grows; no ranking, only
+substring matching.
+
+Expected remediation only if volume/usability actually requires it — this
+was deliberately deferred in the MVP, not an oversight.
+
+---
+
+# 37. Knowledge Base Client/Platform Are Free Text
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Data quality
+```
+
+Current behavior:
+
+`client` and `platform` are plain strings with UI autocomplete from
+existing distinct values, not managed master tables. Inconsistent casing or
+near-duplicate values (e.g. "Acme" vs "ACME Corp") are possible and will
+fragment filter results.
+
+Expected remediation only if fragmentation becomes a real problem in
+practice — deliberately deferred, per the confirmed MVP scope.
+
+---
+
+# 38. Vault Custom Field Protection Loses Secrets on Key Rename or Duplicate Keys
+
+Priority:
+
+```text
+P0 (proposed — see rationale below; confirm or downgrade when this is
+picked up for remediation)
+```
+
+Area:
+
+```text
+Vault
+Custom fields
+Secrets
+```
+
+File:
+
+```text
+app/vault/routes.py (_save_custom_fields)
+```
+
+Current behavior:
+
+`_save_custom_fields` preserves a protected custom field's existing
+ciphertext when the submitted value is blank by matching the submitted
+`field_key` against the prior protected fields **by string equality**,
+not by any stable per-field identity (no field id round-tripped through
+the form). The prior protected rows for the entry are bulk-deleted
+first, then re-matched against incoming form rows by key.
+
+Risk:
+
+Possible **silent loss or swap of a secret**, with no error shown to the
+user and no way to recover the original ciphertext after the delete
+already ran:
+
+```text
+- Renaming a protected field's key while leaving its value blank: the
+  renamed key has no match among the (already-deleted) prior protected
+  rows, so the "blank = keep unchanged" path does not fire; the field is
+  instead (re)created from an empty submitted value, permanently
+  replacing the real secret with an encrypted empty string.
+
+- Multiple protected fields sharing the same key (explicitly supported
+  by the model and by tests/vault/test_custom_field_protection.py's
+  duplicate-key coverage): deleting or reordering one of several
+  same-keyed protected rows while leaving another blank can hand the
+  surviving field the wrong (now-deleted) ciphertext, losing its own
+  real secret and silently receiving an unrelated one instead.
+```
+
+Relationship to prior work:
+
+```text
+This is the same _save_custom_fields path exercised by
+tests/vault/test_custom_field_protection.py (built earlier this session
+to protect blank-submitted custom fields from being overwritten). That
+work covers the same-key/no-rename/no-deletion path correctly; it does
+not cover key rename or duplicate-key deletion/reorder, which is exactly
+where this gap was found (by /review, during unrelated Knowledge Base
+attachments work — not investigated or fixed as part of that task).
+```
+
+Expected remediation:
+
+```text
+Not decided yet — do not assume a solution. Likely requires giving each
+custom field row a stable identity that round-trips through the edit
+form (e.g. a hidden per-row field id) instead of matching purely by
+field_key string equality, but this needs its own /investigate pass
+before implementation: what the form currently submits, whether field
+ids are already available to template rendering, and how this interacts
+with legitimate key renames (a user may genuinely want to rename a key
+while keeping the secret — that must still work, just not through
+silent re-matching).
+```
+
+Remediate in an isolated follow-up task, with its own investigation
+first — do not bundle into unrelated work.
+
+---
+
+# 39. Knowledge Base Attachment Delete Can Silently Orphan a File on Windows
+
+Priority:
+
+```text
+P2
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Filesystem
+```
+
+File:
+
+```text
+app/knowledge_base/attachment_storage.py (safe_unlink)
+```
+
+Current behavior:
+
+`safe_unlink` catches `FileNotFoundError` (expected — the file is already
+gone) but also catches any other `OSError` as a mere `logger.warning`,
+swallowing it. Every caller (`attachment_delete`, `eliminar()`,
+`purge_expired_drafts`) proceeds to delete the DB row regardless of
+whether the physical unlink actually succeeded.
+
+Risk:
+
+On Windows, a file can be transiently locked (open for a concurrent
+`send_file` stream, antivirus scan, search indexing) when a delete runs.
+`os.remove()` then raises `PermissionError`, which is logged but not
+surfaced; the caller deletes the DB row anyway. The physical file is
+permanently orphaned on disk with no DB row left to ever reconcile it
+against — no code path scans disk for files without a corresponding row.
+
+Found by: `/review` during Checkpoint C of the Knowledge Base attachments
+work (substituting for an unavailable `/codex review`), out of scope for
+that checkpoint — not fixed there.
+
+Expected remediation:
+
+```text
+Not decided yet. Options to evaluate:
+  - have safe_unlink return success/failure and let callers decide
+    whether to still delete the DB row on failure (but leaving the row
+    in place means a "clean" row whose file is temporarily locked is
+    also temporarily unservable until retried — needs a retry/requeue
+    story, not just a boolean);
+  - a periodic disk-vs-DB reconciliation job (new infrastructure, likely
+    overkill for a narrow Windows-locking edge case);
+  - accept the current behavior and document the operational risk.
+```
+
+---
+
+# 40. Knowledge Base Attachment Upload Can Orphan a File If the DB Commit Fails
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Filesystem
+```
+
+File:
+
+```text
+app/knowledge_base/attachment_routes.py (_handle_attachment_upload)
+```
+
+Current behavior:
+
+The uploaded file is written to disk and scanned before
+`db.session.commit()` persists the `KnowledgeAttachment` row.
+
+Risk:
+
+If that commit fails (DB lock/timeout), the row is never persisted, but
+the file already written under its UUID name on disk has no DB row
+referencing it. `purge_expired_drafts` can never find it, since it only
+ever queries existing rows — the orphan is permanent.
+
+Found by: `/review` during Checkpoint C (substitute for `/codex review`),
+out of scope for that checkpoint.
+
+Expected remediation:
+
+```text
+Low severity — an orphaned file with no DB row is not servable and not
+a security concern, only wasted disk space, in the same category as the
+already-documented "no global disk-usage cap" limitation (plan Risks
+section). Revisit only if disk usage actually becomes a problem; a full
+fix would need write-ahead/two-phase handling (e.g. commit the row
+first in a "pending" state, write the file after, instead of the
+current order) which is a larger change than this narrow risk justifies
+today.
+```
+
+---
+
+# 41. Knowledge Base Attachment Quota Check Has a TOCTOU Race Under Concurrent Uploads
+
+Priority:
+
+```text
+P2
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Concurrency
+```
+
+File:
+
+```text
+app/knowledge_base/attachment_routes.py (_handle_attachment_upload)
+```
+
+Current behavior:
+
+The total-size quota check reads the current sum of `size_bytes` via a
+separate `SELECT` before the new row is inserted, with no locking between
+the read and the eventual insert.
+
+Risk:
+
+Two near-simultaneous uploads to the same `article_id`/`draft_token`
+(e.g. a multi-file picker) can each read the sum before the other's row
+is committed, both pass the `total + len(data) > KB_ATTACHMENT_MAX_TOTAL_BYTES`
+check, and both commit — the total can exceed the configured limit by up
+to one extra file's size.
+
+Found by: `/review` during Checkpoint C (substitute for `/codex review`),
+out of scope for that checkpoint.
+
+Expected remediation:
+
+```text
+This is a soft resource limit, not a security boundary, and the
+overage is bounded (at most one extra file, i.e. at most
+KB_ATTACHMENT_MAX_SIZE_BYTES over the configured total). A full fix
+would need an application-level lock or a DB-level serializable
+check-and-insert per article_id/draft_token scope. Revisit only if the
+bounded overage is actually a problem in practice — not building
+locking infrastructure for a narrow race on a soft limit today.
+```
+
+---
+
+# 42. Knowledge Base New-Tag Creation Has a Race on Concurrent First Use
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Database integrity
+Concurrency
+```
+
+File:
+
+```text
+app/knowledge_base/logic.py (sync_tags)
+```
+
+Current behavior:
+
+`sync_tags()`'s get-or-create for a tag name queries for an existing
+`KnowledgeTag` by name and, if not found, adds a new one — with no
+locking between the check and the insert. `KnowledgeTag.name` is unique.
+
+Risk:
+
+Two requests (`crear()`/`editar()`) submitted near-simultaneously with
+the same brand-new tag name can both see no existing row, both
+add+flush a new `KnowledgeTag`, and the second commit raises an
+unhandled `IntegrityError` on the unique constraint — a 500 for that
+request. Pre-existing code from the original Knowledge Base feature, not
+touched by the attachments work.
+
+Found by: `/review` during Checkpoint D of the Knowledge Base attachments
+work, out of scope for that plan — not fixed there.
+
+Expected remediation:
+
+```text
+Catch IntegrityError around the insert and retry the lookup (the losing
+request re-queries and finds the row the winner just committed), or use
+an upsert-style INSERT ... ON CONFLICT if the project's SQLite/SQLAlchemy
+version supports it cleanly. Low priority: tag creation is infrequent
+and the failure window is narrow (same never-before-used tag name,
+within the same request-processing instant).
+```
+
+---
+
+# 43. Vault Edit/Delete Authorization Duplicated Across Templates With No Single Source of Truth
+
+Priority:
+
+```text
+P2
+```
+
+Area:
+
+```text
+Vault
+Authorization
+Templates
+Maintainability
+```
+
+Files:
+
+```text
+app/templates/vault/detail.html
+app/templates/vault/index.html
+```
+
+Current behavior:
+
+`_can_edit()`/`_can_delete()` in `app/vault/routes.py` both compute
+`current_user.is_admin or entry.owner_id == current_user.id`. Neither
+`detail()` nor `index()` passes a computed `can_edit`/`can_delete` value
+to the template (unlike Knowledge Base's `detalle()`, which does); the
+templates instead re-hardcode that exact same expression inline, 5
+separate times across the two files.
+
+Risk:
+
+The authorization rule now has 7 independent copies (2 Python helpers +
+5 template copies) with no single source of truth. A future policy
+change (e.g. adding a shared-editor tier) could update the two Python
+helpers while missing one of the 5 template copies, silently re-exposing
+the Editar/Eliminar button to an unauthorized user — the same class of
+bug that debt items #1 and #2 (Vault Edit/Delete Authorization) in this
+document already had to fix once.
+
+Found by: `/review` during Checkpoint D of the Knowledge Base attachments
+work, out of scope for that plan — not fixed there. Pre-existing from
+this session's earlier Vault Edit/Delete Authorization hardening tasks
+(debt items #1/#2), not introduced by the attachments work.
+
+Expected remediation:
+
+```text
+Have detail()/index() compute can_edit/can_delete server-side (mirroring
+Knowledge Base's detalle()) and pass them to the templates, replacing
+all 5 inline hardcoded expressions with the passed-in values. A
+same-session, low-risk refactor once picked up — but do not bundle it
+into unrelated work; template visibility is UX only, the actual
+authorization enforcement in the routes themselves is unaffected either
+way (per portal-security-change: server-side checks are authoritative,
+template hiding is not a security control).
+```
+
+---
+
+# 44. Knowledge Base Attachments Have No Real Malware Scanner Wired Up
+
+Priority:
+
+```text
+P2
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Malware scanning
+```
+
+File:
+
+```text
+app/knowledge_base/scanning.py
+```
+
+Current behavior:
+
+`get_scanner()` only ever returns `NullScanner`, which never returns
+`clean` — every uploaded attachment permanently stays `not_scanned`.
+Since `scan_status == "clean"` is the only state `/view`/`/download` (and
+inline Markdown rendering) will ever serve, **every attachment uploaded
+in this version is permanently unservable**: visible in the attachment
+list with a "Sin scanner" badge, but never viewable or downloadable.
+
+This is the **confirmed, deliberate MVP policy** (explicit product
+decision during this feature's design), not an oversight or a bug —
+documented here per the plan's own Task 13 instruction to record it as a
+known limitation.
+
+Risk:
+
+The feature is end-to-end untestable-by-a-human beyond upload/validation
+without a real scanner integrated. No attachment can actually be
+retrieved by any user until this is resolved.
+
+Expected remediation:
+
+```text
+Integrate a real Scanner implementation (ClamAV via a clamd socket
+client, Windows Defender, Trellix, etc.) behind the existing Scanner
+ABC / get_scanner() factory — app/knowledge_base/scanning.py's interface
+was deliberately designed so this plugs in without touching any caller
+(attachment_routes.py only ever calls get_scanner().scan_file(path)).
+Each real engine would likely need its own narrow dependency, evaluated
+on its own merits when picked up — not decided here.
+```
+
+---
+
+# 45. Knowledge Base Attachment Scanning Is Synchronous Only
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Malware scanning
+Background processing
+```
+
+File:
+
+```text
+app/knowledge_base/attachment_routes.py (_handle_attachment_upload)
+```
+
+Current behavior:
+
+`get_scanner().scan_file(path)` is called synchronously, inline, during
+the upload request itself — there is no async/out-of-band scanning path,
+no job queue, no "pending → scan later → flip status" background
+mechanism.
+
+Risk:
+
+A real scanner that takes meaningfully longer than an HTTP request
+should (e.g. a full AV engine scan of a large file) would block the
+upload response for that entire duration. Not a problem for the current
+`NullScanner` (instant), but would become one the moment debt item #44
+is resolved with a slow real engine.
+
+Expected remediation:
+
+```text
+Deliberately out of scope for this version — explicitly deferred,
+not an oversight. If a future real scanner integration proves too slow
+for a synchronous request/response cycle, revisit: leave new rows
+scan_status="pending", scan out-of-band (a background thread/job, same
+instance-level constraints as the rest of this project's background
+work — see debt item #32), and flip scan_status (running the same
+immediate-unlink-on-infected step) from whatever mechanism calls
+scan_file(). The Scanner interface (app/knowledge_base/scanning.py)
+does not need to change either way — only who calls scan_file() and
+when.
+```

@@ -47,3 +47,12 @@ class Config:
     SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(_instance_path, 'app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SCHEDULER_API_ENABLED = True
+
+    # --- Knowledge Base attachments ---
+    KB_ATTACHMENTS_DIR = os.path.join(_instance_path, 'kb_attachments')
+    KB_ATTACHMENT_MAX_SIZE_BYTES = int(os.environ.get('KB_ATTACHMENT_MAX_SIZE_BYTES', 10 * 1024 * 1024))   # 10 MB/file
+    KB_ATTACHMENT_MAX_TOTAL_BYTES = int(os.environ.get('KB_ATTACHMENT_MAX_TOTAL_BYTES', 50 * 1024 * 1024))  # 50 MB/article
+    KB_ATTACHMENT_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'pdf', 'docx', 'xlsx', 'xls', 'csv', 'txt'}
+    KB_ATTACHMENT_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+    KB_ATTACHMENT_DRAFT_TTL_HOURS = int(os.environ.get('KB_ATTACHMENT_DRAFT_TTL_HOURS', 24))
+    KB_SCANNER = os.environ.get('KB_SCANNER', 'null')  # 'null' today; 'clamav'/'defender'/'trellix' are future values

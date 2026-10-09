@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item active">Base de Conocimiento</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="bi bi-journal-text text-info me-2"></i>Base de Conocimiento</h2>
+  <a href="{{ url_for('knowledge_base.crear') }}" class="btn btn-primary">
+    <i class="bi bi-plus-circle me-1"></i>Nuevo artículo
+  </a>
+</div>
+
+<form method="GET" class="card card-body shadow-sm mb-4">
+  <div class="row g-2">
+    <div class="col-md-4">
+      <input type="search" name="q" class="form-control" placeholder="Buscar..." value="{{ q }}">
+    </div>
+    <div class="col-md-3">
+      <input type="text" name="client" class="form-control" list="clientList" placeholder="Cliente" value="{{ client }}">
+      <datalist id="clientList">
+        {% for c in clients %}<option value="{{ c }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="col-md-3">
+      <input type="text" name="platform" class="form-control" list="platformList" placeholder="Plataforma" value="{{ platform }}">
+      <datalist id="platformList">
+        {% for p in platforms %}<option value="{{ p }}">{% endfor %}
+      </datalist>
+    </div>
+    <div class="col-md-2">
+      <select name="tag" class="form-select">
+        <option value="">Tag</option>
+        {% for t in tags %}
+        <option value="{{ t.name }}" {% if t.name == tag %}selected{% endif %}>{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+  <button type="submit" class="btn btn-outline-secondary mt-2">
+    <i class="bi bi-search me-1"></i>Filtrar
+  </button>
+</form>
+
+{% if articles %}
+<div class="list-group shadow-sm">
+  {% for article in articles %}
+  <a href="{{ url_for('knowledge_base.detalle', id=article.id) }}"
+     class="list-group-item list-group-item-action">
+    <div class="d-flex justify-content-between">
+      <strong>{{ article.title }}</strong>
+      <small class="text-muted">{{ article.updated_at.strftime('%Y-%m-%d') }}</small>
+    </div>
+    <small class="text-muted">
+      {{ article.client or '—' }} · {{ article.platform or '—' }}
+      {% for t in article.tags %}<span class="badge bg-secondary ms-1">{{ t.name }}</span>{% endfor %}
+    </small>
+  </a>
+  {% endfor %}
+</div>
+
+<nav class="mt-3">
+  <ul class="pagination">
+    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+      <a class="page-link" href="{{ url_for('knowledge_base.index', page=pagination.prev_num, q=q, client=client, platform=platform, tag=tag) }}">Anterior</a>
+    </li>
+    <li class="page-item disabled"><span class="page-link">Página {{ pagination.page }} de {{ pagination.pages or 1 }}</span></li>
+    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+      <a class="page-link" href="{{ url_for('knowledge_base.index', page=pagination.next_num, q=q, client=client, platform=platform, tag=tag) }}">Siguiente</a>
+    </li>
+  </ul>
+</nav>
+{% else %}
+<div class="alert alert-info">No hay artículos que coincidan con los filtros actuales.</div>
+{% endif %}
+{% endblock %}

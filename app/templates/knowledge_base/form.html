@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} — Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ url_for('knowledge_base.index') }}">Base de Conocimiento</a></li>
+    <li class="breadcrumb-item active">{{ heading }}</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <h2 class="mb-3"><i class="bi bi-journal-plus me-2"></i>{{ heading }}</h2>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+          {% if draft_token %}
+          <input type="hidden" name="draft_token" id="draft_token" value="{{ draft_token }}">
+          {% endif %}
+
+          <div class="mb-3">
+            {{ form.title.label(class="form-label fw-bold") }}
+            {{ form.title(class="form-control" + (" is-invalid" if form.title.errors else "")) }}
+            {% for e in form.title.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              {{ form.client.label(class="form-label fw-bold") }}
+              {{ form.client(class="form-control", list="clientList") }}
+              <datalist id="clientList">
+                {% for c in clients %}<option value="{{ c }}">{% endfor %}
+              </datalist>
+            </div>
+            <div class="col-md-6">
+              {{ form.platform.label(class="form-label fw-bold") }}
+              {{ form.platform(class="form-control", list="platformList") }}
+              <datalist id="platformList">
+                {% for p in platforms %}<option value="{{ p }}">{% endfor %}
+              </datalist>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            {{ form.problem_md.label(class="form-label fw-bold") }}
+            {{ form.problem_md(class="form-control" + (" is-invalid" if form.problem_md.errors else ""), rows=4, placeholder="Markdown soportado: **negrita**, listas, tablas, bloques de código...") }}
+            {% for e in form.problem_md.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            {{ form.solution_md.label(class="form-label fw-bold") }}
+            {{ form.solution_md(class="form-control" + (" is-invalid" if form.solution_md.errors else ""), rows=8, placeholder="Markdown soportado: **negrita**, listas, tablas, bloques de código...") }}
+            {% for e in form.solution_md.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-4">
+            {{ form.tags_raw.label(class="form-label fw-bold") }}
+            {{ form.tags_raw(class="form-control", placeholder="dns, windows, red") }}
+            <div class="form-text">Separados por coma.</div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('knowledge_base.index') }}" class="btn btn-secondary">Cancelar</a>
+            {{ form.submit(class="btn btn-primary") }}
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-3">
+      <div class="card-header bg-light fw-bold">Adjuntos</div>
+      <div class="card-body">
+        <div class="mb-3">
+          <input type="file" id="attachment-file-input" class="form-control"
+                 accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.xlsx,.xls,.csv,.txt">
+          <div class="form-text">
+            También puedes pegar una captura de pantalla directamente en los campos de texto de arriba.
+          </div>
+        </div>
+        <ul class="list-group" id="attachment-list">
+          {% for att in (article.attachments if article else draft_attachments) %}
+          <li class="list-group-item d-flex justify-content-between align-items-center" data-attachment-id="{{ att.id }}">
+            <span>
+              <i class="bi {{ 'bi-image' if att.is_image else 'bi-file-earmark' }} me-2"></i>
+              {{ att.original_filename }}
+            </span>
+            <span class="d-flex align-items-center gap-2">
+              <span class="badge {{ {'pending': 'bg-secondary', 'clean': 'bg-success', 'not_scanned': 'bg-warning text-dark', 'scan_error': 'bg-danger', 'infected': 'bg-danger'}[att.scan_status] }}">
+                {{ {'pending': 'Analizando', 'clean': 'Limpio', 'not_scanned': 'Sin scanner', 'scan_error': 'Error de análisis', 'infected': 'Infectado'}[att.scan_status] }}
+              </span>
+              <button type="button" class="btn btn-outline-danger btn-sm attachment-delete-btn" data-attachment-id="{{ att.id }}">
+                <i class="bi bi-trash"></i>
+              </button>
+            </span>
+          </li>
+          {% else %}
+          <li class="list-group-item text-muted" id="attachment-list-empty">Sin adjuntos todavía.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const UPLOAD_URL = {{ (url_for('knowledge_base.attachment_upload', article_id=article.id) if article else url_for('knowledge_base.attachment_draft_upload'))|tojson }};
+  const DRAFT_TOKEN = {{ draft_token|tojson if draft_token else 'null' }};
+  const CSRF_TOKEN = {{ csrf_token()|tojson }};
+  const DELETE_URL_TEMPLATE = {{ url_for('knowledge_base.attachment_delete', attachment_id=999999999)|tojson }};
+
+  const STATUS_LABEL = {
+    pending: 'Analizando', clean: 'Limpio', not_scanned: 'Sin scanner',
+    scan_error: 'Error de análisis', infected: 'Infectado',
+  };
+  const STATUS_BADGE = {
+    pending: 'bg-secondary', clean: 'bg-success', not_scanned: 'bg-warning text-dark',
+    scan_error: 'bg-danger', infected: 'bg-danger',
+  };
+
+  const list = document.getElementById('attachment-list');
+  // Tracks whichever problem_md/solution_md textarea the user last
+  // focused, so a manually-picked file (via the file input, which steals
+  // focus itself) still knows where to insert its Markdown reference —
+  // never document.activeElement at promise-resolution time, which by
+  // then may be a different field entirely (or the file input itself,
+  // whose .selectionStart throws).
+  let lastFocusedTextarea = null;
+
+  function addAttachmentRow(data) {
+    const empty = document.getElementById('attachment-list-empty');
+    if (empty) empty.remove();
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item d-flex justify-content-between align-items-center';
+    li.dataset.attachmentId = data.id;
+
+    const nameSpan = document.createElement('span');
+    const icon = document.createElement('i');
+    icon.className = 'bi ' + (data.is_image ? 'bi-image' : 'bi-file-earmark') + ' me-2';
+    nameSpan.appendChild(icon);
+    nameSpan.appendChild(document.createTextNode(data.original_filename));
+
+    const rightSpan = document.createElement('span');
+    rightSpan.className = 'd-flex align-items-center gap-2';
+    const badge = document.createElement('span');
+    badge.className = 'badge ' + (STATUS_BADGE[data.scan_status] || 'bg-secondary');
+    badge.textContent = STATUS_LABEL[data.scan_status] || data.scan_status;
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-outline-danger btn-sm attachment-delete-btn';
+    delBtn.dataset.attachmentId = data.id;
+    delBtn.innerHTML = '<i class="bi bi-trash"></i>';
+    rightSpan.appendChild(badge);
+    rightSpan.appendChild(delBtn);
+
+    li.appendChild(nameSpan);
+    li.appendChild(rightSpan);
+    list.appendChild(li);
+  }
+
+  function uploadFile(file, targetTextarea) {
+    const formData = new FormData();
+    formData.append('file', file, file.name || 'pasted-image.png');
+    if (DRAFT_TOKEN) formData.append('draft_token', DRAFT_TOKEN);
+    formData.append('csrf_token', CSRF_TOKEN);
+
+    return fetch(UPLOAD_URL, { method: 'POST', body: formData })
+      .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+      .then(function (result) {
+        if (!result.ok) {
+          alert(result.data.error || 'No se pudo subir el archivo.');
+          return;
+        }
+        addAttachmentRow(result.data);
+        const target = targetTextarea || lastFocusedTextarea;
+        if (target) {
+          const ref = result.data.is_image
+            ? '![captura](' + result.data.view_url + ')'
+            : '[' + result.data.original_filename + '](' + result.data.download_url + ')';
+          insertAtCursor(target, ref);
+        }
+      })
+      .catch(function () {
+        alert('No se pudo subir el archivo (error de red).');
+      });
+  }
+
+  function insertAtCursor(el, text) {
+    if (!el || typeof el.selectionStart !== 'number') return;
+    const start = el.selectionStart, end = el.selectionEnd;
+    el.value = el.value.slice(0, start) + text + el.value.slice(end);
+    el.selectionStart = el.selectionEnd = start + text.length;
+  }
+
+  ['{{ form.problem_md.id }}', '{{ form.solution_md.id }}'].forEach(function (id) {
+    const textarea = document.getElementById(id);
+    if (!textarea) return;
+    textarea.addEventListener('focus', function () {
+      lastFocusedTextarea = textarea;
+    });
+    textarea.addEventListener('paste', function (e) {
+      const items = Array.from(e.clipboardData ? e.clipboardData.items : []);
+      const item = items.find(function (i) { return i.type.startsWith('image/'); });
+      if (!item) return;
+      e.preventDefault();
+      lastFocusedTextarea = textarea;
+      uploadFile(item.getAsFile(), textarea);
+    });
+  });
+
+  const fileInput = document.getElementById('attachment-file-input');
+  if (fileInput) {
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length) {
+        uploadFile(fileInput.files[0], lastFocusedTextarea);
+        fileInput.value = '';
+      }
+    });
+  }
+
+  list.addEventListener('click', function (e) {
+    const btn = e.target.closest('.attachment-delete-btn');
+    if (!btn) return;
+    const li = btn.closest('li');
+    const id = btn.dataset.attachmentId;
+    const formData = new FormData();
+    formData.append('csrf_token', CSRF_TOKEN);
+    fetch(DELETE_URL_TEMPLATE.replace('999999999', id), { method: 'POST', body: formData })
+      .then(function (r) {
+        if (r.ok) li.remove();
+      })
+      .catch(function () {
+        alert('No se pudo eliminar el adjunto (error de red).');
+      });
+  });
+})();
+</script>
+{% endblock %}

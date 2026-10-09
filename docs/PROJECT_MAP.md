@@ -36,6 +36,7 @@ Status meanings:
 | VirusTotal | `docs/systems/virustotal.md` | VERIFIED |
 | Umbrella | `docs/systems/umbrella.md` | VERIFIED |
 | Vault | `docs/systems/vault.md` | VERIFIED |
+| Knowledge Base | `docs/systems/knowledge_base.md` | VERIFIED |
 
 Agents must use this status when deciding how much they can rely on documentation.
 
@@ -798,6 +799,73 @@ Treat those documents as historical/design context, not automatically as current
 
 ---
 
+# 9.5 Knowledge Base
+
+Subsystem:
+
+```text
+KNOWLEDGE_BASE
+```
+
+Primary source:
+
+```text
+app/knowledge_base/__init__.py
+app/knowledge_base/routes.py
+app/knowledge_base/forms.py
+app/knowledge_base/logic.py
+app/knowledge_base/markdown_render.py
+app/knowledge_base/attachment_routes.py
+app/knowledge_base/attachment_validation.py
+app/knowledge_base/attachment_storage.py
+app/knowledge_base/attachment_cleanup.py
+app/knowledge_base/scanning.py
+app/models/knowledge.py
+```
+
+Templates:
+
+```text
+app/templates/knowledge_base/list.html
+app/templates/knowledge_base/form.html
+app/templates/knowledge_base/detail.html
+```
+
+Responsibilities include:
+
+```text
+documenting ticket solutions as Markdown articles
+searching/filtering by client, platform, tag
+author-or-admin edit, admin-only delete
+file attachments: pasted images + uploaded documents, quarantine-by-
+    default (never servable until scan_status == "clean"), per-uploader
+    draft isolation before an article is saved
+```
+
+Important routes:
+
+```text
+/kb/
+/kb/nuevo
+/kb/<id>
+/kb/<id>/editar
+/kb/<id>/eliminar
+/kb/attachments/draft-upload
+/kb/<article_id>/attachments/upload
+/kb/attachments/<id>/view
+/kb/attachments/<id>/download
+/kb/attachments/<id>/delete
+```
+
+Security sensitivity: `MEDIUM` — the main risks are stored XSS through
+Markdown (mitigated: all rendering goes through the single sanitized
+`render_markdown()` function) and malicious file uploads (mitigated:
+magic-byte validation, in-memory Office-container structural checks, a
+scan_status gate re-checked live on every serve, no scanner = never
+servable). See `docs/systems/knowledge_base.md`.
+
+---
+
 # 10. Database Models
 
 Global model package:
@@ -816,6 +884,7 @@ app/models/umbrella.py
 app/models/notification.py
 app/models/audit.py
 app/models/mixins.py
+app/models/knowledge.py
 ```
 
 Vault uses its own model module:

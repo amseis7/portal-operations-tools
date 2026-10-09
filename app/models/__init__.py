@@ -6,3 +6,4 @@ from .umbrella import UmbrellaCliente, UmbrellaHerramienta, UmbrellaJob, Umbrell
 from .notification import Notification
 from .mixins import VtInfoMixin
 from .audit import AuditLog, log_audit
+from .knowledge import KnowledgeArticle, KnowledgeTag, KnowledgeAttachment

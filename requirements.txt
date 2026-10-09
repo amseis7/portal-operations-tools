@@ -43,3 +43,6 @@ pykeepass>=4.0.0
 flask-wtf
 Flask-Migrate
 cheroot
+markdown==3.7
+bleach==6.2.0
+webencodings==0.6.1

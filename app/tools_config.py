@@ -27,4 +27,11 @@ TOOLS = {
         'endpoint': 'vault.index',
         'color': 'success'
     },
+    'knowledge_base': {
+        'titulo': 'Base de Conocimiento',
+        'descripcion': 'Documentación de soluciones y procedimientos del equipo.',
+        'icono': 'bi-journal-text',
+        'endpoint': 'knowledge_base.index',
+        'color': 'info'
+    },
 }

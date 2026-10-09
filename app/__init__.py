@@ -20,6 +20,11 @@ def create_app(config_class=Config, instance_path=None):
     except OSError:
         pass
 
+    try:
+        os.makedirs(app.config["KB_ATTACHMENTS_DIR"])
+    except OSError:
+        pass
+
     db.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
@@ -60,6 +65,15 @@ def create_app(config_class=Config, instance_path=None):
         minutes=60
     )
 
+    from app.knowledge_base.attachment_cleanup import purge_expired_drafts
+    scheduler.add_job(
+        id='kb_attachment_cleanup',
+        func=purge_expired_drafts,
+        args=[app],
+        trigger='interval',
+        hours=24,
+    )
+
     from app.auth import bp as auth_bp
     app.register_blueprint(auth_bp, url_prefix='/auth')
 
@@ -77,6 +91,9 @@ def create_app(config_class=Config, instance_path=None):
 
     from app.vault import bp as vault_bp
     app.register_blueprint(vault_bp, url_prefix='/vault')
+
+    from app.knowledge_base import bp as knowledge_base_bp
+    app.register_blueprint(knowledge_base_bp, url_prefix='/kb')
 
     from app.tools_config import TOOLS
 
