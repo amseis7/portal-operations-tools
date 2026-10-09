@@ -383,6 +383,20 @@ class TestVaultCustomFieldProtection(PortalTestCase):
         new_row = next(f for f in remaining.values() if f.field_key == "NEW")
         self.assertEqual(decrypt(new_row.field_value_enc), "brand-new")
 
+    # -- whitespace-only value must not bypass the preserve branch ------------
+    # -- (review finding on the stable-id fix itself, same secret-loss class --
+    # -- debt #38 exists to eliminate) -----------------------------------------
+
+    def test_whitespace_only_submitted_value_preserves_protected_secret(self):
+        entry = self._make_entry(apikey=[("original-secret-value", True)])
+        field_id = self._field_id(entry, "apikey")
+        token = self._edit_csrf(entry.id)
+
+        self._post_edit(entry, token, [{"id": field_id, "key": "apikey", "value": " ", "protected": True}])
+
+        field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
+        self.assertEqual(decrypt(field.field_value_enc), "original-secret-value")
+
     # -- 409 response shape -------------------------------------------------------
 
     def test_409_response_has_correct_status_and_message_no_partial_persistence(self):

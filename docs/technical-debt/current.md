@@ -1758,11 +1758,16 @@ practice — deliberately deferred, per the confirmed MVP scope.
 
 # 38. Vault Custom Field Protection Loses Secrets on Key Rename or Duplicate Keys
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
-P0 (proposed — see rationale below; confirm or downgrade when this is
-picked up for remediation)
+P0
 ```
 
 Area:
@@ -1776,19 +1781,19 @@ Secrets
 File:
 
 ```text
-app/vault/routes.py (_save_custom_fields)
+app/vault/routes.py (_diff_custom_fields, _apply_custom_fields)
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-`_save_custom_fields` preserves a protected custom field's existing
-ciphertext when the submitted value is blank by matching the submitted
+`_save_custom_fields` preserved a protected custom field's existing
+ciphertext when the submitted value was blank by matching the submitted
 `field_key` against the prior protected fields **by string equality**,
 not by any stable per-field identity (no field id round-tripped through
-the form). The prior protected rows for the entry are bulk-deleted
+the form). The prior protected rows for the entry were bulk-deleted
 first, then re-matched against incoming form rows by key.
 
-Risk:
+Risk (historical):
 
 Possible **silent loss or swap of a secret**, with no error shown to the
 user and no way to recover the original ciphertext after the delete
@@ -1809,34 +1814,110 @@ already ran:
   real secret and silently receiving an unrelated one instead.
 ```
 
+Resolution:
+
+```text
+Replaced _save_custom_fields' delete-all/recreate + field_key string
+matching with two pure functions:
+
+    _diff_custom_fields(entry, cf_json_str)
+    _apply_custom_fields(entry, updates, new_items, delete_ids)
+
+The edit page now round-trips each VaultEntryField.id through a hidden
+custom_fields_json payload. Submitted items are classified strictly by
+id, never by field_key equality: update (id matches a current row of
+THIS entry), new (no id, non-blank key), or delete (id present on the
+entry but not mentioned, or mentioned with a blanked-out key). Any
+structurally invalid payload, duplicate id in one payload, or id that
+does not belong to the entry being edited raises CustomFieldConflict,
+which the route turns into a 409 with no partial persistence — renaming
+or reordering fields can no longer silently lose or swap a sibling's
+ciphertext.
+
+A second /review pass after this fix found two further gaps in the new
+validation itself, confirmed by direct code inspection and fixed in the
+same follow-up, before this item was marked resolved:
+
+  1. An explicit JSON null for key or value was stringified to the
+     literal "None" instead of being treated as blank (raw_key/raw_value
+     are now mapped to "" when None, matching the existing "never
+     coerce" strictness already applied to id).
+
+  2. A whitespace-only submitted value (e.g. a stray space typed into
+     the masked protected-field input, invisible to the user) was not
+     stripped before the blank-vs-replace decision in
+     _apply_custom_fields, so it bypassed the ciphertext-preserve branch
+     and silently replaced the real secret with encrypt(" ") — the same
+     class of silent secret loss this debt item exists to eliminate,
+     reintroduced via an edge case the initial id-based fix missed. The
+     preserve-vs-replace check now uses value.strip() for that decision
+     only; the stored value itself is never stripped, so a deliberate
+     non-blank replacement still keeps any real leading/trailing
+     whitespace.
+```
+
 Relationship to prior work:
 
 ```text
-This is the same _save_custom_fields path exercised by
+This is the same code path exercised by
 tests/vault/test_custom_field_protection.py (built earlier this session
 to protect blank-submitted custom fields from being overwritten). That
-work covers the same-key/no-rename/no-deletion path correctly; it does
-not cover key rename or duplicate-key deletion/reorder, which is exactly
-where this gap was found (by /review, during unrelated Knowledge Base
-attachments work — not investigated or fixed as part of that task).
+earlier work covered the same-key/no-rename/no-deletion path correctly;
+it did not cover key rename or duplicate-key deletion/reorder, which is
+exactly where this item's original gap was found (by /review, during
+unrelated Knowledge Base attachments work).
 ```
 
-Expected remediation:
+Files changed:
 
 ```text
-Not decided yet — do not assume a solution. Likely requires giving each
-custom field row a stable identity that round-trips through the edit
-form (e.g. a hidden per-row field id) instead of matching purely by
-field_key string equality, but this needs its own /investigate pass
-before implementation: what the form currently submits, whether field
-ids are already available to template rendering, and how this interacts
-with legitimate key renames (a user may genuinely want to rename a key
-while keeping the secret — that must still work, just not through
-silent re-matching).
+app/vault/routes.py
+app/templates/vault/edit.html
+tests/vault/test_custom_field_identity.py
+tests/vault/test_custom_field_protection.py
+docs/superpowers/plans/2026-10-09-vault-custom-field-identity-fix.md
+docs/systems/vault.md
 ```
 
-Remediate in an isolated follow-up task, with its own investigation
-first — do not bundle into unrelated work.
+Evidence:
+
+```text
+tests/vault/test_custom_field_identity.py and
+tests/vault/test_custom_field_protection.py cover: rename with blank
+value preserves id and ciphertext; duplicate-key deletion/reorder
+preserves the correct survivor's own secret (both directions); foreign/
+unknown/duplicate/non-int id fails closed with 409 and persists nothing,
+including entry-attribute changes in the same request; empty submission
+deletes all fields; null key is treated as blank (deletes or is inert,
+never becomes a field literally named "None"); null value is treated as
+blank (preserves ciphertext on a protected field); whitespace-only value
+preserves a protected field's ciphertext (at both the pure-function and
+full HTTP-request level) while still wiping an unprotected field as
+before; and an end-to-end combined rename+duplicate+delete+add scenario
+in one submission. Manual smoke test confirmed: renaming a protected
+field in the real edit UI with a blank value keeps the same field id,
+the same ciphertext, and the Edit form continues to render value="" with
+the "Dejar vacío para no cambiar" placeholder for protected fields — no
+plaintext secret is introduced into the DOM at any point. Full Vault
+suite: 78/78 passing. Full project suite: 187/187 passing.
+```
+
+Not changed by this resolution (explicitly out of scope, tracked
+separately):
+
+```text
+On-demand reveal of a protected custom field's value in the detail view
+does not exist (there is no route, no JS, and no reveal control for
+custom fields — the shield-lock badge next to a protected field in
+detail.html is a static label, unrelated to the entry-level password
+reveal button). This was never part of what this debt item covered and
+is not a regression caused by this fix — investigated and confirmed
+separately, not implemented here.
+
+detail() unconditionally decrypting every protected custom field's
+ciphertext server-side even though the template never renders the
+plaintext — tracked separately as debt item #46.
+```
 
 ---
 
@@ -2227,4 +2308,92 @@ immediate-unlink-on-infected step) from whatever mechanism calls
 scan_file(). The Scanner interface (app/knowledge_base/scanning.py)
 does not need to change either way — only who calls scan_file() and
 when.
+```
+
+---
+
+# 46. Vault Detail View Decrypts Every Protected Custom Field Unconditionally
+
+Priority:
+
+```text
+P2
+```
+
+Area:
+
+```text
+Vault
+Custom fields
+Secrets
+```
+
+File:
+
+```text
+app/vault/routes.py (detail())
+```
+
+Current behavior:
+
+```python
+custom_fields = [
+    {"key": f.field_key, "value": decrypt(f.field_value_enc), "protected": f.is_protected}
+    for f in entry.custom_fields
+]
+return render_template("vault/detail.html", entry=entry, notes=notes, custom_fields=custom_fields, now=now)
+```
+
+`detail()` calls `decrypt()` on every `VaultEntryField` belonging to the
+entry, including protected ones, on every single page view — regardless
+of whether the viewer ever asks to see a protected value.
+`detail.html` (section 15's custom-fields table) only ever renders
+`••••••••` for a row where `field.protected` is true; it never outputs
+`field.value` in that branch. So:
+
+```text
+- there is NO current DOM leak: Jinja only emits what the template
+  references, and the template never references the decrypted value
+  for a protected row;
+- but the plaintext DOES exist unnecessarily in server-side memory/
+  request context (the `custom_fields` list and the `field.value`
+  Jinja variable) for every protected field on every view of the entry,
+  whether or not anyone asked for it.
+```
+
+Risk:
+
+Low under current code (no leak path exists today), but the decrypted
+plaintext's lifetime and surface area (process memory, any future
+template change, any future logging/exception handler that captures
+local variables or the render context) is wider than it needs to be for
+data nobody requested yet.
+
+Found by: self-review during the investigation and resolution of debt
+item #38 (Vault custom-field stable-id fix) — unrelated to that fix's
+actual change, not introduced by it, and explicitly out of scope for it.
+
+Expected remediation:
+
+```text
+Not decided yet. The general direction: avoid decrypting a protected
+custom field's value in detail() until an explicit, authorized reveal
+action requests it specifically — mirroring the entry-level password,
+which detail() already does NOT decrypt up front (only reveal() does,
+on demand). Any future reveal mechanism for custom fields must, per
+portal-vault-change:
+
+    - be POST, not GET;
+    - reuse the entry-level authorization check (_can_access() or
+      equivalent) used by the existing password reveal() route;
+    - be CSRF-protected;
+    - be scoped by both entry_id and the specific VaultEntryField.id
+      (never just field_key, for the same stable-identity reason debt
+      item #38 was fixed) — rejecting with 404/403 if the field does
+      not belong to the given entry;
+    - not log or audit the decrypted value itself.
+
+Do not build this reveal mechanism speculatively — it was explicitly
+investigated and confirmed NOT to exist yet, and is out of scope until
+a task actually requires it.
 ```

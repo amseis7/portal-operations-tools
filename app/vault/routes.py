@@ -147,8 +147,12 @@ def _diff_custom_fields(entry, cf_json_str):
             raise CustomFieldConflict()
 
         raw_id = raw.get("id")
-        key = str(raw.get("key", "")).strip()
-        value = str(raw.get("value", ""))
+        # Explicit JSON null must behave as blank, not stringify to "None" —
+        # same "never coerce" intent already applied to raw_id below.
+        raw_key = raw.get("key")
+        key = "" if raw_key is None else str(raw_key).strip()
+        raw_value = raw.get("value")
+        value = "" if raw_value is None else str(raw_value)
         protected = bool(raw.get("protected", False))
 
         if raw_id is None:
@@ -187,7 +191,13 @@ def _apply_custom_fields(entry, updates, new_items, delete_ids):
     """Apply a successful _diff_custom_fields() classification. Only ever
     called after _diff_custom_fields() returns without raising."""
     for field, key, value, protected in updates:
-        if not value and field.is_protected:  # pre-edit flag, read before overwritten
+        # .strip() here only decides preserve-vs-replace — a whitespace-only
+        # submission (e.g. an accidental space typed into a masked password
+        # input) must count as blank, or it silently overwrites the real
+        # secret with encrypt(" "). The stored value itself is never
+        # stripped, so a deliberate non-blank value keeps any real
+        # leading/trailing whitespace the user typed.
+        if not value.strip() and field.is_protected:  # pre-edit flag, read before overwritten
             field.field_key = key
             field.is_protected = protected
             # field.field_value_enc intentionally untouched: blank value on

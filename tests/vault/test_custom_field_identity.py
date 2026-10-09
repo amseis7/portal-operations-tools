@@ -221,6 +221,78 @@ class TestDiffCustomFields(PortalTestCase):
         with self.assertRaises(CustomFieldConflict):
             _diff_custom_fields(entry, payload)
 
+    # -- null key/value coercion (review finding #1) ---------------------------
+
+    def test_null_key_is_treated_as_blank_not_stringified(self):
+        """A JSON null key must behave like an absent/blank key, not become
+        the literal string "None"."""
+        entry = self._make_entry(TOKEN=[("secret", True)])
+        field = self._field(entry, "TOKEN")
+        payload = json_mod.dumps([
+            {"id": field.id, "key": None, "value": "", "protected": True},
+        ])
+        updates, new_items, delete_ids = _diff_custom_fields(entry, payload)
+
+        self.assertEqual(updates, [])
+        self.assertEqual(new_items, [])
+        self.assertEqual(delete_ids, {field.id})
+
+    def test_null_key_with_no_id_is_inert_not_a_new_none_field(self):
+        entry = self._make_entry(TOKEN=[("secret", True)])
+        payload = json_mod.dumps([
+            {"id": None, "key": None, "value": "irrelevant", "protected": False},
+        ])
+        updates, new_items, delete_ids = _diff_custom_fields(entry, payload)
+
+        self.assertEqual(new_items, [])
+
+    def test_null_value_is_treated_as_blank_string(self):
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+        payload = json_mod.dumps([
+            {"id": field.id, "key": "TOKEN", "value": None, "protected": True},
+        ])
+        updates, new_items, delete_ids = _diff_custom_fields(entry, payload)
+        _apply_custom_fields(entry, updates, new_items, delete_ids)
+        db.session.commit()
+
+        field = db.session.get(VaultEntryField, field.id)
+        self.assertEqual(decrypt(field.field_value_enc), "original-secret")
+
+    # -- whitespace-only value bypassing preserve (review finding #2) ---------
+
+    def test_whitespace_only_value_preserves_protected_secret(self):
+        """A single accidental space typed into a masked protected-field
+        input must still count as blank — it must not silently replace the
+        real secret with encrypt(' ')."""
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+        payload = json_mod.dumps([
+            {"id": field.id, "key": "TOKEN", "value": " ", "protected": True},
+        ])
+        updates, new_items, delete_ids = _diff_custom_fields(entry, payload)
+        _apply_custom_fields(entry, updates, new_items, delete_ids)
+        db.session.commit()
+
+        field = db.session.get(VaultEntryField, field.id)
+        self.assertEqual(decrypt(field.field_value_enc), "original-secret")
+
+    def test_whitespace_only_value_on_unprotected_field_still_wipes_it(self):
+        """Unprotected fields have no preserve semantics at all — a
+        whitespace submission is a deliberate (if odd) new value, same as
+        today's blank-string behavior for unprotected fields."""
+        entry = self._make_entry(NOTE=[("visible-value", False)])
+        field = self._field(entry, "NOTE")
+        payload = json_mod.dumps([
+            {"id": field.id, "key": "NOTE", "value": "   ", "protected": False},
+        ])
+        updates, new_items, delete_ids = _diff_custom_fields(entry, payload)
+        _apply_custom_fields(entry, updates, new_items, delete_ids)
+        db.session.commit()
+
+        field = db.session.get(VaultEntryField, field.id)
+        self.assertEqual(decrypt(field.field_value_enc), "   ")
+
     # -- malformed payload ----------------------------------------------------
 
     def test_malformed_json_raises_conflict(self):

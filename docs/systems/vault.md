@@ -476,27 +476,44 @@ encrypt()
 
 ---
 
-# 14. Custom Field Replacement
+# 14. Custom Field Diff (id-based, not replace-all)
 
-Helper:
+Helpers in `app/vault/routes.py`:
 
 ```python
-_save_custom_fields()
+_diff_custom_fields(entry, cf_json_str)
+_apply_custom_fields(entry, updates, new_items, delete_ids)
 ```
 
-currently performs:
+replaced the earlier delete-all/recreate `_save_custom_fields()`. The edit
+page now round-trips each existing `VaultEntryField.id` through a hidden
+JSON payload (`custom_fields_json`), and the submitted payload is matched
+against the entry's *current* rows **by `id`, never by `field_key` string
+equality**:
 
 ```text
-delete all current fields for entry
-        ↓
 parse submitted JSON
         ↓
-recreate fields
+validate every item carrying a non-null id (must be an int, not bool/float/
+str; must belong to THIS entry; no duplicate ids in one payload) —
+fails closed with 409 and persists nothing on any violation
+        ↓
+classify: update (id matched) / new (no id, non-blank key) /
+delete (id present in entry but not mentioned, or mentioned with a
+blanked-out key)
+        ↓
+apply — rename, protect/unprotect, and replace/preserve ciphertext
+per field, by row identity
 ```
 
-This is replace-all behavior.
+This makes renaming a key, or deleting one of several fields that share
+the same `field_key` (duplicate keys are legal — no `UNIQUE(entry_id,
+field_key)` constraint exists), safe: the correct row's ciphertext is never
+lost or swapped with a sibling's. See `docs/technical-debt/current.md`
+item #38 (resolved) for the vulnerability this replaced.
 
-It does not calculate field-level differences.
+A submitted `id` of JSON `null` and a submitted `key`/`value` of JSON
+`null` are both treated as blank, not coerced to the string `"None"`.
 
 ---
 
@@ -519,6 +536,37 @@ It controls KeePass field protection semantics.
 It does not replace Vault encryption.
 
 All custom field values are encrypted in the application database regardless of this flag.
+
+## Blank-value preserve semantics
+
+When editing an existing protected field, submitting a **blank value**
+preserves the stored ciphertext unchanged (the field is only renamed/
+re-flagged). A **whitespace-only** value (e.g. a stray space typed into
+the masked input) is also treated as blank for this decision — only the
+stored value itself is never stripped, so a deliberate non-blank
+replacement value keeps any real leading/trailing whitespace. This
+distinction exists because the masked `type="password"` input makes a
+lone space visually indistinguishable from empty.
+
+This preserve behavior applies only to fields matched by `id` in the
+submitted payload (`updates`, see section 14). It does not apply to
+newly added fields (`new_items`), which have no prior ciphertext to
+preserve, and it does not apply to unprotected fields, which have no
+preserve semantics at all.
+
+## Detail view currently decrypts protected fields unconditionally
+
+`detail()` in `app/vault/routes.py` builds the `custom_fields` list by
+calling `decrypt()` on every `VaultEntryField`, including protected ones,
+even though `detail.html` only ever renders `••••••••` for protected
+rows and never outputs the decrypted value into the template. There is
+no current DOM leak, but see `docs/technical-debt/current.md` item #46
+for the unnecessary-decrypt concern this creates. Protected custom
+fields have no on-demand reveal mechanism in the UI today — the
+`bi-shield-lock` badge next to a protected field is a static label, not
+a control; it is unrelated to the entry-level password reveal button
+(`btnReveal` / `POST /vault/<id>/reveal`), which only ever reveals
+`entry.password_enc`.
 
 ---
 
