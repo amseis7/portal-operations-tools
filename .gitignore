@@ -16,6 +16,7 @@ instance/
 *.sqlite3
 *.sqlite
 *.kdbx
+*.keyx
 .env
 
 

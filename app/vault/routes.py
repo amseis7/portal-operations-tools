@@ -1,6 +1,7 @@
 import json as json_mod
 import os
 import uuid as uuid_mod
+from collections import defaultdict, deque
 from datetime import datetime
 
 from flask import (
@@ -12,7 +13,7 @@ from werkzeug.exceptions import NotFound
 
 from app.extensions import db
 from app.utils import admin_required
-from app.vault import bp
+from app.vault import bp, import_staging
 from app.vault.models import VaultEntry, VaultGroup, VaultEntryField, VaultSyncConfig
 from app.vault.crypto import encrypt, decrypt
 from app.vault.forms import VaultEntryForm
@@ -35,6 +36,22 @@ def _can_access(entry):
     if current_user.is_admin:
         return True
     return entry.owner_id == current_user.id or entry.shared
+
+
+def _can_edit(entry):
+    """Edit permission is owner-or-admin only. Deliberately does not reuse
+    _can_access(): that helper represents view/reveal permission and
+    includes entry.shared by design — shared visibility must not imply
+    permission to modify the entry."""
+    return current_user.is_admin or entry.owner_id == current_user.id
+
+
+def _can_delete(entry):
+    """Delete permission is owner-or-admin only, same criterion as
+    _can_edit() but kept as its own helper: edit and delete are distinct
+    permissions that happen to share a formula today, not one concept.
+    Shared visibility must not imply permission to delete the entry."""
+    return current_user.is_admin or entry.owner_id == current_user.id
 
 
 def _build_group_tree(groups):
@@ -75,11 +92,30 @@ def _parse_expires_at(value):
 
 
 def _save_custom_fields(entry, cf_json_str):
-    """Replace all custom fields for an entry from JSON string."""
+    """Replace all custom fields for an entry from JSON string.
+
+    A blank submitted value for a key that previously held a protected
+    field preserves that field's existing ciphertext verbatim, regardless
+    of the new protected flag (unchecking "Protegido" while leaving the
+    value blank must keep the secret, only clearing the flag).
+
+    VaultEntryField has no UNIQUE(entry_id, field_key) constraint, so
+    multiple fields can legitimately share the same field_key, each with
+    its own distinct ciphertext. existing_protected therefore maps each
+    key to a FIFO queue of its prior ciphertexts (one entry per
+    occurrence), and a blank resubmission consumes one ciphertext from
+    that queue per matching key — never collapsing separate occurrences
+    onto a single shared value.
+    """
     try:
         fields = json_mod.loads(cf_json_str or "[]")
     except (ValueError, TypeError):
         fields = []
+
+    existing_protected = defaultdict(deque)
+    for f in entry.custom_fields:
+        if f.is_protected:
+            existing_protected[f.field_key].append(f.field_value_enc)
 
     VaultEntryField.query.filter_by(entry_id=entry.id).delete()
 
@@ -89,10 +125,16 @@ def _save_custom_fields(entry, cf_json_str):
             continue
         value = str(item.get("value", ""))
         protected = bool(item.get("protected", False))
+
+        if not value and existing_protected.get(key):
+            value_enc = existing_protected[key].popleft()
+        else:
+            value_enc = encrypt(value)
+
         field = VaultEntryField(
             entry_id=entry.id,
             field_key=key,
-            field_value_enc=encrypt(value),
+            field_value_enc=value_enc,
             is_protected=protected,
         )
         db.session.add(field)
@@ -221,6 +263,8 @@ def reveal(entry_id):
 @login_required
 def edit(entry_id):
     entry = _get_entry_or_404(entry_id)
+    if not _can_edit(entry):
+        abort(403)
 
     form = VaultEntryForm(obj=entry)
     _populate_group_choices(form)
@@ -255,7 +299,11 @@ def edit(entry_id):
         return redirect(url_for("vault.detail", entry_id=entry.id))
 
     existing_cf = [
-        {"key": f.field_key, "value": decrypt(f.field_value_enc), "protected": f.is_protected}
+        {
+            "key": f.field_key,
+            "value": "" if f.is_protected else decrypt(f.field_value_enc),
+            "protected": f.is_protected,
+        }
         for f in entry.custom_fields
     ]
     return render_template("vault/edit.html", form=form, entry=entry, existing_cf=existing_cf)
@@ -265,6 +313,8 @@ def edit(entry_id):
 @login_required
 def delete(entry_id):
     entry = _get_entry_or_404(entry_id)
+    if not _can_delete(entry):
+        abort(403)
     title, eid = entry.title, entry.id
     log_audit("vault", "delete", "entry", eid, title)
     db.session.delete(entry)
@@ -396,9 +446,7 @@ def import_kdbx():
             new_entries.append(entry_data)
 
     token = uuid_mod.uuid4().hex
-    tmp_json = os.path.join(current_app.instance_path, f"vault_import_{token}.json")
-    with open(tmp_json, "w", encoding="utf-8") as f:
-        json_mod.dump({"new": new_entries, "conflicts": conflicts}, f)
+    import_staging.store(token, {"new": new_entries, "conflicts": conflicts})
 
     session["vault_import_token"] = token
     return redirect(url_for("vault.import_preview"))
@@ -413,13 +461,10 @@ def import_preview():
         flash("No hay una importación en progreso.", "warning")
         return redirect(url_for("vault.import_kdbx"))
 
-    tmp_json = os.path.join(current_app.instance_path, f"vault_import_{token}.json")
-    if not os.path.exists(tmp_json):
+    data = import_staging.retrieve(token)
+    if data is None:
         flash("La sesión de importación expiró. Sube el archivo nuevamente.", "warning")
         return redirect(url_for("vault.import_kdbx"))
-
-    with open(tmp_json, encoding="utf-8") as f:
-        data = json_mod.load(f)
 
     # Deduplicate group paths for display in preview
     seen_paths: set = set()
@@ -449,14 +494,11 @@ def import_confirm():
         flash("Sesión de importación inválida.", "danger")
         return redirect(url_for("vault.index"))
 
-    tmp_json = os.path.join(current_app.instance_path, f"vault_import_{token}.json")
-    if not os.path.exists(tmp_json):
+    data = import_staging.retrieve(token)
+    if data is None:
         flash("La sesión de importación expiró.", "danger")
         return redirect(url_for("vault.index"))
-
-    with open(tmp_json, encoding="utf-8") as f:
-        data = json_mod.load(f)
-    os.remove(tmp_json)
+    import_staging.discard(token)
 
     selected_new_uuids = set(request.form.getlist("import_new"))
 

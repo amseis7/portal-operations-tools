@@ -135,9 +135,11 @@
     fields.forEach(function(f, i) {
       var row = document.createElement('div');
       row.className = 'input-group mb-2';
+      var valueType = f.protected ? 'password' : 'text';
+      var valuePlaceholder = f.protected ? 'Dejar vacío para no cambiar' : 'Valor';
       row.innerHTML =
         '<input type="text" class="form-control cf-key" placeholder="Clave" value="'+escHtml(f.key)+'" maxlength="100">'
-        +'<input type="text" class="form-control cf-value" placeholder="Valor" value="'+escHtml(f.value)+'">'
+        +'<input type="'+valueType+'" class="form-control cf-value" placeholder="'+valuePlaceholder+'" value="'+escHtml(f.value)+'">'
         +'<div class="input-group-text"><input class="form-check-input mt-0 cf-protected" type="checkbox" title="Protegido"'+(f.protected?' checked':'')+'>  <i class="bi bi-shield-lock ms-1 text-muted"></i></div>'
         +'<button type="button" class="btn btn-outline-danger cf-del" data-idx="'+i+'"><i class="bi bi-trash"></i></button>';
       container.appendChild(row);

@@ -271,15 +271,19 @@
                          class="btn btn-sm btn-primary" title="Ver">
                         <i class="bi bi-eye"></i>
                       </a>
+                      {% if current_user.is_admin or entry.owner_id == current_user.id %}
                       <a href="{{ url_for('vault.edit', entry_id=entry.id) }}"
                          class="btn btn-sm btn-warning text-dark" title="Editar">
                         <i class="bi bi-pencil"></i>
                       </a>
+                      {% endif %}
+                      {% if current_user.is_admin or entry.owner_id == current_user.id %}
                       <button type="button" class="btn btn-sm btn-danger" title="Eliminar"
                               data-bs-toggle="modal" data-bs-target="#modalEliminar"
                               data-entry-id="{{ entry.id }}" data-entry-title="{{ entry.title }}">
                         <i class="bi bi-trash"></i>
                       </button>
+                      {% endif %}
                     </div>
                   </td>
                 </tr>

@@ -48,6 +48,12 @@ Useful but not urgent.
 
 # 1. Vault Edit Authorization
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -61,7 +67,7 @@ Vault
 Authorization
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
 ```text
 /vault/<entry_id>/edit
@@ -79,24 +85,63 @@ Risk:
 
 An authenticated user who can reach or guess an entry ID may potentially access the edit flow for an entry they do not own.
 
-Expected remediation:
+Resolution:
 
 ```text
-Apply the same explicit access model used by Vault detail/reveal routes.
+Added a dedicated _can_edit(entry) helper in app/vault/routes.py,
+deliberately separate from _can_access(entry):
+
+    def _can_edit(entry):
+        return current_user.is_admin or entry.owner_id == current_user.id
+
+Final criterion (explicit product decision, not inferred from code):
+    owner can edit
+    admin can edit
+    entry.shared == True does NOT grant edit permission
+
+_can_access(entry) (view/reveal permission, which does include
+entry.shared) was left untouched. edit() now calls _can_edit(entry) and
+aborts with 403 when it returns False, before any form processing.
 ```
 
-Likely files:
+Files changed:
 
 ```text
 app/vault/routes.py
-tests/vault/
+app/templates/vault/detail.html (Editar button hidden for non-owner/non-admin)
+tests/vault/test_edit_authorization.py
 ```
 
-Do not silently fix during unrelated tasks.
+Evidence:
+
+```text
+tests/vault/test_edit_authorization.py covers:
+    owner can GET/POST edit
+    admin can GET/POST edit
+    non-owner, shared=False -> 403 on GET and POST
+    non-owner, shared=True  -> 403 on GET and POST (the key regression:
+        shared visibility does not imply edit permission)
+    authorized POST persists changes
+    unauthorized POST does not modify the entry
+```
+
+Not changed by this resolution (explicitly out of scope, tracked separately):
+
+```text
+Vault Delete Authorization (debt item #2)
+proteger_blueprint() for the vault blueprint (debt item #3)
+detail()/reveal() authorization (_can_access(), unchanged)
+```
 
 ---
 
 # 2. Vault Delete Authorization
+
+Status:
+
+```text
+RESOLVED
+```
 
 Priority:
 
@@ -111,41 +156,81 @@ Vault
 Authorization
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
 ```text
 POST /vault/<entry_id>/delete
 ```
 
-requires authentication but does not currently enforce:
+required authentication but did not enforce:
 
 ```python
 _can_access(entry)
 ```
 
-or equivalent ownership/admin authorization.
+or equivalent ownership/admin authorization. Any authenticated user with a
+valid entry ID could delete any Vault entry.
 
-Risk:
-
-Unauthorized deletion of Vault entries.
-
-Expected remediation:
+Resolution:
 
 ```text
-Add explicit entry-level authorization before deletion.
+Added a dedicated _can_delete(entry) helper in app/vault/routes.py,
+kept separate from both _can_access(entry) and _can_edit(entry):
+
+    def _can_delete(entry):
+        return current_user.is_admin or entry.owner_id == current_user.id
+
+Final criterion (explicit product decision, consistent with the edit
+policy already resolved in debt item #1):
+    owner can delete
+    admin can delete
+    entry.shared == True does NOT grant delete permission
+
+delete() now calls _can_delete(entry) immediately after
+_get_entry_or_404(), before log_audit(), db.session.delete(),
+db.session.commit(), and vault_sync.trigger_async() — so an unauthorized
+attempt produces no side effect at all (no audit record, no deletion, no
+KeePass resync trigger).
+
+The "Eliminar" button/action was hidden for non-owner/non-admin users in
+both app/templates/vault/detail.html and app/templates/vault/index.html.
+In detail.html this required hiding the entire confirmation modal (not
+just the trigger button), since the modal's <form action="..."> baked
+the real delete URL into the page unconditionally — hiding only the
+trigger button left that URL present in the page source.
 ```
 
-Additional review should determine whether:
+Files changed:
 
 ```text
-owner
-admin
-shared user
+app/vault/routes.py
+app/templates/vault/detail.html
+app/templates/vault/index.html
+tests/vault/test_delete_authorization.py
 ```
 
-should each have deletion rights.
+Evidence:
 
-Do not infer that shared visibility implies delete permission.
+```text
+tests/vault/test_delete_authorization.py covers:
+    owner can delete own entry
+    admin can delete any entry
+    non-owner, shared=False -> 403, entry remains
+    non-owner, shared=True  -> 403, entry remains (the key regression:
+        shared visibility does not imply delete permission)
+    authorized delete cascades to VaultEntryField (custom fields)
+    unauthorized attempt creates no AuditLog(action="delete") for that entry
+    "Eliminar" visibility correct in detail.html and index.html
+```
+
+Not changed by this resolution (explicitly out of scope, tracked separately):
+
+```text
+_can_access() and _can_edit() (unchanged)
+edit() (unchanged)
+proteger_blueprint() for the vault blueprint (debt item #3)
+import/export and sync internals (only verified, not modified)
+```
 
 ---
 
@@ -209,6 +294,12 @@ tool permissions
 
 # 4. Plaintext Vault Import Preview Files
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -223,9 +314,9 @@ Secrets
 Filesystem
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-KeePass import preview writes temporary files:
+KeePass import preview used to write temporary files:
 
 ```text
 instance/vault_import_<token>.json
@@ -239,37 +330,70 @@ notes
 custom fields
 ```
 
-Risk:
+Risk (historical):
 
-Plaintext credentials are temporarily persisted on disk.
+Plaintext credentials were temporarily persisted on disk, exposed to
+filesystem access, backups, endpoint security tools, crash recovery,
+manual file inspection, and stale files.
 
-Exposure may occur through:
-
-```text
-filesystem access
-backups
-endpoint security tools
-crash recovery
-manual file inspection
-stale files
-```
-
-Expected remediation options should be evaluated explicitly.
-
-Possible approaches include:
+Resolution:
 
 ```text
-encrypted temporary storage
-server-side session-backed state
-short-lived database staging with encryption
-in-memory workflow when feasible
+Replaced the on-disk JSON file with app/vault/import_staging.py — an
+in-process, in-memory dict keyed by the same import token, protected by
+a threading.Lock, with a 30-minute TTL purged lazily on store()/
+retrieve() (no background thread, no APScheduler, no new infra).
+
+instance/vault_import_<token>.json is no longer written at any point in
+the import flow. Only the token itself is kept in the Flask session
+(unchanged). The upload-time .kdbx/.keyx temp-file save-then-delete in
+the existing `finally` block was left untouched, as required — that
+part was already correct.
+
+This was chosen over an encrypted-file or DB-staging alternative because
+it is the option ADR-004 already points to ("prefer... non-persistent
+temporary state"), requires no migration, and the app runs as a single
+multi-threaded process (Cheroot), so process memory is a valid shared
+store for this use case. Trade-off: an in-progress import is lost on
+process restart (the admin re-uploads the .kdbx) — acceptable for an
+admin-only, infrequent, non-critical-path workflow.
 ```
 
-Do not redesign without first considering import size and multi-request workflow requirements.
+Files changed:
+
+```text
+app/vault/import_staging.py (new)
+app/vault/routes.py (import_kdbx/import_preview/import_confirm)
+tests/vault/test_import_staging.py
+tests/vault/test_import_flow.py
+```
+
+Evidence:
+
+```text
+tests/vault/test_import_staging.py covers: store/retrieve/discard,
+TTL expiry, lazy purge of other expired tokens on both store() and
+retrieve(), isolation between concurrent tokens.
+
+tests/vault/test_import_flow.py covers: full upload -> preview -> confirm
+flow against a synthetic .kdbx, preview/confirm with a missing or
+nonexistent token, and an explicit assertion that
+instance/vault_import_*.json is never created at any point in the flow
+(including on an abandoned import).
+```
+
+This resolution also resolves debt item #5 ("Abandoned Vault Import
+Files") as a direct consequence — see that item.
 
 ---
 
 # 5. Abandoned Vault Import Files
+
+Status:
+
+```text
+RESOLVED
+```
 
 Priority:
 
@@ -285,38 +409,32 @@ Secrets
 Cleanup
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-Temporary import JSON files are deleted during confirmed import.
+Temporary import JSON files were deleted during confirmed import, but no
+cleanup mechanism existed for abandoned preview workflows — plaintext
+temporary import files could remain under `instance/` indefinitely.
 
-No cleanup mechanism is currently documented for abandoned preview workflows.
-
-Risk:
-
-Plaintext temporary import files may remain under:
+Resolution:
 
 ```text
-instance/
+Resolved as a direct side effect of debt item #4: the on-disk
+instance/vault_import_<token>.json file this item was about no longer
+exists at all. There is nothing left to abandon on disk.
+
+The in-memory staging in app/vault/import_staging.py does still hold an
+abandoned import's data until its 30-minute TTL lazily purges it (on the
+next store() or retrieve() call anywhere in the process) — but that is
+process memory, not a file, and was never the subject of this debt item.
 ```
 
-indefinitely.
-
-Expected remediation:
+Evidence:
 
 ```text
-Add expiration / cleanup behavior for abandoned import state.
+tests/vault/test_import_flow.py::test_abandoned_import_leaves_no_files_on_disk
+uploads a .kdbx, never confirms, and asserts no vault_import_*.json or
+leftover import_*.kdbx/.keyx files exist afterward.
 ```
-
-Could include:
-
-```text
-timestamp-based cleanup
-startup cleanup
-scheduled cleanup
-explicit cancel action
-```
-
-Any cleanup logic must avoid deleting active imports.
 
 ---
 
