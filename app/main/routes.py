@@ -6,6 +6,18 @@ from app.models.audit import AuditLog
 from app.utils import admin_required
 from sqlalchemy import or_
 
+# Single source of truth for audit module metadata — used by the filter
+# buttons and the per-row badge in main/audit.html. Add a new module here
+# instead of touching the template when a future tool starts auditing.
+AUDIT_MODULES = {
+    'csirt': {'label': 'CSIRT', 'icon': 'bi-shield-lock', 'color': 'primary'},
+    'virustotal': {'label': 'Análisis IoC', 'icon': 'bi-bug', 'color': 'danger'},
+    'umbrella': {'label': 'Umbrella', 'icon': 'bi-shield-check', 'color': 'warning'},
+    'vault': {'label': 'Vault', 'icon': 'bi-safe', 'color': 'dark'},
+    'auth': {'label': 'Usuarios', 'icon': 'bi-people', 'color': 'success'},
+    'knowledge_base': {'label': 'Base de Conocimiento', 'icon': 'bi-journal-text', 'color': 'info'},
+}
+
 @bp.route('/')
 @bp.route('/dashboard')
 @login_required
@@ -35,7 +47,9 @@ def audit():
     if module_filter:
         query = query.filter(AuditLog.module == module_filter)
     logs = query.limit(500).all()
-    return render_template('main/audit.html', logs=logs, module_filter=module_filter)
+    return render_template(
+        'main/audit.html', logs=logs, module_filter=module_filter, audit_modules=AUDIT_MODULES
+    )
 
 
 @bp.route('/notificacion/leida/<int:notif_id>', methods=['POST'])

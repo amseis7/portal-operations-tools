@@ -17,7 +17,7 @@
         <h2 class="mb-0">
             <i class="bi bi-journal-text text-secondary me-2"></i>Auditoría Global
         </h2>
-        <small class="text-muted">Registro de acciones en CSIRT, Análisis IoC, Cisco Umbrella, Vault y gestión de usuarios</small>
+        <small class="text-muted">Registro de acciones en CSIRT, Análisis IoC, Cisco Umbrella, Vault, Base de Conocimiento y gestión de usuarios</small>
     </div>
     <span class="badge bg-danger d-flex align-items-center gap-1 px-3 py-2">
         <i class="bi bi-shield-lock-fill"></i> Solo Admin
@@ -37,26 +37,12 @@
                        class="btn {{ 'btn-secondary' if not module_filter else 'btn-outline-secondary' }}">
                         Todos
                     </a>
-                    <a href="{{ url_for('main.audit', module='csirt') }}"
-                       class="btn {{ 'btn-primary' if module_filter == 'csirt' else 'btn-outline-primary' }}">
-                        <i class="bi bi-shield-lock me-1"></i>CSIRT
+                    {% for key, meta in audit_modules.items() %}
+                    <a href="{{ url_for('main.audit', module=key) }}"
+                       class="btn {{ 'btn-' + meta.color + (' text-dark' if meta.color == 'warning' else '') if module_filter == key else 'btn-outline-' + meta.color }}">
+                        <i class="bi {{ meta.icon }} me-1"></i>{{ meta.label }}
                     </a>
-                    <a href="{{ url_for('main.audit', module='virustotal') }}"
-                       class="btn {{ 'btn-danger' if module_filter == 'virustotal' else 'btn-outline-danger' }}">
-                        <i class="bi bi-bug me-1"></i>Análisis IoC
-                    </a>
-                    <a href="{{ url_for('main.audit', module='umbrella') }}"
-                       class="btn {{ 'btn-warning text-dark' if module_filter == 'umbrella' else 'btn-outline-warning' }}">
-                        <i class="bi bi-shield-check me-1"></i>Umbrella
-                    </a>
-                    <a href="{{ url_for('main.audit', module='vault') }}"
-                       class="btn {{ 'btn-dark' if module_filter == 'vault' else 'btn-outline-dark' }}">
-                        <i class="bi bi-safe me-1"></i>Vault
-                    </a>
-                    <a href="{{ url_for('main.audit', module='auth') }}"
-                       class="btn {{ 'btn-success' if module_filter == 'auth' else 'btn-outline-success' }}">
-                        <i class="bi bi-people me-1"></i>Usuarios
-                    </a>
+                    {% endfor %}
                 </div>
             </div>
             {% if logs %}
@@ -94,14 +80,9 @@
                                 {{ log.user.username if log.user else '<sistema>' }}
                             </td>
                             <td class="text-center">
-                                {% if log.module == 'csirt' %}
-                                    <span class="badge bg-primary">CSIRT</span>
-                                {% elif log.module == 'virustotal' %}
-                                    <span class="badge bg-danger">IoC</span>
-                                {% elif log.module == 'umbrella' %}
-                                    <span class="badge bg-warning text-dark">Umbrella</span>
-                                {% elif log.module == 'auth' %}
-                                    <span class="badge bg-success">Usuarios</span>
+                                {% set meta = audit_modules.get(log.module) %}
+                                {% if meta %}
+                                    <span class="badge bg-{{ meta.color }}{{ ' text-dark' if meta.color == 'warning' else '' }}">{{ meta.label }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary">{{ log.module }}</span>
                                 {% endif %}
