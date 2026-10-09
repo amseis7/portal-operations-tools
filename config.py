@@ -55,4 +55,14 @@ class Config:
     KB_ATTACHMENT_ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'pdf', 'docx', 'xlsx', 'xls', 'csv', 'txt'}
     KB_ATTACHMENT_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
     KB_ATTACHMENT_DRAFT_TTL_HOURS = int(os.environ.get('KB_ATTACHMENT_DRAFT_TTL_HOURS', 24))
-    KB_SCANNER = os.environ.get('KB_SCANNER', 'null')  # 'null' today; 'clamav'/'defender'/'trellix' are future values
+    # 'null' (default) or 'dev_allow' are the only values registered today.
+    # 'clamav'/'defender'/'trellix' are names a FUTURE real engine might use,
+    # but setting one now does NOT degrade gracefully: validate_scanner_config()
+    # raises RuntimeError at startup for any name not yet registered in
+    # app/knowledge_base/scanning.py's _SCANNERS — register the engine there
+    # first, then set this.
+    KB_SCANNER = os.environ.get('KB_SCANNER', 'null')
+    # Deliberately strong name: DevAllowScanner does NOT scan files for malware.
+    # Local development only — validate_scanner_config() refuses to start if
+    # KB_SCANNER=dev_allow is set without this also being explicitly true.
+    KB_ALLOW_INSECURE_DEV_SCANNER = os.environ.get('KB_ALLOW_INSECURE_DEV_SCANNER', 'false').strip().lower() == 'true'

@@ -2225,23 +2225,47 @@ app/knowledge_base/scanning.py
 
 Current behavior:
 
-`get_scanner()` only ever returns `NullScanner`, which never returns
-`clean` — every uploaded attachment permanently stays `not_scanned`.
-Since `scan_status == "clean"` is the only state `/view`/`/download` (and
-inline Markdown rendering) will ever serve, **every attachment uploaded
-in this version is permanently unservable**: visible in the attachment
+In any environment that has not explicitly opted in to the local-dev
+escape hatch below, `get_scanner()` only ever returns `NullScanner`,
+which never returns `clean` — every uploaded attachment permanently
+stays `not_scanned`. Since `scan_status == "clean"` is the only state
+`/view`/`/download` (and inline Markdown rendering) will ever serve,
+**every attachment uploaded in this version is permanently unservable**
+in that default/production configuration: visible in the attachment
 list with a "Sin scanner" badge, but never viewable or downloadable.
 
 This is the **confirmed, deliberate MVP policy** (explicit product
-decision during this feature's design), not an oversight or a bug —
-documented here per the plan's own Task 13 instruction to record it as a
-known limitation.
+decision during this feature's design) for production, not an oversight
+or a bug — documented here per the plan's own Task 13 instruction to
+record it as a known limitation.
+
+**Local-development-only escape hatch** (added during a later session,
+not a resolution of this item): `app/knowledge_base/scanning.py` now
+also registers `DevAllowScanner`, which marks every file `clean`
+*without actually scanning it*. It is never the default and cannot be
+reached accidentally — `get_scanner()` only returns it when **both**
+`KB_SCANNER=dev_allow` and `KB_ALLOW_INSECURE_DEV_SCANNER=true` are
+explicitly set (checked by `is True`, not plain truthiness), re-checked
+on every call (not just at startup), and `validate_scanner_config()`
+raises `RuntimeError` at `create_app()` time for any `KB_SCANNER` value
+it does not recognize — no silent fallback to `NullScanner` for a typo
+or an unimplemented engine name. Every `dev_allow` upload's audit entry
+records `detail="dev-allow: file was NOT malware-scanned"`, so a
+rubber-stamped upload remains distinguishable from a real scan in the
+audit trail. See `docs/systems/knowledge_base.md` §8.3 for the full
+mechanism. This does **not** reduce production risk at all — it exists
+solely so a developer without a local AV engine can see attachments
+render/download while working on unrelated Knowledge Base UI, and it
+requires deliberate, explicit configuration to activate anywhere.
 
 Risk:
 
-The feature is end-to-end untestable-by-a-human beyond upload/validation
-without a real scanner integrated. No attachment can actually be
-retrieved by any user until this is resolved.
+In production (or any environment that has not explicitly opted into
+`dev_allow`), the feature remains end-to-end untestable-by-a-human
+beyond upload/validation without a real scanner integrated — no
+attachment can actually be retrieved by any user until this item is
+resolved with a real engine. The risk this item tracks is unchanged by
+the dev-only escape hatch above.
 
 Expected remediation:
 
@@ -2253,6 +2277,14 @@ was deliberately designed so this plugs in without touching any caller
 (attachment_routes.py only ever calls get_scanner().scan_file(path)).
 Each real engine would likely need its own narrow dependency, evaluated
 on its own merits when picked up — not decided here.
+
+When a real engine is integrated, attachments already stuck at
+`not_scanned` (from before the engine existed) are not automatically
+rescanned — `scan_status` is only ever written once, at upload time.
+Rescanning existing rows needs its own explicit remediation task
+(investigated but deliberately not implemented alongside `dev_allow`):
+a one-off, admin-triggered pass over `not_scanned`/`scan_error` rows,
+not a new recurring APScheduler job.
 ```
 
 ---

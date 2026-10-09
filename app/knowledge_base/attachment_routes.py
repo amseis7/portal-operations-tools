@@ -64,7 +64,17 @@ def _handle_attachment_upload(article_id, draft_token):
     with open(path, "wb") as f:
         f.write(data)
 
-    scan_result = get_scanner().scan_file(path)
+    try:
+        scan_result = get_scanner().scan_file(path)
+    except RuntimeError:
+        # Scanner config was valid at app startup but is no longer usable
+        # right now (e.g. an insecure-dev flag cleared at runtime) — the
+        # file above is already written to disk with no DB row pointing
+        # at it yet, so it must be removed here or it becomes a permanent
+        # orphan (neither the quota query nor purge_expired_drafts look
+        # at files without a KnowledgeAttachment row).
+        safe_unlink(path)
+        return jsonify({"error": "El servicio de escaneo no está disponible en este momento."}), 500
 
     attachment = KnowledgeAttachment(
         article_id=article_id,
@@ -83,12 +93,18 @@ def _handle_attachment_upload(article_id, draft_token):
     db.session.add(attachment)
     db.session.flush()
 
-    log_audit("knowledge_base", "attachment_upload", "attachment", attachment.id, attachment.original_filename)
+    log_audit(
+        "knowledge_base", "attachment_upload", "attachment", attachment.id, attachment.original_filename,
+        details=scan_result.detail,
+    )
 
     if scan_result.status == ScanStatus.INFECTED:
         # Confirmed policy: never store malware just to keep evidence.
         # The row (for traceability) stays; the physical file does not.
-        log_audit("knowledge_base", "malware_detected", "attachment", attachment.id, attachment.original_filename)
+        log_audit(
+            "knowledge_base", "malware_detected", "attachment", attachment.id, attachment.original_filename,
+            details=scan_result.detail,
+        )
         safe_unlink(path)
 
     db.session.commit()

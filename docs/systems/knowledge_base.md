@@ -202,13 +202,64 @@ dependency.
 
 ## 8.3 Scanner Abstraction (`scanning.py`)
 
-`Scanner` ABC + `get_scanner()` factory reading `KB_SCANNER` config
-(`"null"` today; unrecognized values fall back to `NullScanner` rather
-than raising). `NullScanner` **never** returns `clean` — it returns
-`not_scanned`. **No real scanner is integrated in this version** — see
-`docs/technical-debt/current.md`. Until one is, every attachment is
+`Scanner` ABC + `get_scanner()` factory reading `KB_SCANNER` config.
+`validate_scanner_config(app)` runs once, immediately after
+`app.config.from_object(config_class)` in `create_app()` — **before**
+the scheduler starts or any blueprint registers — and fails the
+application's startup with `RuntimeError` for any `KB_SCANNER` value
+that is not a registered scanner name. There is no silent fallback: an
+unrecognized value (a typo, or a not-yet-implemented engine name like
+`"clamav"`) refuses to start the app, it never silently becomes
+`NullScanner`. `get_scanner()` itself also never falls back — an
+unregistered name reaching it at call time (config mutated after
+`create_app()` returned) raises `RuntimeError`, never a raw `KeyError`
+and never `NullScanner`.
+
+Two scanners are registered:
+
+```text
+"null"       NullScanner       — default. Never returns clean; always
+                                  returns not_scanned. No real engine is
+                                  integrated in this version — see
+                                  docs/technical-debt/current.md #44.
+"dev_allow"  DevAllowScanner   — deliberately insecure: marks every file
+                                  clean WITHOUT scanning it. detail is
+                                  always "dev-allow: file was NOT
+                                  malware-scanned", and that detail is
+                                  recorded in the global AuditLog
+                                  (log_audit's `details=`) on both the
+                                  attachment_upload and malware_detected
+                                  entries, so a rubber-stamped upload is
+                                  distinguishable from a real scan after
+                                  the fact. Never the default. Only ever
+                                  selectable when BOTH of the following
+                                  are explicitly set:
+
+                                      KB_SCANNER=dev_allow
+                                      KB_ALLOW_INSECURE_DEV_SCANNER=true
+
+                                  (the second flag's name is deliberately
+                                  strong). The gate — "if dev_allow, the
+                                  flag must be the literal bool True, not
+                                  merely truthy" — is checked by a single
+                                  shared helper, _require_dev_allow_gate(),
+                                  called from both validate_scanner_config()
+                                  (startup) and get_scanner() (every call,
+                                  so clearing the flag at runtime revokes
+                                  dev_allow immediately, without a
+                                  restart).
+```
+
+With `NullScanner` (the default, and the only scanner in any environment
+that hasn't explicitly opted into `dev_allow`), every attachment is
 permanently unservable (`/view`/`/download` both 404, and `<img>` never
-renders inline) — this is the confirmed policy, not a defect.
+renders inline) — this is the confirmed production policy, not a defect.
+`dev_allow` exists solely so a developer can see attachments render
+locally without a real AV engine installed; it must never be enabled
+outside a developer's own machine. Re-scanning attachments already
+stuck at `not_scanned` from before `dev_allow` was enabled is not
+implemented — newly uploaded files are marked `clean`, pre-existing rows
+are not retroactively touched (delete and re-upload locally if needed).
 
 ## 8.4 Draft Lifecycle
 
@@ -296,17 +347,26 @@ KB_ATTACHMENT_MAX_TOTAL_BYTES   50 MB/article or /draft (default)
 KB_ATTACHMENT_ALLOWED_EXTENSIONS   png, jpg, jpeg, webp, pdf, docx, xlsx, xls, csv, txt
 KB_ATTACHMENT_IMAGE_EXTENSIONS     png, jpg, jpeg, webp
 KB_ATTACHMENT_DRAFT_TTL_HOURS   24 (default)
-KB_SCANNER                      "null" (default; no real engine wired up)
+KB_SCANNER                      "null" (default; no real engine wired up) or
+                                 "dev_allow" (local dev only — see 8.3)
+KB_ALLOW_INSECURE_DEV_SCANNER   "false" (default) — must be the literal
+                                 string "true" to activate dev_allow
 ```
 
-All optional with safe defaults — none are global invariants, so none
-raise at startup if unset (unlike `SECRET_KEY`/`VAULT_KEY`).
+All optional with safe defaults for the "null"/unset case — none are
+global invariants like `SECRET_KEY`/`VAULT_KEY`, which raise at import
+time if missing. `KB_SCANNER`/`KB_ALLOW_INSECURE_DEV_SCANNER` are the one
+exception to "no startup validation": an unrecognized `KB_SCANNER`, or
+`KB_SCANNER=dev_allow` without its flag, DOES raise `RuntimeError` at
+`create_app()` time — see 8.3.
 
 ## 8.9 Known Limitations
 
 See `docs/technical-debt/current.md` items #39-#41 for the specific
 filesystem/DB-consistency and quota-TOCTOU edge cases found and
 deliberately deferred (narrow windows, bounded consequences, not security
-bypasses) during this feature's own review. The "no real scanner" and
-"scanning is synchronous, not async" limitations are the confirmed MVP
-policy, not oversights — see 8.3 above.
+bypasses) during this feature's own review. The "no real scanner in
+production" and "scanning is synchronous, not async" limitations are the
+confirmed MVP policy, not oversights — see 8.3 above and
+`docs/technical-debt/current.md` #44. Re-scanning attachments already
+stuck at `not_scanned` is not implemented — see 8.3's last paragraph.

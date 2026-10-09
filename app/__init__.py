@@ -15,6 +15,10 @@ def create_app(config_class=Config, instance_path=None):
         
     app.config.from_object(config_class)
 
+    from app.knowledge_base.scanning import validate_scanner_config
+    validate_scanner_config(app)
+    logger.info("KB scanner activo: %s", app.config.get("KB_SCANNER", "null"))
+
     try:
         os.makedirs(app.instance_path)
     except OSError:
