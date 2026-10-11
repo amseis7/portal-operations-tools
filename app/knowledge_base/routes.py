@@ -8,7 +8,7 @@ from app.knowledge_base.attachment_storage import attachment_path, safe_unlink
 from app.knowledge_base.forms import KnowledgeArticleForm
 from app.knowledge_base.logic import distinct_values, escape_like, sync_tags
 from app.models.audit import log_audit
-from app.models.knowledge import KnowledgeArticle, KnowledgeAttachment, KnowledgeTag
+from app.models.knowledge import KnowledgeArticle, KnowledgeAttachment, KnowledgeTag, visible_attachments
 from app.utils import proteger_blueprint
 
 proteger_blueprint(bp, "knowledge_base")
@@ -98,9 +98,9 @@ def crear():
         flash("Artículo creado.", "success")
         return redirect(url_for("knowledge_base.detalle", id=article.id))
 
-    draft_attachments = KnowledgeAttachment.query.filter_by(
+    draft_attachments = visible_attachments(KnowledgeAttachment.query.filter_by(
         draft_token=draft_token, uploaded_by=current_user.id
-    ).order_by(KnowledgeAttachment.created_at).all()
+    ).order_by(KnowledgeAttachment.created_at).all())
 
     return render_template(
         "knowledge_base/form.html",

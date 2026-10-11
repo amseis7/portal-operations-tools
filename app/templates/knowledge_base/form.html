@@ -82,7 +82,7 @@
           </div>
         </div>
         <ul class="list-group" id="attachment-list">
-          {% for att in (article.attachments if article else draft_attachments) %}
+          {% for att in (article.visible_attachments if article else draft_attachments) %}
           <li class="list-group-item d-flex justify-content-between align-items-center" data-attachment-id="{{ att.id }}">
             <span>
               <i class="bi {{ 'bi-image' if att.is_image else 'bi-file-earmark' }} me-2"></i>
@@ -163,9 +163,18 @@
     list.appendChild(li);
   }
 
-  function uploadFile(file, targetTextarea) {
+  // `kind` is the UX intent of whichever flow is calling this — "inline"
+  // for a paste, "attachment" for the file picker — decided by the
+  // caller BEFORE the request is sent, never inferred afterward from
+  // result.is_image or from whether a textarea happened to be focused.
+  // Paste only ever fires for clipboard image items (see the paste
+  // listener below), so an "inline" upload is always an image; the
+  // backend independently re-verifies this (never trusts the client) and
+  // rejects a non-image sent as kind=inline with its own 400.
+  function uploadFile(file, targetTextarea, kind) {
     const formData = new FormData();
     formData.append('file', file, file.name || 'pasted-image.png');
+    formData.append('kind', kind);
     if (DRAFT_TOKEN) formData.append('draft_token', DRAFT_TOKEN);
     formData.append('csrf_token', CSRF_TOKEN);
 
@@ -176,13 +185,11 @@
           alert(result.data.error || 'No se pudo subir el archivo.');
           return;
         }
-        addAttachmentRow(result.data);
-        const target = targetTextarea || lastFocusedTextarea;
-        if (target) {
-          const ref = result.data.is_image
-            ? '![captura](' + result.data.view_url + ')'
-            : '[' + result.data.original_filename + '](' + result.data.download_url + ')';
-          insertAtCursor(target, ref);
+        if (kind === 'inline') {
+          const target = targetTextarea || lastFocusedTextarea;
+          if (target) insertAtCursor(target, '![captura](' + result.data.view_url + ')');
+        } else {
+          addAttachmentRow(result.data);
         }
       })
       .catch(function () {
@@ -209,7 +216,7 @@
       if (!item) return;
       e.preventDefault();
       lastFocusedTextarea = textarea;
-      uploadFile(item.getAsFile(), textarea);
+      uploadFile(item.getAsFile(), textarea, 'inline');
     });
   });
 
@@ -217,7 +224,7 @@
   if (fileInput) {
     fileInput.addEventListener('change', function () {
       if (fileInput.files.length) {
-        uploadFile(fileInput.files[0], lastFocusedTextarea);
+        uploadFile(fileInput.files[0], null, 'attachment');
         fileInput.value = '';
       }
     });

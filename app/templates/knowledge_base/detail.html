@@ -42,19 +42,19 @@
 
 <div class="card shadow-sm mb-3">
   <div class="card-header bg-light fw-bold">Problema</div>
-  <div class="card-body">{{ article.problem_md|markdown }}</div>
+  <div class="card-body markdown-body">{{ article.problem_md|markdown }}</div>
 </div>
 
 <div class="card shadow-sm">
   <div class="card-header bg-light fw-bold">Solución / Procedimiento</div>
-  <div class="card-body">{{ article.solution_md|markdown }}</div>
+  <div class="card-body markdown-body">{{ article.solution_md|markdown }}</div>
 </div>
 
-{% if article.attachments %}
+{% if article.visible_attachments %}
 <div class="card shadow-sm mt-3">
   <div class="card-header bg-light fw-bold">Adjuntos</div>
   <ul class="list-group list-group-flush">
-    {% for att in article.attachments %}
+    {% for att in article.visible_attachments %}
     <li class="list-group-item d-flex justify-content-between align-items-center">
       <span>
         <i class="bi {{ 'bi-image' if att.is_image else 'bi-file-earmark' }} me-2"></i>

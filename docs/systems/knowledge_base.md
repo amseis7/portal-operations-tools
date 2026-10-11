@@ -165,16 +165,45 @@ FK, cascade delete), `draft_token` (nullable), `original_filename`,
 `stored_filename` (the only thing that ever touches the filesystem — a
 generated UUID, never the client-supplied name), `mime_type`, `extension`,
 `size_bytes`, `sha256`, `is_image`, `uploaded_by`, `created_at`,
-`scan_status`, `scan_checked_at`. A `CHECK` constraint enforces exactly one
-of `article_id`/`draft_token` set, never both, never neither — the
-promotion transition (draft → real article) sets both fields on the same
-object inside the article's own transaction, so a committed row with both
-or neither is never actually reachable; the constraint is a backstop.
+`scan_status`, `scan_checked_at`, `kind`. A `CHECK` constraint enforces
+exactly one of `article_id`/`draft_token` set, never both, never neither —
+the promotion transition (draft → real article) sets both fields on the
+same object inside the article's own transaction, so a committed row with
+both or neither is never actually reachable; the constraint is a backstop.
+A second `CHECK` constraint (`ck_knowledge_attachment_kind`) enforces
+`kind IN ('attachment', 'inline')`.
 
 `KnowledgeArticle.attachments` uses `cascade="all, delete-orphan"` —
 SQLAlchemy only removes the **rows** when an article is deleted; the
 physical files are unlinked explicitly in `eliminar()` before the delete
 commits (see 8.6).
+
+### Attachment kind: `"attachment"` vs. `"inline"`
+
+`kind` records **UX intent at upload time**, decided by which browser
+action the user took — the paste handler sends `kind="inline"`, the file
+picker sends `kind="attachment"` (`form.html`'s `uploadFile()`) — never
+inferred from `is_image` or from scanning Markdown content. The backend
+independently re-verifies: `kind="inline"` is only accepted when
+`validate_upload()`'s own signature check already proved the file is an
+image (`validated.is_image`); anything else is rejected with 400 before
+the file is written to disk or scanned.
+
+`KnowledgeArticle.visible_attachments` (a Python property, backed by the
+module-level `visible_attachments()` filter function) is the single
+source of truth for "what the Adjuntos UI shows" —
+`kind == "attachment"` only. It is used by both `detail.html` and
+`form.html`, and by `crear()`'s `draft_attachments` query result, so the
+filter exists in exactly one place rather than being copied into each
+template. **`KnowledgeArticle.attachments` itself is never filtered** —
+`eliminar()` (8.6) still needs every row, inline included, to find and
+unlink every physical file when an article is deleted.
+
+An `inline` attachment is never listed in "Adjuntos" and therefore has no
+delete button anywhere in the UI — the only way to stop referencing one
+is to remove its `![captura](...)` line from the Markdown text, which
+does **not** delete the row or the file. See `docs/technical-debt/current.md`
+for the known limitation this leaves (quota consumption, no cleanup).
 
 ## 8.2 Validation (`attachment_validation.py`)
 
@@ -335,6 +364,16 @@ anchored with `\Z` (not `$`, which would also match before a trailing
 newline). This blocks external image tracking/exfiltration
 (`<img src="https://evil/track.gif">`) that a bare tag allowlist would
 otherwise let through.
+
+`form.html`'s JS only auto-inserts this `![captura](...)` reference for
+the **paste** flow (`kind="inline"`). The file picker (`kind="attachment"`)
+deliberately never auto-inserts any Markdown reference into the focused
+textarea — not an image embed, and not a `[filename](download_url)` link
+either, even though the latter was the previous behavior for any
+file-picker upload when a textarea had focus. This is an intentional,
+explicit product decision (not an oversight): the two upload flows now
+have fully independent behavior, driven by which control the user used,
+never inferred from the uploaded file's type.
 
 ## 8.8 Configuration
 

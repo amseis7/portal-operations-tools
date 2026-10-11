@@ -2429,3 +2429,82 @@ Do not build this reveal mechanism speculatively — it was explicitly
 investigated and confirmed NOT to exist yet, and is out of scope until
 a task actually requires it.
 ```
+
+---
+
+# 47. Knowledge Base Inline Attachment Orphaning Has No Cleanup
+
+Priority:
+
+```text
+P3
+```
+
+Area:
+
+```text
+Knowledge Base
+Attachments
+Storage
+```
+
+File:
+
+```text
+app/knowledge_base/attachment_routes.py
+app/models/knowledge.py (KnowledgeAttachment.kind, visible_attachments())
+```
+
+Current behavior:
+
+```text
+A KnowledgeAttachment with kind="inline" (pasted into problem_md/
+solution_md via the Markdown editor) is deliberately excluded from the
+"Adjuntos" UI (KnowledgeArticle.visible_attachments only returns
+kind="attachment" rows) — this is the confirmed, intentional design,
+not a bug.
+
+Consequence: if the user removes the ![captura](...) reference from the
+Markdown text (editing the textarea directly, not via any delete
+action), the underlying row and its physical file remain fully attached
+to the article. The row:
+    - is not deleted;
+    - does not reappear in "Adjuntos" (kind is unchanged);
+    - still counts toward KB_ATTACHMENT_MAX_TOTAL_BYTES for that
+      article (the quota query sums all kinds, not just "attachment");
+    - has no delete button anywhere in the UI, since attachment_delete()
+      is only ever wired to the "Adjuntos" list, which never renders an
+      inline row.
+```
+
+Risk:
+
+```text
+Not a security issue — bounded by the existing per-article quota, same
+category as other already-accepted storage-accumulation limitations in
+this document (e.g. #39-#41). The only consequence is wasted quota/disk
+for images a user pasted and later un-referenced from the text, with no
+way to reclaim that space short of deleting the entire article.
+```
+
+Expected remediation:
+
+```text
+Not decided — do not implement speculatively. Options to evaluate when
+this is actually picked up:
+    - on-save reconciliation: when an article is saved, re-scan its
+      problem_md/solution_md for /kb/attachments/<id>/view references
+      and flag/delete any kind="inline" row for this article no longer
+      referenced. Must run only at save time, never on every read/view
+      (re-parsing Markdown on every page load was already rejected as a
+      design for the kind feature itself);
+    - an explicit "remove inline image" UI affordance, independent of
+      the Adjuntos list;
+    - accept and document as a permanent limitation.
+
+Security must not be traded for automatic cleanup — in particular, do
+not reintroduce runtime inference of "is this attachment inline" from
+Markdown content as a replacement for the persisted `kind` column; that
+was evaluated and explicitly rejected (docs/systems/knowledge_base.md
+§8.1's "Attachment kind" subsection) when `kind` was designed.
+```

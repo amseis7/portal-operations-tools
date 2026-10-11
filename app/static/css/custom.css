@@ -214,6 +214,15 @@ button:focus-visible,
 }
 
 /* ---------------------------------------------------------
+   KNOWLEDGE BASE - Markdown-rendered images (pasted screenshots can be
+   far wider than the card, forcing horizontal scroll otherwise)
+   --------------------------------------------------------- */
+.markdown-body img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* ---------------------------------------------------------
    PRINT - Clean output
    --------------------------------------------------------- */
 @media print {

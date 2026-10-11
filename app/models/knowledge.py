@@ -2,6 +2,16 @@ from datetime import datetime
 from app.extensions import db
 
 
+def visible_attachments(attachments):
+    """Single source of truth for which attachments the "Adjuntos" UI
+    shows — excludes kind="inline" rows (pasted into Markdown, served
+    only via /view). Used by KnowledgeArticle.visible_attachments AND
+    directly on draft_attachments lists (which have no article yet to
+    hang a property off of), so both paths share one filter instead of
+    duplicating the same condition in templates."""
+    return [a for a in attachments if a.kind == "attachment"]
+
+
 knowledge_article_tag = db.Table(
     "knowledge_article_tag",
     db.Column(
@@ -45,6 +55,14 @@ class KnowledgeArticle(db.Model):
         cascade="all, delete-orphan", order_by="KnowledgeAttachment.created_at",
     )
 
+    @property
+    def visible_attachments(self):
+        """Single source of truth for the "Adjuntos" UI filter. Deliberately
+        NOT a replacement for `attachments` — eliminar() (routes.py) still
+        needs the full, unfiltered relationship to clean up every physical
+        file (including inline ones) when the article itself is deleted."""
+        return visible_attachments(self.attachments)
+
     def __repr__(self):
         return f"<KnowledgeArticle {self.id}: {self.title}>"
 
@@ -56,6 +74,10 @@ class KnowledgeAttachment(db.Model):
             "(article_id IS NOT NULL AND draft_token IS NULL) "
             "OR (article_id IS NULL AND draft_token IS NOT NULL)",
             name="ck_knowledge_attachment_exactly_one_owner",
+        ),
+        db.CheckConstraint(
+            "kind IN ('attachment', 'inline')",
+            name="ck_knowledge_attachment_kind",
         ),
     )
 
@@ -76,6 +98,11 @@ class KnowledgeAttachment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
     scan_status = db.Column(db.String(20), default="pending", nullable=False, index=True)
     scan_checked_at = db.Column(db.DateTime, nullable=True)
+    # "attachment" (file-picker, shown in the "Adjuntos" list, downloadable)
+    # vs "inline" (pasted into Markdown, served only via /view, never listed
+    # as an Adjunto). UX intent captured at upload time — not inferred from
+    # is_image or from Markdown content, which are different concerns.
+    kind = db.Column(db.String(20), default="attachment", server_default="attachment", nullable=False)
 
     article = db.relationship("KnowledgeArticle", back_populates="attachments")
     uploader = db.relationship("User", backref=db.backref("knowledge_attachments", lazy="dynamic"))

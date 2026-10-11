@@ -58,6 +58,18 @@ def _handle_attachment_upload(article_id, draft_token):
     except AttachmentValidationError as e:
         return jsonify({"error": str(e)}), 400
 
+    # "attachment" (file-picker, shown in "Adjuntos") vs "inline" (pasted
+    # into Markdown, served only via /view). Never trust the client's
+    # claim about is_image — only validated.is_image, the result of
+    # validate_upload()'s own signature check above, decides whether
+    # kind="inline" is allowed. Rejected before anything is written to
+    # disk.
+    kind = request.form.get("kind", "attachment")
+    if kind not in ("attachment", "inline"):
+        return jsonify({"error": "Tipo de adjunto inválido."}), 400
+    if kind == "inline" and not validated.is_image:
+        return jsonify({"error": "Solo una imagen puede marcarse como inline."}), 400
+
     stored_filename = f"{uuid_mod.uuid4().hex}.{validated.extension}"
     os.makedirs(current_app.config["KB_ATTACHMENTS_DIR"], exist_ok=True)
     path = attachment_path(current_app, stored_filename)
@@ -89,6 +101,7 @@ def _handle_attachment_upload(article_id, draft_token):
         uploaded_by=current_user.id,
         scan_status=scan_result.status.value,
         scan_checked_at=datetime.utcnow(),
+        kind=kind,
     )
     db.session.add(attachment)
     db.session.flush()
@@ -115,6 +128,7 @@ def _handle_attachment_upload(article_id, draft_token):
         "download_url": f"/kb/attachments/{attachment.id}/download",
         "is_image": attachment.is_image,
         "scan_status": attachment.scan_status,
+        "kind": attachment.kind,
         "original_filename": attachment.original_filename,
     })
 
