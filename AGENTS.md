@@ -325,3 +325,151 @@ Use progressive context loading:
 Avoid loading unrelated modules.
 
 The objective is to reduce token consumption while preserving enough context to make correct changes.
+
+---
+
+# 19. Review Policy
+
+Reviews must be proportional to the risk and scope of the change.
+
+The default review mode is a focused single-pass review. Multi-agent or multi-angle review is reserved for broad or high-risk changes where additional independent perspectives are likely to materially improve safety.
+
+## 19.1 Normal Changes
+
+This includes:
+
+- UX changes
+- templates
+- isolated backend changes
+- ordinary bug fixes
+- tests
+- documentation
+- small refactors explicitly required by the task
+
+For these changes:
+
+1. Do not fork review agents by default.
+2. Do not run multi-angle or multi-agent review automatically.
+3. Perform one focused review pass.
+4. Verify findings directly against the current code before acting on them.
+5. Run relevant tests during implementation.
+6. Run the full test suite once before completion when appropriate.
+7. Do not reopen implementation for style, naming, minor duplication, speculative maintainability, micro-performance, or YAGNI findings unless explicitly requested.
+
+## 19.2 Security-Sensitive Changes
+
+This includes changes involving:
+
+- authentication
+- authorization
+- Vault or secrets
+- encryption
+- credential handling
+- migrations that may lose or corrupt data
+- filesystem security
+- upload validation
+- security boundaries
+- rollback or partial-persistence guarantees
+
+For these changes:
+
+1. Start with one focused security review.
+2. Use multi-agent review only when the change is broad enough to justify it.
+3. When multi-agent review is justified, use at most 3 review agents unless the user explicitly approves more.
+4. Do not automatically retry stalled agents.
+5. Retry at most one failed or stalled review angle, and only when that angle is necessary to determine safety.
+6. Consolidate and verify findings before launching additional analysis.
+7. Do not run repeated full review rounds unless a real blocker was found and fixed.
+
+## 19.3 Blocker Definition
+
+A finding should reopen implementation only when it can plausibly cause one or more of:
+
+- secret or sensitive-data disclosure
+- authentication or authorization bypass
+- data loss or corruption
+- partial persistence or rollback failure
+- unsafe migration behavior
+- filesystem safety failure
+- regression of an explicitly documented security invariant
+- regression of stable object identity where that identity protects correctness or confidentiality
+
+The following are non-blockers by default unless the task explicitly targets them:
+
+- style
+- naming
+- minor duplication
+- simplification opportunities
+- speculative future callers
+- micro-performance
+- test scaffolding polish
+- hypothetical abstractions
+- YAGNI concerns
+
+Report such findings separately without automatically expanding the implementation scope.
+
+## 19.4 Review Stop Conditions
+
+A task is ready to close when:
+
+1. relevant tests pass,
+2. affected subsystem tests pass when available,
+3. the full suite passes when appropriate,
+4. one focused review finds no real blockers,
+5. required smoke tests or manual validation have passed,
+6. the final diff contains only in-scope changes.
+
+Once these conditions are met, do not launch another review pass.
+
+If a review agent stalls for more than 10 minutes or makes no meaningful progress:
+
+- stop waiting for it,
+- do not retry automatically,
+- continue with the completed review evidence,
+- retry only if the missing angle is required to determine safety.
+
+If review work exceeds 20 minutes for a small isolated diff:
+
+- stop expanding the analysis,
+- consolidate the findings already obtained,
+- verify only potential blockers,
+- report status and proceed toward closure if no blocker remains.
+
+## 19.5 Validation Frequency
+
+During TDD and implementation:
+
+- run focused tests as often as needed,
+- run subsystem tests after the implementation stabilizes,
+- run the full project suite once near the end.
+
+If a real blocker is found and fixed, rerun the relevant tests and the full suite as needed.
+
+Do not rerun the full suite after every non-blocking observation or documentation-only change unless there is a specific reason.
+
+## 19.6 Review Tooling
+
+Do not make completion of ordinary tasks depend on external review tooling that is unavailable, stalled, rate-limited, blocked by local policy, or incompatible with the current environment.
+
+If an external reviewer fails for tooling reasons:
+
+1. treat the review as not executed, not as a pass or failure,
+2. record the tooling limitation,
+3. fall back to one focused local review,
+4. do not repeatedly retry the same deterministic tooling failure.
+
+External or second-model review is optional by default and should be reserved for high-risk changes where it materially improves confidence.
+
+Automatic review gates or stop hooks that can create review loops should not be enabled unless explicitly approved.
+
+## 19.7 Context Discipline
+
+When a task is complete and committed:
+
+- prefer starting a fresh context before moving to an unrelated task,
+- do not carry large completed review transcripts into the next task,
+- do not re-investigate decisions already documented in the repository,
+- reuse verified conclusions instead of repeating broad discovery work.
+
+The objective is to preserve review quality while preventing disproportionate review time, token consumption, and repeated analysis on small or already-validated changes.
+
