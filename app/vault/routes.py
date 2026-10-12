@@ -336,7 +336,11 @@ def detail(entry_id):
         abort(403)
     notes = decrypt(entry.notes_enc) if entry.notes_enc else None
     custom_fields = [
-        {"key": f.field_key, "value": decrypt(f.field_value_enc), "protected": f.is_protected}
+        {
+            "key": f.field_key,
+            "value": "" if f.is_protected else decrypt(f.field_value_enc),
+            "protected": f.is_protected,
+        }
         for f in entry.custom_fields
     ]
     log_audit("vault", "view", "entry", entry.id, entry.title)

@@ -1916,7 +1916,7 @@ separately, not implemented here.
 
 detail() unconditionally decrypting every protected custom field's
 ciphertext server-side even though the template never renders the
-plaintext — tracked separately as debt item #46.
+plaintext — tracked separately as debt item #46 (RESOLVED).
 ```
 
 ---
@@ -2346,6 +2346,12 @@ when.
 
 # 46. Vault Detail View Decrypts Every Protected Custom Field Unconditionally
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -2366,7 +2372,7 @@ File:
 app/vault/routes.py (detail())
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
 ```python
 custom_fields = [
@@ -2376,58 +2382,75 @@ custom_fields = [
 return render_template("vault/detail.html", entry=entry, notes=notes, custom_fields=custom_fields, now=now)
 ```
 
-`detail()` calls `decrypt()` on every `VaultEntryField` belonging to the
+`detail()` called `decrypt()` on every `VaultEntryField` belonging to the
 entry, including protected ones, on every single page view — regardless
-of whether the viewer ever asks to see a protected value.
+of whether the viewer ever asked to see a protected value.
 `detail.html` (section 15's custom-fields table) only ever renders
 `••••••••` for a row where `field.protected` is true; it never outputs
 `field.value` in that branch. So:
 
 ```text
-- there is NO current DOM leak: Jinja only emits what the template
-  references, and the template never references the decrypted value
-  for a protected row;
-- but the plaintext DOES exist unnecessarily in server-side memory/
-  request context (the `custom_fields` list and the `field.value`
-  Jinja variable) for every protected field on every view of the entry,
+- there was NO DOM leak: Jinja only emits what the template references,
+  and the template never referenced the decrypted value for a protected
+  row;
+- but the plaintext existed unnecessarily in server-side memory/request
+  context (the `custom_fields` list and the `field.value` Jinja
+  variable) for every protected field on every view of the entry,
   whether or not anyone asked for it.
 ```
 
-Risk:
+Risk (historical):
 
-Low under current code (no leak path exists today), but the decrypted
-plaintext's lifetime and surface area (process memory, any future
-template change, any future logging/exception handler that captures
-local variables or the render context) is wider than it needs to be for
-data nobody requested yet.
+Low (no leak path existed), but the decrypted plaintext's lifetime and
+surface area (process memory, any future template change, any future
+logging/exception handler that captures local variables or the render
+context) was wider than it needed to be for data nobody requested.
 
 Found by: self-review during the investigation and resolution of debt
 item #38 (Vault custom-field stable-id fix) — unrelated to that fix's
 actual change, not introduced by it, and explicitly out of scope for it.
 
-Expected remediation:
+Resolution:
 
 ```text
-Not decided yet. The general direction: avoid decrypting a protected
-custom field's value in detail() until an explicit, authorized reveal
-action requests it specifically — mirroring the entry-level password,
-which detail() already does NOT decrypt up front (only reveal() does,
-on demand). Any future reveal mechanism for custom fields must, per
-portal-vault-change:
+detail() no longer decrypts a custom field when is_protected is True —
+it substitutes an empty string for `value` instead, mirroring the
+pattern _build_existing_cf() (used by edit.html) already established:
 
-    - be POST, not GET;
-    - reuse the entry-level authorization check (_can_access() or
-      equivalent) used by the existing password reveal() route;
-    - be CSRF-protected;
-    - be scoped by both entry_id and the specific VaultEntryField.id
-      (never just field_key, for the same stable-identity reason debt
-      item #38 was fixed) — rejecting with 404/403 if the field does
-      not belong to the given entry;
-    - not log or audit the decrypted value itself.
+    "value": "" if f.is_protected else decrypt(f.field_value_enc),
 
-Do not build this reveal mechanism speculatively — it was explicitly
-investigated and confirmed NOT to exist yet, and is out of scope until
-a task actually requires it.
+No template change was needed: detail.html already ignored `field.value`
+whenever `field.protected` is true, so eliminating the decrypt call
+changes nothing observable for either protected or unprotected fields.
+Unprotected fields are decrypted and rendered exactly as before.
+
+Verified with tests/vault/test_detail_protected_fields.py: decrypt() is
+not called at all for an entry with only a protected field; it is called
+exactly once, with only the unprotected field's ciphertext, for a mixed
+protected/unprotected entry; plaintext never appears in the detail
+response body; duplicate field_key entries (one protected, one not)
+render correctly without identity confusion; and detail()'s existing
+authorization behavior (_can_access()) is unchanged for both the
+non-owner/non-shared 403 case and the shared-entry 200 case.
+
+Vault suite: 88/88 passing. Full project suite: 228/228 passing.
+```
+
+Not part of this resolution (tracked separately, not a pending part of
+this item):
+
+```text
+On-demand reveal of a protected custom field's value in the detail view
+still does not exist (no route, no JS, no reveal control — the
+shield-lock badge next to a protected field in detail.html remains a
+static label). This was investigated as part of this task and
+deliberately deferred: it is a separate feature with its own
+authorization/CSRF/IDOR surface, not a requirement for closing the
+unnecessary-decrypt exposure this item tracked. A design sketch for a
+future POST /vault/<entry_id>/field/<field_id>/reveal endpoint
+(entry_id+field_id scoped, _can_access()-gated, CSRF-protected, no
+logging of the plaintext) exists in the investigation record for
+whoever picks that up; it is not scheduled.
 ```
 
 ---
