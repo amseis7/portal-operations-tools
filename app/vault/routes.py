@@ -175,6 +175,14 @@ def _diff_custom_fields(entry, cf_json_str):
             raise CustomFieldConflict()
 
         if key:
+            # A previously protected field going to unprotected with no new
+            # value typed would make _apply_custom_fields preserve the old
+            # ciphertext while dropping is_protected — detail() decrypts
+            # unconditionally, so that preserved secret would render in
+            # plaintext without the user ever re-entering it. Reject the
+            # whole submit instead of silently exposing it.
+            if field.is_protected and not protected and not value.strip():
+                raise CustomFieldConflict()
             updates.append((field, key, value, protected))
         else:
             # Existing row, key blanked out by the user: explicit delete,

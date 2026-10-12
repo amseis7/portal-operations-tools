@@ -125,17 +125,79 @@ class TestVaultCustomFieldProtection(PortalTestCase):
         field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
         self.assertEqual(decrypt(field.field_value_enc), "brand-new-value")
 
-    def test_unchecking_protected_with_blank_value_preserves_secret_and_clears_flag(self):
+    def test_unchecking_protected_with_blank_value_is_rejected_with_409(self):
+        """A previously protected secret must never become visible in
+        detail() just by unchecking "Protegido" with no new value typed —
+        that would expose the preserved ciphertext in plaintext without the
+        user ever re-entering the secret."""
         entry = self._make_entry(apikey=[("original-secret-value", True)])
         field_id = self._field_id(entry, "apikey")
         token = self._edit_csrf(entry.id)
 
-        # User unchecked "Protegido" in the UI: protected=False submitted, value still blank.
-        self._post_edit(entry, token, [{"id": field_id, "key": "apikey", "value": "", "protected": False}])
+        resp = self._post_edit(entry, token, [{"id": field_id, "key": "apikey", "value": "", "protected": False}])
 
+        self.assertEqual(resp.status_code, 409)
         field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
         self.assertEqual(decrypt(field.field_value_enc), "original-secret-value")
+        self.assertTrue(field.is_protected)
+        self.assertEqual(field.id, field_id)
+
+    def test_unchecking_protected_with_whitespace_only_value_is_rejected_with_409(self):
+        entry = self._make_entry(apikey=[("original-secret-value", True)])
+        field_id = self._field_id(entry, "apikey")
+        token = self._edit_csrf(entry.id)
+
+        resp = self._post_edit(entry, token, [{"id": field_id, "key": "apikey", "value": "   ", "protected": False}])
+
+        self.assertEqual(resp.status_code, 409)
+        field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
+        self.assertEqual(decrypt(field.field_value_enc), "original-secret-value")
+        self.assertTrue(field.is_protected)
+
+    def test_unchecking_protected_with_explicit_new_value_is_allowed(self):
+        entry = self._make_entry(apikey=[("original-secret-value", True)])
+        field_id = self._field_id(entry, "apikey")
+        token = self._edit_csrf(entry.id)
+
+        resp = self._post_edit(entry, token, [{"id": field_id, "key": "apikey", "value": "reentered-secret", "protected": False}])
+
+        self.assertEqual(resp.status_code, 302)
+        field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
+        self.assertEqual(decrypt(field.field_value_enc), "reentered-secret")
         self.assertFalse(field.is_protected)
+        self.assertEqual(field.id, field_id)
+
+    def test_conflict_from_unprotecting_blank_rolls_back_other_entry_changes(self):
+        entry = self._make_entry(apikey=[("secret-value", True)])
+        field_id = self._field_id(entry, "apikey")
+        original_title = entry.title
+        token = self._edit_csrf(entry.id)
+
+        resp = self._post_edit(
+            entry, token,
+            [{"id": field_id, "key": "apikey", "value": "", "protected": False}],
+            title="Title Changed By Attacker Request",
+        )
+
+        self.assertEqual(resp.status_code, 409)
+        refreshed = db.session.get(VaultEntry, entry.id)
+        self.assertEqual(refreshed.title, original_title)
+        field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey").first()
+        self.assertEqual(decrypt(field.field_value_enc), "secret-value")
+        self.assertTrue(field.is_protected)
+
+    def test_rename_plus_unprotect_plus_new_value_keeps_field_id(self):
+        entry = self._make_entry(apikey=[("original-secret-value", True)])
+        field_id = self._field_id(entry, "apikey")
+        token = self._edit_csrf(entry.id)
+
+        self._post_edit(entry, token, [{"id": field_id, "key": "apikey-renamed", "value": "fresh-reentered-secret", "protected": False}])
+
+        field = VaultEntryField.query.filter_by(entry_id=entry.id, field_key="apikey-renamed").first()
+        self.assertIsNotNone(field)
+        self.assertEqual(field.id, field_id)
+        self.assertFalse(field.is_protected)
+        self.assertEqual(decrypt(field.field_value_enc), "fresh-reentered-secret")
 
     def test_create_with_protected_field_persists_encrypted(self):
         token_page = self.client.get("/vault/new")
