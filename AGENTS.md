@@ -462,6 +462,27 @@ External or second-model review is optional by default and should be reserved fo
 
 Automatic review gates or stop hooks that can create review loops should not be enabled unless explicitly approved.
 
+### 19.6.1 Windows Corporate Environment / Codex
+
+On managed Windows environments where local policy blocks PowerShell or cmd execution from Codex review tooling:
+
+- Do not require `/codex:review` or `/codex:adversarial-review` for task completion.
+- Do not repeatedly retry Codex repository-inspection reviews after the same deterministic policy failure.
+- Treat a Codex run blocked by local policy as **not executed**, never as a pass or a code failure.
+- Prefer the normal focused local review defined above.
+- If a second-model review is still useful, provide Codex with the already-generated diff or patch as input instead of requiring Codex to execute Git commands itself.
+- Generate that diff with the developer shell that is already allowed in the environment, and exclude secrets, `.env`, `instance/`, database files, credential material, sensitive logs, and unrelated untracked files.
+- When feeding a diff to Codex, instruct it to review the supplied patch only and not to inspect the host or execute shell commands.
+- Do not weaken corporate execution policies, PowerShell restrictions, endpoint controls, or sandbox rules merely to make review tooling work.
+- Do not patch files inside plugin caches as a permanent fix; plugin updates may overwrite them. Prefer supported CLI/configuration changes or wait for an upstream fix.
+
+For Windows corporate environments, the preferred review order is:
+
+1. focused local review in Claude Code,
+2. relevant tests,
+3. optional second-model review from a supplied diff/patch,
+4. no additional review round unless a real blocker is found.
+
 ## 19.7 Context Discipline
 
 When a task is complete and committed:
