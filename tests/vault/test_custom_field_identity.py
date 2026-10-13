@@ -360,3 +360,89 @@ class TestDiffCustomFields(PortalTestCase):
         self.assertEqual(updates, [])
         self.assertEqual(new_items, [])
         self.assertEqual(delete_ids, existing_ids)
+
+    # -- _apply_custom_fields() defensive guard (direct call, no diff) ------
+    #
+    # These call _apply_custom_fields() directly with a hand-built updates
+    # tuple, bypassing _diff_custom_fields() entirely, to prove the critical
+    # protected-unprotect-blank rejection does not depend solely on diff
+    # having validated the payload first.
+
+    def test_apply_rejects_direct_unsafe_unprotect_with_blank_value(self):
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+        original_enc = field.field_value_enc
+
+        with self.assertRaises(CustomFieldConflict):
+            _apply_custom_fields(entry, [(field, "TOKEN", "", False)], [], set())
+
+        self.assertTrue(field.is_protected)
+        self.assertEqual(field.field_key, "TOKEN")
+        self.assertEqual(field.field_value_enc, original_enc)
+        self.assertEqual(VaultEntryField.query.filter_by(entry_id=entry.id).count(), 1)
+
+    def test_apply_rejects_direct_unsafe_unprotect_with_whitespace_value(self):
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+        original_enc = field.field_value_enc
+
+        with self.assertRaises(CustomFieldConflict):
+            _apply_custom_fields(entry, [(field, "TOKEN", "   ", False)], [], set())
+
+        self.assertTrue(field.is_protected)
+        self.assertEqual(field.field_value_enc, original_enc)
+
+    def test_apply_validates_all_updates_before_mutating_any(self):
+        """A valid update listed before an invalid one must not be mutated
+        either — prevalidation must happen for the whole batch before any
+        mutation, not inside the same loop that mutates."""
+        entry = self._make_entry(
+            TOKEN=[("token-secret", True)],
+            API_KEY=[("api-secret", True)],
+            NOTE=[("note-value", False)],
+        )
+        token_field = self._field(entry, "TOKEN")
+        api_field = self._field(entry, "API_KEY")
+        note_field = self._field(entry, "NOTE")
+        token_original_enc = token_field.field_value_enc
+        api_original_enc = api_field.field_value_enc
+
+        updates = [
+            (token_field, "TOKEN", "brand-new-value", True),  # valid alone
+            (api_field, "API_KEY", "", False),  # invalid: unprotect + blank
+        ]
+        new_items = [("FRESH", "new-value", False)]
+        delete_ids = {note_field.id}
+
+        with self.assertRaises(CustomFieldConflict):
+            _apply_custom_fields(entry, updates, new_items, delete_ids)
+
+        self.assertEqual(token_field.field_value_enc, token_original_enc)
+        self.assertTrue(token_field.is_protected)
+        self.assertEqual(api_field.field_value_enc, api_original_enc)
+        self.assertTrue(api_field.is_protected)
+        self.assertIsNotNone(db.session.get(VaultEntryField, note_field.id))
+        self.assertEqual(VaultEntryField.query.filter_by(entry_id=entry.id).count(), 3)
+        self.assertIsNone(
+            VaultEntryField.query.filter_by(entry_id=entry.id, field_key="FRESH").first()
+        )
+
+    def test_apply_direct_preserve_still_works_for_protected_blank(self):
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+        original_enc = field.field_value_enc
+
+        _apply_custom_fields(entry, [(field, "TOKEN2", "", True)], [], set())
+
+        self.assertEqual(field.field_key, "TOKEN2")
+        self.assertTrue(field.is_protected)
+        self.assertEqual(field.field_value_enc, original_enc)
+
+    def test_apply_direct_explicit_unprotect_with_nonblank_value_still_works(self):
+        entry = self._make_entry(TOKEN=[("original-secret", True)])
+        field = self._field(entry, "TOKEN")
+
+        _apply_custom_fields(entry, [(field, "TOKEN", "new-plain-value", False)], [], set())
+
+        self.assertFalse(field.is_protected)
+        self.assertEqual(decrypt(field.field_value_enc), "new-plain-value")

@@ -196,8 +196,17 @@ def _diff_custom_fields(entry, cf_json_str):
 
 
 def _apply_custom_fields(entry, updates, new_items, delete_ids):
-    """Apply a successful _diff_custom_fields() classification. Only ever
-    called after _diff_custom_fields() returns without raising."""
+    """Apply a successful _diff_custom_fields() classification. Expected to
+    be called after _diff_custom_fields() returns without raising, but does
+    not rely on that alone: the same protected-unprotect-blank rule is
+    re-checked here, defensively, against every update before any mutation
+    happens, so a future caller that builds `updates` without going through
+    _diff_custom_fields() still fails closed instead of silently preserving
+    a secret's ciphertext while dropping its protected flag."""
+    for field, key, value, protected in updates:
+        if field.is_protected and not protected and not value.strip():
+            raise CustomFieldConflict()
+
     for field, key, value, protected in updates:
         # .strip() here only decides preserve-vs-replace — a whitespace-only
         # submission (e.g. an accidental space typed into a masked password
