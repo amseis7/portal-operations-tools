@@ -14,7 +14,7 @@ class TestVaultDetailProtectedFields(PortalTestCase):
 
     def setUp(self):
         super().setUp()
-        self.owner = self.make_user("vaultowner")
+        self.owner = self.make_user("vaultowner", tools=["vault"])
         self.login("vaultowner")
 
     def _make_entry(self, shared=False, **field_specs):
@@ -91,7 +91,7 @@ class TestVaultDetailProtectedFields(PortalTestCase):
 
     def test_authorization_unchanged_non_owner_non_shared_gets_403(self):
         entry = self._make_entry(shared=False, apikey=[("secret-value", True)])
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
 
         resp = self.client.get(f"/vault/{entry.id}")
@@ -100,7 +100,7 @@ class TestVaultDetailProtectedFields(PortalTestCase):
 
     def test_authorization_unchanged_shared_entry_still_viewable(self):
         entry = self._make_entry(shared=True, apikey=[("secret-value", True)])
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
 
         resp = self.client.get(f"/vault/{entry.id}")

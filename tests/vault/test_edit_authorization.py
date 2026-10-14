@@ -7,7 +7,7 @@ from app.vault.crypto import encrypt
 class TestVaultEditAuthorization(PortalTestCase):
     def setUp(self):
         super().setUp()
-        self.owner = self.make_user("owner_user")
+        self.owner = self.make_user("owner_user", tools=["vault"])
 
     def _make_entry(self, shared):
         entry = VaultEntry(
@@ -68,7 +68,7 @@ class TestVaultEditAuthorization(PortalTestCase):
     # 3. non-owner, shared=False -> 403 on GET and POST
     def test_non_owner_non_shared_gets_403_on_get_and_post(self):
         entry = self._make_entry(shared=False)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
 
         resp_get = self.client.get(f"/vault/{entry.id}/edit")
@@ -81,7 +81,7 @@ class TestVaultEditAuthorization(PortalTestCase):
     # 4. non-owner, shared=True -> 403 on GET and POST (shared visibility != edit permission)
     def test_non_owner_shared_gets_403_on_get_and_post(self):
         entry = self._make_entry(shared=True)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
 
         resp_get = self.client.get(f"/vault/{entry.id}/edit")
@@ -105,7 +105,7 @@ class TestVaultEditAuthorization(PortalTestCase):
     # 6. unauthorized POST does not modify the entry
     def test_unauthorized_post_does_not_modify_entry(self):
         entry = self._make_entry(shared=True)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         token = self._csrf_token()
 

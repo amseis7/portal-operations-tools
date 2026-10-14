@@ -7,7 +7,7 @@ from app.vault.crypto import encrypt
 class TestVaultEditButtonVisibility(PortalTestCase):
     def setUp(self):
         super().setUp()
-        self.owner = self.make_user("owner_user")
+        self.owner = self.make_user("owner_user", tools=["vault"])
         self.entry = VaultEntry(
             title="Entrada compartida",
             category="server",
@@ -35,7 +35,7 @@ class TestVaultEditButtonVisibility(PortalTestCase):
         self.assertIn(self._edit_href(), resp.data)
 
     def test_detail_hides_edit_button_for_non_owner_shared_viewer(self):
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         resp = self.client.get(f"/vault/{self.entry.id}")
         self.assertEqual(resp.status_code, 200)  # can still view (shared=True)
@@ -48,7 +48,7 @@ class TestVaultEditButtonVisibility(PortalTestCase):
         self.assertIn(self._edit_href(), resp.data)
 
     def test_index_hides_edit_button_for_non_owner_shared_viewer(self):
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         resp = self.client.get("/vault/")
         self.assertIn(b"Entrada compartida", resp.data)  # still listed (shared=True)

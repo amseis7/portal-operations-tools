@@ -11,13 +11,15 @@ from flask_login import login_required, current_user
 from werkzeug.exceptions import NotFound
 
 from app.extensions import db
-from app.utils import admin_required
+from app.utils import admin_required, proteger_blueprint
 from app.vault import bp, import_staging
 from app.vault.models import VaultEntry, VaultGroup, VaultEntryField, VaultSyncConfig
 from app.vault.crypto import encrypt, decrypt
 from app.vault.forms import VaultEntryForm
 from app.vault.sync import vault_sync
 from app.models.audit import log_audit
+
+proteger_blueprint(bp, 'vault')
 
 
 # ---------------------------------------------------------------------------

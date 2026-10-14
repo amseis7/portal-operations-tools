@@ -8,7 +8,7 @@ from app.models.audit import AuditLog
 class TestVaultDeleteAuthorization(PortalTestCase):
     def setUp(self):
         super().setUp()
-        self.owner = self.make_user("owner_user")
+        self.owner = self.make_user("owner_user", tools=["vault"])
 
     def _make_entry(self, shared, with_custom_field=False):
         entry = VaultEntry(
@@ -67,7 +67,7 @@ class TestVaultDeleteAuthorization(PortalTestCase):
     # 3. non-owner, shared=False -> 403, entry remains
     def test_non_owner_non_shared_gets_403_and_entry_remains(self):
         entry = self._make_entry(shared=False)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         token = self._csrf_token()
 
@@ -79,7 +79,7 @@ class TestVaultDeleteAuthorization(PortalTestCase):
     # 4. non-owner, shared=True -> 403, entry remains (shared != delete)
     def test_non_owner_shared_gets_403_and_entry_remains(self):
         entry = self._make_entry(shared=True)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         token = self._csrf_token()
 
@@ -105,7 +105,7 @@ class TestVaultDeleteAuthorization(PortalTestCase):
     def test_unauthorized_attempt_does_not_create_delete_audit_log(self):
         entry = self._make_entry(shared=True)
         entry_id = entry.id
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         token = self._csrf_token()
 
@@ -132,7 +132,7 @@ class TestVaultDeleteAuthorization(PortalTestCase):
 
     def test_delete_button_hidden_for_non_owner_shared_viewer_in_detail(self):
         entry = self._make_entry(shared=True)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         resp = self.client.get(f"/vault/{entry.id}")
         self.assertEqual(resp.status_code, 200)  # still viewable
@@ -150,7 +150,7 @@ class TestVaultDeleteAuthorization(PortalTestCase):
 
     def test_delete_button_hidden_for_non_owner_shared_viewer_in_index(self):
         entry = self._make_entry(shared=True)
-        self.make_user("other_user")
+        self.make_user("other_user", tools=["vault"])
         self.login("other_user")
         resp = self.client.get("/vault/")
         self.assertIn(b"Entrada original", resp.data)  # still listed

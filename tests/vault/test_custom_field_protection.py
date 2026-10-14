@@ -10,7 +10,7 @@ from app.vault.crypto import encrypt, decrypt
 class TestVaultCustomFieldProtection(PortalTestCase):
     def setUp(self):
         super().setUp()
-        self.owner = self.make_user("vaultowner")
+        self.owner = self.make_user("vaultowner", tools=["vault"])
         self.login("vaultowner")
 
     def _make_entry(self, **field_specs):
