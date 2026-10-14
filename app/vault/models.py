@@ -5,6 +5,12 @@ from app.extensions import db
 
 class VaultGroup(db.Model):
     __tablename__ = "vault_group"
+    __table_args__ = (
+        db.CheckConstraint(
+            "(scope = 'shared' AND owner_id IS NULL) OR (scope = 'personal' AND owner_id IS NOT NULL)",
+            name="ck_vault_group_scope_owner",
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     uuid = db.Column(db.String(36), unique=True, nullable=False, default=lambda: str(uuid4()))
@@ -12,9 +18,18 @@ class VaultGroup(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey("vault_group.id"), nullable=True)
     icon_id = db.Column(db.Integer, default=48)  # 48 = folder en KeePass
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # ADR-005: scope="shared" groups are global (owner_id NULL); scope="personal"
+    # groups belong to exactly one user. Enforced by ck_vault_group_scope_owner
+    # above. Parent/child scope-and-owner coherence is validated in the
+    # application layer, not here (a CHECK constraint only sees one row).
+    scope = db.Column(db.String(10), nullable=False, server_default="shared")
+    owner_id = db.Column(
+        db.Integer, db.ForeignKey("user.id", name="fk_vault_group_owner_id"), nullable=True
+    )
 
     parent = db.relationship("VaultGroup", remote_side=[id], backref="children")
     entries = db.relationship("VaultEntry", back_populates="group")
+    owner = db.relationship("User")
 
     def __repr__(self):
         return f"<VaultGroup {self.id}: {self.name}>"
