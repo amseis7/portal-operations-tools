@@ -549,6 +549,12 @@ Do not delete historical tables/models without migration review.
 
 # 8. Vault Group Administration Is Broad
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -562,26 +568,47 @@ Vault
 Authorization
 ```
 
-Current behavior:
+Previous behavior:
 
-Authenticated users can create and delete Vault groups.
+Any authenticated user with the `vault` tool could create and delete any
+Vault group. Groups had no ownership model, so one user could disorganize
+another user's shared taxonomy or delete a group another user depended on.
 
-Groups currently have no ownership model.
-
-Risk:
-
-One user may change shared Vault organization for other users.
-
-Expected remediation requires a product decision:
+Resolution:
 
 ```text
-admin-only groups
-shared group management
-per-user groups
-group-level ownership/permissions
-```
+Resolved by ADR-005 (Vault Groups Have a Shared/Personal Scope),
+implemented across three phases:
 
-Do not choose a model implicitly.
+Fase 1: VaultGroup gained scope ("shared"|"personal") and owner_id
+(migration 1edf6bb9b43e). All pre-existing groups backfilled as
+scope="shared", owner_id=NULL — no ownership inferred.
+
+Fase 2: new()/edit() validate a submitted VaultEntry.group_id against
+the entry's REAL owner_id (never current_user) for shared/personal
+compatibility (_validate_group_assignment() in app/vault/routes.py).
+
+Fase 3 (this phase): group_new()/group_delete() now enforce the product
+decision explicitly:
+
+  - shared groups: create/delete admin-only; owner_id always NULL.
+  - personal groups: any vault-tool user creates/deletes their OWN
+    (owner_id always current_user.id, server-side, never from form
+    input — including for admin, who does not get a "create on behalf
+    of another user" capability).
+  - parent/child coherence (a group's parent must share its scope, and
+    for personal groups its owner) is enforced by
+    _validate_group_parent(), independent of the authorization check
+    above.
+  - delete behavior is unchanged: entries/direct children are detached
+    (group_id/parent_id set to NULL), never deleted; deletion is never
+    recursive.
+
+Deferred to a later phase (not a reopening of this item): virtual
+"Compartidas"/"Personales" roots and per-user personal-tree browsing in
+the UI, scope-aware filtering of the group dropdown shown to end users,
+and KeePass export/import scope filtering.
+```
 
 ---
 

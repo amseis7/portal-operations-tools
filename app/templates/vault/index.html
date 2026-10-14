@@ -47,6 +47,14 @@
                      placeholder="Nombre del grupo" required maxlength="120">
             </div>
             <div class="mb-2">
+              <select class="form-select form-select-sm" name="scope">
+                <option value="personal" selected>Personal</option>
+                {% if current_user.is_admin %}
+                <option value="shared">Compartido</option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="mb-2">
               <select class="form-select form-select-sm" name="parent_id">
                 <option value="">— Sin padre (raíz) —</option>
                 {% for g, depth in group_tree %}

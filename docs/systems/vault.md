@@ -1013,11 +1013,19 @@ Protection:
 @login_required
 ```
 
-Current implementation does not require administrator privileges.
+plus ADR-005 scope/ownership rules enforced inline in the route:
 
-Any authenticated user can create Vault groups under the current route protection.
+```text
+scope == "shared"   => current_user.is_admin required; owner_id = NULL
+scope == "personal" => any vault-tool user; owner_id = current_user.id,
+                        always server-computed, never from form input
+                        (including for admin — no "create on behalf of
+                        another user")
+```
 
-No dedicated Vault ownership exists for groups.
+Parent/scope coherence (`parent_id` must point to a group of a compatible
+scope/owner) is validated by `_validate_group_parent()`, independent of the
+authorization check above.
 
 ---
 
@@ -1035,7 +1043,13 @@ Protection:
 @login_required
 ```
 
-Current implementation does not require administrator privileges.
+plus ADR-005 authorization enforced inline in the route:
+
+```text
+group.scope == "shared"   => current_user.is_admin required
+group.scope == "personal" => current_user.is_admin or
+                              group.owner_id == current_user.id
+```
 
 Before deletion:
 
@@ -2095,7 +2109,8 @@ Any authenticated user.
 
 ### Groups
 
-Any authenticated user.
+ADR-005: shared groups admin-only; personal groups any vault-tool user for
+their own `owner_id` only (see sections 31-32).
 
 ### KeePass import
 
@@ -2146,7 +2161,8 @@ Vault delete lacks entry access check.
 
 Vault blueprint lacks global tool permission protection.
 
-Group creation/deletion is available to any authenticated user.
+Group creation/deletion is available to any authenticated user. (RESOLVED
+by ADR-005 — see technical-debt item #8 and sections 31-32.)
 
 Import preview stores plaintext secrets in temporary JSON.
 

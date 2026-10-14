@@ -160,6 +160,45 @@ def _validate_group_assignment(owner_id, shared, group_id):
     return group
 
 
+class VaultGroupParentConflict(Exception):
+    """Raised by _validate_group_parent() when a submitted parent_id is not
+    compatible with the group being created/moved (ADR-005 hierarchy rule).
+    Also raised for a nonexistent parent_id — never silently cleared to
+    None. The whole submit must be rejected before any mutation, same
+    contract as VaultGroupAssignmentConflict."""
+
+
+def _validate_group_parent(scope, owner_id, parent_id):
+    """Validate a submitted parent_id against the group's OWN scope/owner —
+    never current_user. Deliberately takes no actor at all: whether this
+    actor is authorized to create/delete a group of this scope is a
+    separate question, resolved by the caller before this is ever called;
+    this helper only decides whether the parent is a coherent fit.
+
+        scope == "shared"   => parent is None or parent.scope == "shared"
+        scope == "personal" => parent is None or (parent.scope == "personal"
+                                                    and parent.owner_id == owner_id)
+
+    Returns the validated parent VaultGroup, or None if parent_id was
+    blank. Fails closed (raises VaultGroupParentConflict) on any
+    incompatible, nonexistent, or foreign parent_id."""
+    if parent_id is None:
+        return None
+
+    parent = db.session.get(VaultGroup, parent_id)
+    if parent is None:
+        raise VaultGroupParentConflict()
+
+    if scope == "shared":
+        if parent.scope != "shared":
+            raise VaultGroupParentConflict()
+    else:
+        if parent.scope != "personal" or parent.owner_id != owner_id:
+            raise VaultGroupParentConflict()
+
+    return parent
+
+
 def _diff_custom_fields(entry, cf_json_str):
     """Parse and validate a submitted custom-fields payload against
     entry's CURRENT VaultEntryField rows, classifying each submitted item
@@ -524,12 +563,54 @@ def delete(entry_id):
 @bp.route("/grupos/nuevo", methods=["POST"])
 @login_required
 def group_new():
+    """ADR-005: shared groups are admin-only and always owner_id=NULL;
+    personal groups are creatable by any Vault user but always
+    owner_id=current_user.id, server-side, regardless of what the client
+    submits — "create a personal group on behalf of another user" is not a
+    feature. Parent/scope coherence is delegated to
+    _validate_group_parent(); whether THIS actor may create a group of
+    THIS scope at all is decided here, not in that helper."""
     name = request.form.get("name", "").strip()
-    parent_id = request.form.get("parent_id", type=int)
+    scope = request.form.get("scope", "personal")
+    raw_parent_id = request.form.get("parent_id", "").strip()
+
     if not name:
         flash("El nombre del grupo no puede estar vacío.", "danger")
         return redirect(url_for("vault.index"))
-    group = VaultGroup(name=name, parent_id=parent_id or None)
+
+    if scope not in ("shared", "personal"):
+        abort(400)
+
+    # request.form.get("parent_id", type=int) would silently turn an
+    # unparseable value like "abc" into None, indistinguishable from a
+    # genuinely blank field — "no parent" must mean the field was actually
+    # blank, not "couldn't be parsed", and 0 is a real (if never valid)
+    # int that must still reach _validate_group_parent() to be rejected as
+    # nonexistent rather than treated as blank.
+    if raw_parent_id:
+        try:
+            parent_id = int(raw_parent_id)
+        except ValueError:
+            abort(400)
+    else:
+        parent_id = None
+
+    if scope == "shared" and not current_user.is_admin:
+        abort(403)
+
+    owner_id = None if scope == "shared" else current_user.id
+
+    try:
+        parent = _validate_group_parent(scope, owner_id, parent_id)
+    except VaultGroupParentConflict:
+        abort(409)
+
+    group = VaultGroup(
+        name=name,
+        parent_id=parent.id if parent else None,
+        scope=scope,
+        owner_id=owner_id,
+    )
     db.session.add(group)
     db.session.commit()
     vault_sync.trigger_async(current_app._get_current_object())
@@ -540,9 +621,22 @@ def group_new():
 @bp.route("/grupos/<int:group_id>/eliminar", methods=["POST"])
 @login_required
 def group_delete(group_id):
+    """ADR-005: shared groups are admin-only to delete; personal groups are
+    deletable by their owner or an admin (admin retains its existing
+    unrestricted reach over every Vault object). Historical delete
+    behavior is preserved: entries/children are detached, never deleted,
+    and deletion is never recursive."""
     group = db.session.get(VaultGroup, group_id)
     if group is None:
         abort(404)
+
+    if group.scope == "shared":
+        if not current_user.is_admin:
+            abort(403)
+    else:
+        if not (current_user.is_admin or group.owner_id == current_user.id):
+            abort(403)
+
     VaultEntry.query.filter_by(group_id=group_id).update({"group_id": None})
     VaultGroup.query.filter_by(parent_id=group_id).update({"parent_id": None})
     db.session.delete(group)
