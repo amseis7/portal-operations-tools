@@ -117,6 +117,49 @@ class CustomFieldConflict(Exception):
     silent fallback to treating the item as new."""
 
 
+class VaultGroupAssignmentConflict(Exception):
+    """Raised by _validate_group_assignment() when a submitted group_id is
+    not compatible with the entry's shared flag and real owner (ADR-005).
+    Also raised for a nonexistent/foreign group_id — never silently
+    cleared to None. The whole submit must be rejected before any
+    mutation, same contract as CustomFieldConflict."""
+
+
+def _validate_group_assignment(owner_id, shared, group_id):
+    """Validate a submitted group_id against the entry's REAL owner_id —
+    never current_user.id. An admin editing another user's entry must
+    still have that entry's personal-group compatibility checked against
+    the ENTRY's owner, not the admin's own groups; tool/object
+    authorization (can the actor touch this entry at all) is already
+    handled separately by _can_edit()/_can_access() before this is ever
+    called, and is not this function's concern.
+
+        shared == True  => group is None or group.scope == "shared"
+        shared == False => group is None or (group.scope == "personal"
+                                              and group.owner_id == owner_id)
+
+    Returns the validated VaultGroup, or None if group_id was blank.
+    Fails closed (raises VaultGroupAssignmentConflict) on any
+    incompatible, nonexistent, or foreign group_id — a client-manipulated
+    group_id that isn't even in the rendered dropdown must be rejected the
+    same way as one that is."""
+    if group_id is None:
+        return None
+
+    group = db.session.get(VaultGroup, group_id)
+    if group is None:
+        raise VaultGroupAssignmentConflict()
+
+    if shared:
+        if group.scope != "shared":
+            raise VaultGroupAssignmentConflict()
+    else:
+        if group.scope != "personal" or group.owner_id != owner_id:
+            raise VaultGroupAssignmentConflict()
+
+    return group
+
+
 def _diff_custom_fields(entry, cf_json_str):
     """Parse and validate a submitted custom-fields payload against
     entry's CURRENT VaultEntryField rows, classifying each submitted item
@@ -302,6 +345,14 @@ def new():
             return render_template("vault/new.html", form=form)
 
         group_id = int(form.group_id.data) if form.group_id.data else None
+        try:
+            validated_group = _validate_group_assignment(current_user.id, form.shared.data, group_id)
+        except VaultGroupAssignmentConflict:
+            flash("El grupo seleccionado no es compatible con el ámbito de la "
+                  "credencial. Seleccione un grupo compatible o deje la "
+                  "credencial sin grupo.", "danger")
+            return render_template("vault/new.html", form=form), 409
+
         entry = VaultEntry(
             title=form.title.data,
             category=form.category.data,
@@ -311,7 +362,7 @@ def new():
             notes_enc=encrypt(form.notes.data) if form.notes.data else None,
             shared=form.shared.data,
             owner_id=current_user.id,
-            group_id=group_id,
+            group_id=validated_group.id if validated_group else None,
             expires_at=_parse_expires_at(form.expires_at.data),
         )
         db.session.add(entry)
@@ -389,10 +440,28 @@ def edit(entry_id):
         form.expires_at.data = entry.expires_at.strftime("%Y-%m-%d") if entry.expires_at else ""
 
     if form.validate_on_submit():
-        # Validate custom fields BEFORE touching any entry attribute or
-        # flushing — so "no mutation happens until validation fully
-        # passes" is literally true, not merely true because a later
-        # rollback happens to undo it (debt #38 fix, Global Constraint 5).
+        # Validate group assignment and custom fields BEFORE touching any
+        # entry attribute or flushing — so "no mutation happens until
+        # validation fully passes" is literally true, not merely true
+        # because a later rollback happens to undo it (debt #38 fix,
+        # Global Constraint 5). Group validation uses entry.owner_id — the
+        # entry's REAL owner — never current_user.id: an admin editing
+        # another user's entry must still be checked against that entry's
+        # own owner for personal-group compatibility (ADR-005).
+        submitted_group_id = int(form.group_id.data) if form.group_id.data else None
+        try:
+            validated_group = _validate_group_assignment(
+                entry.owner_id, form.shared.data, submitted_group_id
+            )
+        except VaultGroupAssignmentConflict:
+            flash("El grupo seleccionado no es compatible con el ámbito de la "
+                  "credencial. Seleccione un grupo compatible o deje la "
+                  "credencial sin grupo.", "danger")
+            return render_template(
+                "vault/edit.html", form=form, entry=entry,
+                existing_cf=_build_existing_cf(entry),
+            ), 409
+
         try:
             updates, new_items, delete_ids = _diff_custom_fields(
                 entry, request.form.get("custom_fields_json", "[]")
@@ -411,7 +480,7 @@ def edit(entry_id):
         entry.username = form.username.data
         entry.url = form.url.data or None
         entry.shared = form.shared.data
-        entry.group_id = int(form.group_id.data) if form.group_id.data else None
+        entry.group_id = validated_group.id if validated_group else None
         entry.expires_at = _parse_expires_at(form.expires_at.data)
 
         if form.password.data:
