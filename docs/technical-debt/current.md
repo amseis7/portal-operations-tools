@@ -2216,6 +2216,12 @@ within the same request-processing instant).
 
 # 43. Vault Edit/Delete Authorization Duplicated Across Templates With No Single Source of Truth
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -2231,48 +2237,76 @@ Templates
 Maintainability
 ```
 
-Files:
-
-```text
-app/templates/vault/detail.html
-app/templates/vault/index.html
-```
-
-Current behavior:
+Historical behavior (resolved — kept for context):
 
 `_can_edit()`/`_can_delete()` in `app/vault/routes.py` both compute
 `current_user.is_admin or entry.owner_id == current_user.id`. Neither
-`detail()` nor `index()` passes a computed `can_edit`/`can_delete` value
-to the template (unlike Knowledge Base's `detalle()`, which does); the
-templates instead re-hardcode that exact same expression inline, 5
-separate times across the two files.
+`detail()` nor `index()` passed a computed `can_edit`/`can_delete` value
+to the template; the templates instead re-hardcoded that exact same
+expression inline, 5 separate times across the two files — 7
+independent copies total (2 Python helpers + 5 template copies) with no
+single source of truth.
 
-Risk:
-
-The authorization rule now has 7 independent copies (2 Python helpers +
-5 template copies) with no single source of truth. A future policy
-change (e.g. adding a shared-editor tier) could update the two Python
-helpers while missing one of the 5 template copies, silently re-exposing
-the Editar/Eliminar button to an unauthorized user — the same class of
-bug that debt items #1 and #2 (Vault Edit/Delete Authorization) in this
-document already had to fix once.
-
-Found by: `/review` during Checkpoint D of the Knowledge Base attachments
-work, out of scope for that plan — not fixed there. Pre-existing from
-this session's earlier Vault Edit/Delete Authorization hardening tasks
-(debt items #1/#2), not introduced by the attachments work.
-
-Expected remediation:
+Resolution:
 
 ```text
-Have detail()/index() compute can_edit/can_delete server-side (mirroring
-Knowledge Base's detalle()) and pass them to the templates, replacing
-all 5 inline hardcoded expressions with the passed-in values. A
-same-session, low-risk refactor once picked up — but do not bundle it
-into unrelated work; template visibility is UX only, the actual
-authorization enforcement in the routes themselves is unaffected either
-way (per portal-security-change: server-side checks are authoritative,
-template hiding is not a security control).
+Added _entry_permissions(entry) in app/vault/routes.py:
+
+    def _entry_permissions(entry):
+        return {"can_edit": _can_edit(entry), "can_delete": _can_delete(entry)}
+
+Pure in-memory check on an already-loaded entry — zero extra DB queries.
+
+detail() now computes permissions = _entry_permissions(entry) once and
+passes it to the template; detail.html's 3 inline expressions (Editar
+link, Eliminar button, the Eliminar confirmation modal — the modal
+needed its own gate because its <form action="..."> bakes the real
+delete URL into the page unconditionally) now read
+permissions.can_edit / permissions.can_delete.
+
+index() computes entry_permissions = {entry.id: _entry_permissions(entry)
+for entry in entries} once from the already-loaded entries list (no N+1 —
+same zero-DB-query property, just called once per row) and passes it to
+the template; index.html's 2 inline expressions (Editar link, Eliminar
+button, per row) now read entry_permissions[entry.id].can_edit /
+.can_delete.
+
+_can_edit()/_can_delete() themselves are unchanged and remain the sole
+backend authority — edit()/delete() still call them independently before
+any mutation; hiding a button never substitutes for that 403.
+```
+
+Files changed:
+
+```text
+app/vault/routes.py
+app/templates/vault/detail.html
+app/templates/vault/index.html
+tests/vault/test_entry_permissions.py
+tests/vault/test_edit_button_visibility.py
+tests/vault/test_delete_authorization.py
+```
+
+Evidence:
+
+```text
+tests/vault/test_entry_permissions.py covers:
+    _entry_permissions() returns {can_edit, can_delete}
+    owner gets True for both; admin gets True for both on another
+        user's entry; non-owner shared viewer gets False for both
+        (entry.shared does not grant edit/delete)
+    index()'s per-row entry_permissions dict does not cross-contaminate
+        between two different owners' entries rendered in the same
+        page (the real risk of a dict-by-id design)
+    structural check: detail.html/index.html source no longer contain
+        the inline `current_user.is_admin or entry.owner_id ==
+        current_user.id` expression
+
+tests/vault/test_edit_button_visibility.py and
+tests/vault/test_delete_authorization.py (pre-existing, extended with
+one admin-sees-button-on-others-entry-in-index case each) continue to
+cover the HTTP-level owner/admin/hidden-for-shared-viewer visibility
+regression in both templates, unchanged by this refactor.
 ```
 
 ---

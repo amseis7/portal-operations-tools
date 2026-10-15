@@ -148,6 +148,13 @@ class TestVaultDeleteAuthorization(PortalTestCase):
         resp = self.client.get("/vault/")
         self.assertIn(f'data-entry-id="{entry.id}"'.encode(), resp.data)
 
+    def test_delete_button_visible_for_admin_in_index_on_others_entry(self):
+        entry = self._make_entry(shared=False)
+        self.make_user("admin_user", is_admin=True)
+        self.login("admin_user")
+        resp = self.client.get("/vault/")
+        self.assertIn(f'data-entry-id="{entry.id}"'.encode(), resp.data)
+
     def test_delete_button_hidden_for_non_owner_shared_viewer_in_index(self):
         entry = self._make_entry(shared=True)
         self.make_user("other_user", tools=["vault"])

@@ -47,6 +47,12 @@ class TestVaultEditButtonVisibility(PortalTestCase):
         resp = self.client.get("/vault/")
         self.assertIn(self._edit_href(), resp.data)
 
+    def test_index_shows_edit_button_for_admin_on_others_entry(self):
+        self.make_user("admin_user", is_admin=True)
+        self.login("admin_user")
+        resp = self.client.get("/vault/")
+        self.assertIn(self._edit_href(), resp.data)
+
     def test_index_hides_edit_button_for_non_owner_shared_viewer(self):
         self.make_user("other_user", tools=["vault"])
         self.login("other_user")

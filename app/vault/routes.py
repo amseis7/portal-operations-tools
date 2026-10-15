@@ -56,6 +56,18 @@ def _can_delete(entry):
     return current_user.is_admin or entry.owner_id == current_user.id
 
 
+def _entry_permissions(entry):
+    """Single source of truth for Editar/Eliminar button visibility
+    (technical-debt #43) — templates must consume this instead of
+    re-deriving `current_user.is_admin or entry.owner_id == current_user.id`
+    inline. Presentation only: _can_edit()/_can_delete() remain the sole
+    backend authority and are called again, independently, by edit()/
+    delete() themselves — hiding a button here never substitutes for
+    that. Pure in-memory check on an already-loaded entry; calling this
+    once per already-loaded entry in a list is not an N+1 query."""
+    return {"can_edit": _can_edit(entry), "can_delete": _can_delete(entry)}
+
+
 def _build_group_tree(groups):
     """Return [(group, depth)] in hierarchical order for SELECT display."""
     by_parent = {}
@@ -449,9 +461,11 @@ def index():
     sync_configured = bool(
         (db_cfg and db_cfg.kdbx_path) or current_app.config.get("VAULT_KDBX_PATH")
     )
+    entry_permissions = {entry.id: _entry_permissions(entry) for entry in entries}
     return render_template(
         "vault/index.html",
         entries=entries,
+        entry_permissions=entry_permissions,
         shared_tree=shared_tree,
         personal_trees=personal_trees,
         parent_choices=parent_choices,
@@ -548,7 +562,11 @@ def detail(entry_id):
     log_audit("vault", "view", "entry", entry.id, entry.title)
     db.session.commit()
     now = datetime.utcnow()
-    return render_template("vault/detail.html", entry=entry, notes=notes, custom_fields=custom_fields, now=now)
+    permissions = _entry_permissions(entry)
+    return render_template(
+        "vault/detail.html", entry=entry, notes=notes, custom_fields=custom_fields,
+        now=now, permissions=permissions,
+    )
 
 
 @bp.route("/<int:entry_id>/reveal", methods=["POST"])
