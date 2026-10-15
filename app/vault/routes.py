@@ -956,16 +956,26 @@ def sync_settings():
 
 
 def _get_or_create_group_chain(path_list):
-    """Find or create VaultGroup hierarchy from a list of names. Returns leaf group id or None."""
+    """Find or create a VaultGroup hierarchy from a list of names, for
+    KeePass import/sync. ADR-005: KeePass operates only on shared data —
+    only scope="shared" groups are ever searched for reuse here, and any
+    newly created group is explicitly scope="shared", owner_id=None
+    (spelled out even though the column server_default already matches,
+    so the intent is unambiguous in code). A personal group with a
+    matching name/parent is never reused, even if one exists; if both a
+    shared and a personal group share the name, the shared one is reused.
+    Returns leaf group id or None."""
     if not path_list:
         return None
     parent_id = None
     for name in path_list:
         if not name:
             continue
-        group = VaultGroup.query.filter_by(name=name, parent_id=parent_id).first()
+        group = VaultGroup.query.filter_by(
+            name=name, parent_id=parent_id, scope="shared"
+        ).first()
         if not group:
-            group = VaultGroup(name=name, parent_id=parent_id)
+            group = VaultGroup(name=name, parent_id=parent_id, scope="shared", owner_id=None)
             db.session.add(group)
             db.session.flush()
         parent_id = group.id

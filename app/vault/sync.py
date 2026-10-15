@@ -67,17 +67,24 @@ class VaultSyncService:
 
             kp = create_database(path, password=password, keyfile=keyfile)
 
-            # Build KeePass group hierarchy
+            # Build KeePass group hierarchy — ADR-005: KeePass operates
+            # only on shared data. A personal group is never a node in
+            # kp_groups, so an entry whose group_id happens to point at
+            # one (shared=True with historically/defensively inconsistent
+            # data) naturally falls through to `ungrouped` below, same as
+            # an entry with no group at all — no special-case code needed.
             kp_groups = {}
-            groups = VaultGroup.query.order_by(VaultGroup.id).all()
+            groups = VaultGroup.query.filter_by(scope="shared").order_by(VaultGroup.id).all()
             for g in groups:
                 parent_kp = kp_groups.get(g.parent_id) or kp.root_group
                 kp_groups[g.id] = kp.add_group(parent_kp, g.name)
 
             ungrouped = kp.add_group(kp.root_group, "Sin Grupo")
 
-            # Add entries
-            for entry in VaultEntry.query.all():
+            # Add entries — only shared=True entries ever reach the
+            # shared .kdbx file; a personal entry must never appear here
+            # regardless of its owner_id or group assignment.
+            for entry in VaultEntry.query.filter_by(shared=True).all():
                 try:
                     kp_group = kp_groups.get(entry.group_id) or ungrouped
                     e = kp.add_entry(

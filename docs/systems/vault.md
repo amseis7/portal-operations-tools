@@ -1477,9 +1477,15 @@ reconstructs KeePass group hierarchy by:
 name + parent_id
 ```
 
-Existing matching groups are reused.
+ADR-005 (Fase 5): the lookup/creation is scoped to shared groups only —
+`scope == "shared"` is part of the match criteria, and a newly created
+group is explicitly `scope="shared", owner_id=None`. A personal group
+with a matching name/parent is never reused, even if one exists; if both
+a shared and a personal group share the name, the shared one is reused.
 
-Missing groups are created.
+Existing matching shared groups are reused.
+
+Missing groups are created as shared groups.
 
 Group UUID from KeePass is not used for this hierarchy reconstruction.
 
@@ -1816,13 +1822,16 @@ is used to make it writable.
 
 # 63. Export Group Hierarchy
 
-All Vault groups are read ordered by:
+ADR-005 (Fase 5): KeePass operates only on shared data. Only groups with:
 
 ```text
-VaultGroup.id
+VaultGroup.scope == "shared"
 ```
 
-and recreated inside KeePass.
+are read (ordered by `VaultGroup.id`) and recreated inside KeePass.
+`scope == "personal"` groups are never read by export, regardless of
+owner, name, or parent_id — a personal group is never a node in the
+service's internal group map.
 
 Mapping:
 
@@ -1831,17 +1840,39 @@ Vault group id
 → KeePass group object
 ```
 
+(shared groups only — a personal group's id never appears in this map).
+
 Ungrouped entries are placed under a synthetic KeePass group:
 
 ```text
 Sin Grupo
 ```
 
+A shared entry whose `group_id` points at a personal group — historical
+or otherwise inconsistent data; this should not happen through the
+validated `new()`/`edit()` routes, but export does not assume it can't —
+also lands under `Sin Grupo`, as a direct consequence of the personal
+group never being in the group map. Export never mutates the database to
+"fix" this; it only reads.
+
+---
+
+# 63a. Export Entry Selection
+
+Only entries with:
+
+```text
+VaultEntry.shared == True
+```
+
+are exported. A personal entry (`shared == False`) is never written to
+the shared `.kdbx` file, regardless of its `owner_id` or `group_id`.
+
 ---
 
 # 64. Export Entry Content
 
-Each Vault entry exports:
+Each exported Vault entry exports:
 
 ```text
 title
