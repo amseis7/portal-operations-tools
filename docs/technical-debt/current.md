@@ -604,10 +604,26 @@ decision explicitly:
     (group_id/parent_id set to NULL), never deleted; deletion is never
     recursive.
 
-Deferred to a later phase (not a reopening of this item): virtual
-"Compartidas"/"Personales" roots and per-user personal-tree browsing in
-the UI, scope-aware filtering of the group dropdown shown to end users,
-and KeePass export/import scope filtering.
+Fase 4: index() presents groups under "Compartidas"/"Personales"
+presentation-only roots (_shared_group_tree(), _personal_group_trees()
+— never persisted as real VaultGroup rows); admin sees each owner's
+personal tree separately labeled, never merged into one ambiguous tree.
+The VaultEntryForm.group_id dropdown and the group_new() parent dropdown
+are filtered to exactly the (owner_id, shared) or (scope, owner_id) pair
+the backend validators check (_populate_group_choices(),
+_group_new_parent_choices()) — never the sole security boundary;
+_validate_group_assignment()/_validate_group_parent() still authorize
+independently of what is rendered.
+
+Fase 5: KeePass export (VaultSyncService._export()) now reads only
+scope="shared" groups and shared=True entries; import/sync
+(_get_or_create_group_chain()) only searches/creates scope="shared"
+groups with owner_id=None, never reusing a personal group with a
+matching name/path. No personal group or personal credential can reach
+the shared .kdbx file.
+
+Still out of scope for this item (UI polish, not an authorization gap):
+group rename, move, drag/drop, owner transfer.
 ```
 
 ---

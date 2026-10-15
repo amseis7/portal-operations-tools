@@ -10,7 +10,9 @@ from app.vault.crypto import decrypt
 
 
 class VaultSyncService:
-    """Exports all vault entries to a .kdbx file on a network path.
+    """Exports shared vault entries (shared=True, in scope="shared"
+    groups) to a .kdbx file on a network path — ADR-005: KeePass operates
+    only on shared data, never personal groups/entries.
     The file is set read-only after writing so KeePass opens it in read-only mode.
     Sync runs in a background daemon thread to avoid blocking HTTP responses.
     """
