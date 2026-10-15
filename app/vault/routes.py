@@ -928,7 +928,13 @@ def sync_settings():
         if not path:
             flash("La ruta del archivo .kdbx es obligatoria.", "danger")
             return redirect(url_for("vault.sync_settings"))
-        if not password and not keyfile_path:
+
+        # A blank password field means "leave the existing secret
+        # unchanged" (debt #6) — it is never decrypted/pre-filled for the
+        # admin to "leave as-is", so it must count as already-configured
+        # for this check, not as "no password at all".
+        has_existing_password = bool(cfg and cfg.kdbx_password_enc)
+        if not password and not has_existing_password and not keyfile_path:
             flash("Debes proporcionar una contraseña, una ruta de keyfile, o ambas.", "danger")
             return redirect(url_for("vault.sync_settings"))
 
@@ -937,7 +943,8 @@ def sync_settings():
             db.session.add(cfg)
 
         cfg.kdbx_path = path
-        cfg.kdbx_password_enc = encrypt(password) if password else None
+        if password:
+            cfg.kdbx_password_enc = encrypt(password)
         cfg.kdbx_keyfile_path = keyfile_path or None
         db.session.commit()
 
@@ -945,14 +952,7 @@ def sync_settings():
         flash("Configuración de sync guardada.", "success")
         return redirect(url_for("vault.index"))
 
-    current_password = ""
-    if cfg and cfg.kdbx_password_enc:
-        try:
-            current_password = decrypt(cfg.kdbx_password_enc)
-        except Exception:
-            current_password = ""
-
-    return render_template("vault/sync_settings.html", cfg=cfg, current_password=current_password)
+    return render_template("vault/sync_settings.html", cfg=cfg)
 
 
 def _get_or_create_group_chain(path_list):

@@ -934,23 +934,30 @@ Protection:
 @login_required
 ```
 
-Important current behavior:
-
-The route currently loads the requested entry but does **not** call:
+Authorization:
 
 ```python
-_can_access(entry)
+_can_edit(entry)
 ```
 
-and does not explicitly check ownership or administrator status.
+called immediately after loading the entry, before any form processing.
+Unauthorized users receive:
 
-Therefore current edit authorization does not match detail/reveal authorization.
+```text
+HTTP 403
+```
 
-This is a verified implementation characteristic and a security concern.
+`_can_edit()` is deliberately separate from `_can_access()` (view/reveal):
 
-Do not interpret it as the intended permission model.
+```text
+owner can edit
+admin can edit
+entry.shared == True does NOT grant edit permission
+```
 
-Do not silently change it during unrelated work; treat it as explicit technical/security debt.
+Shared visibility (`_can_access()`) intentionally does not imply edit
+permission — this was resolved as technical-debt item #1 (RESOLVED); see
+`docs/technical-debt/current.md` and `tests/vault/test_edit_authorization.py`.
 
 ---
 
@@ -1001,19 +1008,27 @@ Protection:
 @login_required
 ```
 
-Important current behavior:
-
-Like edit, the route currently does **not** call:
+Authorization:
 
 ```python
-_can_access(entry)
+_can_delete(entry)
 ```
 
-before deletion.
+called immediately after `_get_entry_or_404()`, before `log_audit()`,
+`db.session.delete()`, `db.session.commit()`, and
+`vault_sync.trigger_async()` — an unauthorized attempt produces no side
+effect at all (no audit record, no deletion, no KeePass resync trigger).
+Unauthorized users receive:
 
-Therefore any authenticated user capable of reaching the route and knowing an entry ID is not explicitly restricted by owner/shared/admin logic in this handler.
+```text
+HTTP 403
+```
 
-This is current implementation behavior and should be treated as a high-priority security issue, not as an intended invariant.
+`_can_delete()` uses the same criterion as `_can_edit()` (kept as its own
+helper, not a shared call) — `entry.shared == True` does NOT grant delete
+permission, only owner or admin. Resolved as technical-debt item #2
+(RESOLVED); see `docs/technical-debt/current.md` and
+`tests/vault/test_delete_authorization.py`.
 
 Deletion is audited and followed by KeePass synchronization.
 
@@ -2118,7 +2133,10 @@ to audit details.
 
 # 75. Current Authorization Model
 
-The current Vault security model is not uniform.
+Three distinct object-level helpers exist by deliberate design, not by
+accident — `_can_access()`, `_can_edit()`, and `_can_delete()` return the
+same boolean type but encode different policies, and view/reveal must not
+be conflated with edit/delete (technical-debt items #1 and #2, RESOLVED).
 
 ### Index
 
@@ -2148,11 +2166,15 @@ _can_access()
 
 ### Edit
 
-Currently does not call `_can_access()`.
+Uses `_can_edit()` — **not** `_can_access()`, deliberately:
+`entry.shared == True` grants view/reveal but must not grant edit. Owner
+or admin only.
 
 ### Delete
 
-Currently does not call `_can_access()`.
+Uses `_can_delete()` — same owner-or-admin criterion as `_can_edit()`,
+kept as its own helper rather than a shared call. `entry.shared == True`
+does not grant delete permission.
 
 ### Create
 
@@ -2175,19 +2197,16 @@ Admin only.
 
 Admin only.
 
-This inconsistency must be understood before making access-control changes.
-
 ---
 
 # 76. Blueprint-Level Tool Authorization
 
-Current application registration does not show:
-
 ```python
-proteger_blueprint(vault_bp, "vault")
+proteger_blueprint(bp, 'vault')
 ```
 
-Therefore a user's `UserTool("vault")` assignment is not currently the same kind of server-side blueprint guard used by:
+is called at module load in `app/vault/routes.py`, immediately after the
+imports, the same pattern used by:
 
 ```text
 CSIRT
@@ -2195,9 +2214,11 @@ VirusTotal
 Umbrella
 ```
 
-Dashboard visibility and direct URL access are separate concerns.
-
-This should be treated as explicit authorization debt.
+A user without `UserTool("vault")` is redirected before any route body
+(including ownership/share logic) ever runs — dashboard visibility is not
+the security boundary; this blueprint-level guard is. Resolved as
+technical-debt item #3 (RESOLVED); see `docs/technical-debt/current.md`
+and `tests/vault/test_vault_authorization.py`.
 
 ---
 

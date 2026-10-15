@@ -236,6 +236,12 @@ import/export and sync internals (only verified, not modified)
 
 # 3. Vault Blueprint Missing Tool-Level Protection
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -249,45 +255,41 @@ Vault
 Authorization
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-CSIRT, VirusTotal, and Umbrella use blueprint-level protection through:
+CSIRT, VirusTotal, and Umbrella used blueprint-level protection through
+`proteger_blueprint(...)`. Vault relied only on route-level
+`@login_required` and did not use the same `UserTool("vault")`
+server-side protection model — a user who should not have the Vault tool
+could reach any Vault route directly even if the dashboard hid it.
 
-```python
-proteger_blueprint(...)
-```
-
-Vault currently relies on route-level:
-
-```python
-@login_required
-```
-
-and does not use the same:
+Resolution:
 
 ```text
-UserTool("vault")
+proteger_blueprint(bp, 'vault') added in app/vault/routes.py, at module
+load immediately after the imports — the same pattern already used by
+CSIRT, VirusTotal, and Umbrella. A user without UserTool("vault") is now
+redirected before any route body (including ownership/share logic) ever
+runs, for every route in the blueprint. Administrators retain access via
+User.has_tool()'s existing admin bypass.
 ```
 
-server-side protection model.
-
-Risk:
-
-A user who should not have the Vault tool may potentially access Vault routes directly even if the dashboard hides the tool.
-
-Expected remediation:
+Files changed:
 
 ```text
-Apply consistent server-side tool authorization to Vault.
+app/vault/routes.py
+tests/vault/test_vault_authorization.py
 ```
 
-Requires careful review of:
+Evidence:
 
 ```text
-shared entries
-admin routes
-existing users
-tool permissions
+tests/vault/test_vault_authorization.py covers:
+    user without the vault tool blocked from index, new (GET), detail,
+        group_new, and other routes, before any view logic runs
+    user with the vault tool reaches index/detail normally
+    admin reaches entries without an explicit UserTool grant (has_tool()
+        bypass)
 ```
 
 ---
@@ -440,6 +442,12 @@ leftover import_*.kdbx/.keyx files exist afterward.
 
 # 6. Vault Sync Password Rendered Back to UI
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -454,33 +462,58 @@ Secrets
 UI
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-The Vault sync configuration route decrypts the stored KeePass password and provides it to the rendered settings page.
+`sync_settings()` decrypted the stored KeePass password and rendered it
+into the GET form's `value="..."` attribute — a real plaintext secret
+exposure (browser DOM, screen capture, browser extensions, devtools,
+client-side code) for a value that unlocks the entire shared `.kdbx`
+file. The form's own placeholder text already promised "Dejar en blanco
+para no cambiarla" (leave blank to not change it), but the POST handler
+did the opposite: `cfg.kdbx_password_enc = encrypt(password) if password
+else None` silently wiped the configured password on any edit where the
+admin didn't retype it — a real (if latent) data-loss bug the plaintext
+pre-fill had been papering over.
 
-Risk:
-
-Existing secret is unnecessarily exposed in plaintext to:
+Resolution:
 
 ```text
-browser DOM
-screen capture
-browser extensions
-developer tools
-client-side code
+Follows the same pattern already used by Umbrella's editar_cliente()
+(app/umbrella/routes.py): the password field is never pre-filled with
+the decrypted secret.
+
+GET:  sync_settings.html's kdbx_password input no longer has a value=
+      attribute at all; current_password is no longer computed/passed.
+
+POST: blank kdbx_password => existing cfg.kdbx_password_enc is left
+      untouched (only touched when `if password:` is true). The "at
+      least one of password/keyfile" validation now checks
+      has_existing_password = bool(cfg and cfg.kdbx_password_enc) so a
+      path-only edit with an already-configured password is not
+      incorrectly rejected.
 ```
 
-Expected remediation:
+Files changed:
 
 ```text
-Do not return the existing password to the UI.
+app/vault/routes.py
+app/templates/vault/sync_settings.html
+tests/vault/test_sync_settings_password_exposure.py
 ```
 
-Use behavior such as:
+Evidence:
 
 ```text
-blank password field = preserve existing secret
-new value = replace stored secret
+tests/vault/test_sync_settings_password_exposure.py covers:
+    GET does not render the plaintext password anywhere in the page
+    GET's kdbx_password input has no value= attribute
+    blank password on edit preserves the existing secret (decrypts to
+        the original value, path still updates)
+    non-blank password on edit replaces the existing secret
+    first-time setup with blank password and no keyfile is rejected
+    first-time setup with blank password and a keyfile is accepted
+    path-only edit with an already-configured password and no keyfile
+        is accepted (the regression the old validation would have hit)
 ```
 
 ---
