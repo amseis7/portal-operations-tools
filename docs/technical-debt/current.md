@@ -520,6 +520,12 @@ tests/vault/test_sync_settings_password_exposure.py covers:
 
 # 7. Duplicate / Unused VaultAuditLog Model
 
+Status:
+
+```text
+RESOLVED
+```
+
 Priority:
 
 ```text
@@ -534,49 +540,66 @@ Audit
 Architecture
 ```
 
-Current behavior:
+Historical behavior (resolved — kept for context):
 
-Model:
+`VaultAuditLog` (table `vault_audit_log`) existed alongside the global
+`AuditLog` (table `audit_log`, written via `log_audit()`), with no
+writer or reader using `VaultAuditLog` in current code. Investigation
+(via `git log -S`) found it had a real writer AND a real reader for a
+short window right after Vault's initial release — 2026-06-09 to
+2026-06-10 — before being fully superseded, same day, by `log_audit()`
+for writes and the global `/audit?module=vault` route for reads. Current
+Vault routes (`create`/`view`/`reveal`/`edit`/`delete`/`import`/
+`sync_config` edit) all call `log_audit("vault", ...)`; `AuditLog` covers
+`VaultAuditLog`'s original fields as a strict superset
+(`object_type`/`object_id`/`object_name`/`details` generalize
+`entry_id`/`entry_title`).
 
-```text
-VaultAuditLog
-```
-
-exists, while current Vault routes primarily use global:
-
-```text
-AuditLog
-```
-
-through:
-
-```python
-log_audit()
-```
-
-Risk:
-
-Conflicting audit concepts increase confusion for maintainers and agents.
-
-Expected remediation:
-
-Decide explicitly whether:
+Resolution:
 
 ```text
-global AuditLog
+Removed VaultAuditLog, VaultEntry.audit_logs, and User.vault_audit_logs
+from app/vault/models.py. New migration d50ebdbf500a drops the table —
+fail-closed: it SELECT COUNT(*)s the table first and raises a
+RuntimeError (never a DROP, never a row deletion, never an automatic
+migration to audit_log) if any row is found, protecting the brief real
+writer window's historical data from being silently destroyed in any
+environment that happens to still have rows. If the table does not exist
+at all, upgrade() is a safe no-op. Downgrade recreates the table's final
+historical schema, empty — schema only, never a data restore.
+
+log_audit()/AuditLog themselves were not touched.
 ```
 
-is the canonical audit mechanism.
-
-If so:
+Files changed:
 
 ```text
-migrate/remove unused VaultAuditLog safely
+app/vault/models.py
+migrations/versions/d50ebdbf500a_drop_unused_vault_audit_log_table.py
+tests/vault/test_vault_audit_log_migration.py
+tests/vault/test_vault_audit_log_removed.py
 ```
 
-Otherwise define clear responsibilities for both.
+Evidence:
 
-Do not delete historical tables/models without migration review.
+```text
+tests/vault/test_vault_audit_log_migration.py covers:
+    upgrade drops an empty vault_audit_log and advances alembic_version
+    other Vault tables/rows remain intact after upgrade
+    upgrade ABORTS (SystemExit code 1) when the table has rows — the
+        table, the row, and alembic_version are all left untouched
+    downgrade recreates the table with the exact expected columns, empty
+    a failed upgrade's retry succeeds once the offending row is removed
+
+tests/vault/test_vault_audit_log_removed.py covers:
+    VaultAuditLog no longer importable from app.vault.models
+    VaultEntry no longer exposes .audit_logs
+    User no longer exposes .vault_audit_logs
+    vault_audit_log is not in db.metadata.tables
+    db.create_all() still works for the remaining Vault tables
+    log_audit()/AuditLog are unaffected (a real log_audit("vault", ...)
+        call still persists correctly)
+```
 
 ---
 

@@ -116,7 +116,6 @@ VaultGroup
 VaultEntry
 VaultEntryField
 VaultSyncConfig
-VaultAuditLog
 ```
 
 defined in:
@@ -2017,13 +2016,10 @@ Restarting the application resets them.
 
 ---
 
-# 71. Audit Systems
+# 71. Audit System
 
-The project currently contains two Vault-related audit concepts.
-
-### Global application audit
-
-Used by current Vault routes:
+Vault uses the single, global application audit mechanism — the same
+one CSIRT, VirusTotal, Umbrella, Auth, and Knowledge Base use:
 
 ```python
 log_audit()
@@ -2035,51 +2031,16 @@ from:
 app/models/audit.py
 ```
 
-### VaultAuditLog
+writing to the global `AuditLog` table (`audit_log`), with
+`module="vault"`. The global `/audit` route (`app/main/routes.py`)
+reads it with `?module=vault` filtering; `'vault'` is registered in that
+route's `AUDIT_MODULES`.
 
-Model:
-
-```text
-VaultAuditLog
-```
-
-table:
-
-```text
-vault_audit_log
-```
-
-defined in:
-
-```text
-app/vault/models.py
-```
-
----
-
-# 72. VaultAuditLog Current Usage
-
-The current Vault routes do **not** write to:
-
-```text
-VaultAuditLog
-```
-
-They use the global:
-
-```text
-AuditLog
-```
-
-through:
-
-```python
-log_audit()
-```
-
-Therefore `VaultAuditLog` currently appears to be unused application infrastructure.
-
-Do not assume its presence means Vault actions are stored there.
+A Vault-specific `VaultAuditLog` model/table (`vault_audit_log`) existed
+historically (technical-debt item #7, RESOLVED) but is no longer part of
+the codebase — removed once investigation confirmed it had no active
+writer or reader and `AuditLog` already covered its fields as a strict
+superset. Do not reintroduce a parallel Vault-specific audit model.
 
 ---
 
@@ -2241,8 +2202,6 @@ Import preview stores plaintext secrets in temporary JSON.
 Abandoned import JSON files have no shown cleanup mechanism.
 
 Sync settings decrypt existing KeePass password into rendered page.
-
-VaultAuditLog exists but current Vault actions use global AuditLog.
 ```
 
 These are not reasons to modify the application during unrelated feature work.
@@ -2502,10 +2461,6 @@ No cleanup mechanism is shown.
 
 This increases plaintext exposure.
 
-## VaultAuditLog is currently unused
-
-Actual actions are written to global AuditLog.
-
 ## Background sync is process-local
 
 Jobs are not durable.
@@ -2619,7 +2574,6 @@ delete without _can_access()
 absence of proteger_blueprint(vault_bp, "vault")
 plaintext import-preview JSON
 rendering decrypted sync password
-unused duplicate VaultAuditLog
 ```
 
 Agents must not cite this documentation as justification to preserve those behaviors.

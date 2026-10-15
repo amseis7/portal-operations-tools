@@ -112,7 +112,7 @@ class TestVaultGroupScopeMigrationSuccess(unittest.TestCase):
 
                 parent_id, child_id = _seed_parent_child_and_entry(db.engine, "success-up")
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 self.assertEqual(_alembic_version(db.engine), REVISION_UNDER_TEST)
                 with db.engine.connect() as conn:
@@ -145,7 +145,7 @@ class TestVaultGroupScopeMigrationSuccess(unittest.TestCase):
                 from app.extensions import db
 
                 parent_id, child_id = _seed_parent_child_and_entry(db.engine, "success-down")
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 downgrade(revision=PREVIOUS_HEAD_REVISION)
 
@@ -183,7 +183,7 @@ class TestVaultGroupScopeMigrationSuccess(unittest.TestCase):
                     ))
                 engine.dispose()
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 engine = sa.create_engine(MigrationTestConfig.SQLALCHEMY_DATABASE_URI)
                 with engine.begin() as conn:
@@ -203,7 +203,7 @@ class TestVaultGroupScopeMigrationSuccess(unittest.TestCase):
             with app.app_context():
                 from app.extensions import db
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 engine = sa.create_engine(MigrationTestConfig.SQLALCHEMY_DATABASE_URI)
                 with engine.begin() as conn:
@@ -272,7 +272,7 @@ class TestVaultGroupScopeMigrationForeignKeysOnFailsFast(unittest.TestCase):
                 version_before = _alembic_version(db.engine)
 
                 with self.assertRaises(SystemExit) as cm:
-                    upgrade()
+                    upgrade(revision=REVISION_UNDER_TEST)
                 self.assertEqual(cm.exception.code, 1)
 
                 columns = _vault_group_columns(db.engine)
@@ -304,7 +304,7 @@ class TestVaultGroupScopeMigrationForeignKeysOnFailsFast(unittest.TestCase):
             with app.app_context():
                 from app.extensions import db
 
-                upgrade()  # reach current head first, with foreign_keys still OFF
+                upgrade(revision=REVISION_UNDER_TEST)  # reach the revision under test first, with foreign_keys still OFF
                 self._enable_sqlite_fk_enforcement(db.engine)
                 with db.engine.connect() as conn:
                     self.assertEqual(conn.execute(sa.text("PRAGMA foreign_keys")).scalar(), 1)
@@ -362,7 +362,7 @@ class TestVaultGroupScopeMigrationOrphanPreflight(unittest.TestCase):
                     ), {"owner_id": owner_id})
 
                 with self.assertRaises(SystemExit) as cm:
-                    upgrade()
+                    upgrade(revision=REVISION_UNDER_TEST)
                 self.assertEqual(cm.exception.code, 1)
 
                 columns = _vault_group_columns(db.engine)
@@ -389,7 +389,7 @@ class TestVaultGroupScopeMigrationOrphanPreflight(unittest.TestCase):
                 with db.engine.begin() as conn:
                     conn.execute(sa.text("DELETE FROM vault_entry WHERE title='Entrada Huerfana'"))
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 retry_columns = _vault_group_columns(db.engine)
                 retry_version = _alembic_version(db.engine)
@@ -441,7 +441,7 @@ class TestVaultGroupScopeMigrationInjectedFailureThenRetry(unittest.TestCase):
                 alembic_impl.DefaultImpl.rename_table = _failing_rename_table
                 try:
                     with self.assertRaises(SystemExit) as cm:
-                        upgrade()
+                        upgrade(revision=REVISION_UNDER_TEST)
                     self.assertEqual(cm.exception.code, 1)
                 finally:
                     alembic_impl.DefaultImpl.rename_table = original_rename_table
@@ -484,7 +484,7 @@ class TestVaultGroupScopeMigrationInjectedFailureThenRetry(unittest.TestCase):
                     self.assertEqual(temp_rows, 0)
 
                 # --- retry (injection removed) must now succeed cleanly ---
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 retry_columns = _vault_group_columns(db.engine)
                 retry_version = _alembic_version(db.engine)
@@ -546,7 +546,7 @@ class TestVaultGroupScopeMigrationStaleBatchTableGuard(unittest.TestCase):
                     ))
 
                 with self.assertRaises(SystemExit) as cm:
-                    upgrade()
+                    upgrade(revision=REVISION_UNDER_TEST)
                 self.assertEqual(cm.exception.code, 1)
 
                 columns = _vault_group_columns(db.engine)
@@ -596,7 +596,7 @@ class TestVaultGroupScopeMigrationStaleBatchTableGuard(unittest.TestCase):
                     conn.execute(sa.text("DROP TABLE vault_group"))
 
                 with self.assertRaises(SystemExit) as cm:
-                    upgrade()
+                    upgrade(revision=REVISION_UNDER_TEST)
                 self.assertEqual(cm.exception.code, 1)
 
                 version_after = _alembic_version(db.engine)
