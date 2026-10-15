@@ -11,6 +11,7 @@ from flask_login import login_required, current_user
 from werkzeug.exceptions import NotFound
 
 from app.extensions import db
+from app.models.user import User
 from app.utils import admin_required, proteger_blueprint
 from app.vault import bp, import_staging
 from app.vault.models import VaultEntry, VaultGroup, VaultEntryField, VaultSyncConfig
@@ -89,14 +90,89 @@ def _build_existing_cf(entry):
     ]
 
 
-def _populate_group_choices(form):
-    """Fill form.group_id.choices from DB."""
-    groups = VaultGroup.query.order_by(VaultGroup.name).all()
+def _populate_group_choices(form, owner_id, shared):
+    """Fill form.group_id.choices with exactly the groups compatible with
+    this entry's (owner_id, shared) — the same pair _validate_group_
+    assignment() is checked against (ADR-005), so the dropdown can never
+    offer something the backend would then reject. owner_id must be the
+    entry's REAL owner (current_user.id for new(), entry.owner_id for
+    edit()) — never current_user.id in edit(), so an admin editing another
+    user's entry sees that user's personal groups, not the admin's own."""
+    if shared:
+        groups = VaultGroup.query.filter_by(scope="shared").order_by(VaultGroup.name).all()
+    else:
+        groups = VaultGroup.query.filter_by(
+            scope="personal", owner_id=owner_id
+        ).order_by(VaultGroup.name).all()
     tree = _build_group_tree(groups)
     form.group_id.choices = [("", "— Sin grupo —")] + [
         (str(g.id), "  " * depth + g.name)
         for g, depth in tree
     ]
+
+
+def _shared_group_tree():
+    """[(group, depth)] for every scope="shared" group — visible to every
+    Vault user, presented under the "Compartidas" root."""
+    groups = VaultGroup.query.filter_by(scope="shared").order_by(VaultGroup.name).all()
+    return _build_group_tree(groups)
+
+
+def _personal_group_trees(user):
+    """[(owner_id, label, tree)] for personal groups visible to `user`.
+
+    Normal user: exactly one entry — their own tree (possibly empty), no
+    other owner's personal groups anywhere in the result.
+
+    Admin: one entry per user who owns at least one personal group, each
+    with its own independently-built tree and a safe human label (never a
+    raw id) — personal groups from different owners are never merged into
+    a single ambiguous tree."""
+    if user.is_admin:
+        groups = VaultGroup.query.filter_by(scope="personal").all()
+        by_owner = {}
+        for g in groups:
+            by_owner.setdefault(g.owner_id, []).append(g)
+        result = []
+        for owner_id, owner_groups in by_owner.items():
+            owner = db.session.get(User, owner_id)
+            label = (owner.nombre_completo or owner.username) if owner else "?"
+            result.append((owner_id, label, _build_group_tree(owner_groups)))
+        result.sort(key=lambda row: row[1].lower())
+        return result
+    else:
+        groups = VaultGroup.query.filter_by(
+            scope="personal", owner_id=user.id
+        ).order_by(VaultGroup.name).all()
+        return [(user.id, None, _build_group_tree(groups))]
+
+
+def _group_new_parent_choices(user):
+    """[(group_id, indented_label, scope)] for every group `user` could
+    ever pick as a parent when creating a new group — rendered together in
+    one <select>, with a small amount of client-side JS toggling which
+    options are visible based on the chosen scope. Purely a UX convenience:
+    _validate_group_parent() is the authority regardless of what this
+    offers, so an unrendered/manipulated parent_id is still rejected
+    server-side.
+
+    Shared options are only included for an admin (only admin can ever
+    create a shared group). Personal options are always just `user`'s own
+    personal groups — never another user's, including when `user` is
+    admin."""
+    choices = []
+    if user.is_admin:
+        shared_groups = VaultGroup.query.filter_by(scope="shared").order_by(VaultGroup.name).all()
+        for g, depth in _build_group_tree(shared_groups):
+            choices.append((g.id, "  " * depth + g.name, "shared"))
+
+    personal_groups = VaultGroup.query.filter_by(
+        scope="personal", owner_id=user.id
+    ).order_by(VaultGroup.name).all()
+    for g, depth in _build_group_tree(personal_groups):
+        choices.append((g.id, "  " * depth + g.name, "personal"))
+
+    return choices
 
 
 def _parse_expires_at(value):
@@ -158,6 +234,28 @@ def _validate_group_assignment(owner_id, shared, group_id):
             raise VaultGroupAssignmentConflict()
 
     return group
+
+
+def _parse_optional_group_id(raw_value):
+    """Parse a submitted group_id form value before it ever reaches
+    _validate_group_assignment(). None/""/whitespace => None ("no group").
+    A non-numeric value (a tampered client sending "abc") must fail closed
+    the same way an incompatible/nonexistent group_id does — not raise an
+    uncaught ValueError/500 — so it raises the SAME
+    VaultGroupAssignmentConflict _validate_group_assignment() raises,
+    meant to be caught by the same except block. "0" parses to the int 0
+    and is deliberately NOT collapsed to None here — it is left for
+    _validate_group_assignment() to reject as a nonexistent id, same as
+    any other int that doesn't match a real VaultGroup row."""
+    if raw_value is None:
+        return None
+    stripped = raw_value.strip()
+    if not stripped:
+        return None
+    try:
+        return int(stripped)
+    except ValueError:
+        raise VaultGroupAssignmentConflict()
 
 
 class VaultGroupParentConflict(Exception):
@@ -328,8 +426,9 @@ def _apply_custom_fields(entry, updates, new_items, delete_ids):
 @bp.route("/")
 @login_required
 def index():
-    groups = VaultGroup.query.order_by(VaultGroup.name).all()
-    group_tree = _build_group_tree(groups)
+    shared_tree = _shared_group_tree()
+    personal_trees = _personal_group_trees(current_user)
+    parent_choices = _group_new_parent_choices(current_user)
 
     selected_group = request.args.get("group", type=int)
 
@@ -353,7 +452,9 @@ def index():
     return render_template(
         "vault/index.html",
         entries=entries,
-        group_tree=group_tree,
+        shared_tree=shared_tree,
+        personal_trees=personal_trees,
+        parent_choices=parent_choices,
         selected_group=selected_group,
         now=now,
         sync_configured=sync_configured,
@@ -376,15 +477,15 @@ def sync_ahora():
 @login_required
 def new():
     form = VaultEntryForm()
-    _populate_group_choices(form)
+    _populate_group_choices(form, current_user.id, form.shared.data)
 
     if form.validate_on_submit():
         if not form.password.data:
             form.password.errors.append("La contraseña es obligatoria.")
             return render_template("vault/new.html", form=form)
 
-        group_id = int(form.group_id.data) if form.group_id.data else None
         try:
+            group_id = _parse_optional_group_id(form.group_id.data)
             validated_group = _validate_group_assignment(current_user.id, form.shared.data, group_id)
         except VaultGroupAssignmentConflict:
             flash("El grupo seleccionado no es compatible con el ámbito de la "
@@ -470,7 +571,7 @@ def edit(entry_id):
         abort(403)
 
     form = VaultEntryForm(obj=entry)
-    _populate_group_choices(form)
+    _populate_group_choices(form, entry.owner_id, form.shared.data)
 
     if request.method == "GET":
         form.password.data = ""
@@ -487,8 +588,8 @@ def edit(entry_id):
         # entry's REAL owner — never current_user.id: an admin editing
         # another user's entry must still be checked against that entry's
         # own owner for personal-group compatibility (ADR-005).
-        submitted_group_id = int(form.group_id.data) if form.group_id.data else None
         try:
+            submitted_group_id = _parse_optional_group_id(form.group_id.data)
             validated_group = _validate_group_assignment(
                 entry.owner_id, form.shared.data, submitted_group_id
             )

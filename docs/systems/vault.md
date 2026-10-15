@@ -629,6 +629,26 @@ index navigation
 entry group selector
 ```
 
+ADR-005 (Fase 4): the index no longer builds one flat tree from every
+`VaultGroup` row. `_shared_group_tree()` builds the "Compartidas" tree from
+`scope="shared"` groups only; `_personal_group_trees(user)` builds
+"Personales" — for a normal user, exactly their own tree; for admin, one
+independently-built tree per owner, each labeled with that user's safe
+human identifier (never a raw id), never merged into one ambiguous tree.
+`_group_new_parent_choices(user)` builds the group-creation form's parent
+options the same way, scoped to what `user` could actually create under.
+The `VaultEntryForm.group_id` dropdown is filtered by
+`_populate_group_choices(form, owner_id, shared)` using the same
+`(owner_id, shared)` pair `_validate_group_assignment()` checks — owner_id
+is the entry's real owner (`entry.owner_id` in `edit()`, never
+`current_user.id`), so admin editing another user's entry sees that
+user's personal groups, not admin's own. None of this filtering is a
+security boundary — `_validate_group_assignment()` / `_validate_group_
+parent()` / `group_new()` / `group_delete()` remain authoritative
+regardless of what is rendered. `VaultEntryForm.group_id` uses
+`validate_choice=False` precisely so WTForms' own choice-membership check
+never becomes an accidental second gate ahead of that authority.
+
 ---
 
 # 18. Vault Index

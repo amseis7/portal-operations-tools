@@ -89,12 +89,12 @@ class PortalTestCase(unittest.TestCase):
         db.drop_all()
         self.app_context.pop()
 
-    def make_user(self, username, is_admin=False, tools=None):
+    def make_user(self, username, is_admin=False, tools=None, nombre_completo="Usuario de Prueba"):
         user = User(
             username=username,
             is_admin=is_admin,
             must_change_password=False,
-            nombre_completo="Usuario de Prueba",
+            nombre_completo=nombre_completo,
         )
         user.set_password(SYNTHETIC_PASSWORD)
         db.session.add(user)

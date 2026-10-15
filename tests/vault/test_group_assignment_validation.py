@@ -185,6 +185,40 @@ class TestVaultGroupAssignmentRoutes(PortalTestCase):
             data["shared"] = "y"
         return self.client.post(f"/vault/{entry.id}/edit", data=data, follow_redirects=False)
 
+    def _post_new_raw_group_id(self, raw_group_id, shared=False, title="Nueva entrada"):
+        """Like _post_new(), but sends group_id exactly as given — a
+        non-numeric string, or "0" — which str(group_id) if group_id else
+        "" in _post_new() cannot represent (it collapses both None and 0
+        to "")."""
+        token = self._csrf("/vault/new")
+        data = {
+            "title": title,
+            "category": "server",
+            "username": "svc",
+            "password": "Synthetic-New-Password-1",
+            "group_id": raw_group_id,
+            "csrf_token": token,
+            "custom_fields_json": "[]",
+        }
+        if shared:
+            data["shared"] = "y"
+        return self.client.post("/vault/new", data=data, follow_redirects=False)
+
+    def _post_edit_raw_group_id(self, entry, raw_group_id, shared=False, title=None):
+        token = self._csrf(f"/vault/{entry.id}/edit")
+        data = {
+            "title": title if title is not None else entry.title,
+            "category": entry.category,
+            "username": entry.username,
+            "password": "",
+            "group_id": raw_group_id,
+            "csrf_token": token,
+            "custom_fields_json": "[]",
+        }
+        if shared:
+            data["shared"] = "y"
+        return self.client.post(f"/vault/{entry.id}/edit", data=data, follow_redirects=False)
+
     # -- new() ----------------------------------------------------------
 
     def test_new_shared_entry_in_shared_group_succeeds(self):
@@ -306,22 +340,64 @@ class TestVaultGroupAssignmentRoutes(PortalTestCase):
         self.assertNotEqual(entry.title, "Should not apply")
 
     def test_edit_with_nonexistent_group_id_is_rejected(self):
-        """A group_id with no matching VaultGroup row at all is caught by
-        the form's own SelectField choice validation before it ever
-        reaches _validate_group_assignment() — a different layer than the
-        409 path used for a real-but-incompatible group (see
-        test_admin_cannot_switch_... / test_new_personal_entry_with_
-        manipulated_other_users_group_is_rejected for that path), but the
-        security property under test is the same either way: no mutation
-        on an invalid group_id, regardless of which layer catches it."""
+        """A group_id with no matching VaultGroup row at all — not even
+        rendered in the (now scope/owner-filtered, ADR-005 Fase 4) dropdown
+        — still reaches _validate_group_assignment() directly, since
+        VaultEntryForm.group_id uses validate_choice=False precisely so
+        WTForms' own choice-membership check never becomes a second gate
+        ahead of that helper. The helper rejects it as nonexistent (409)."""
         entry = self._make_entry(self.owner.id, shared=False, group_id=None)
 
         resp = self._post_edit(entry, shared=False, group_id=999999, title="Should not apply")
 
-        self.assertNotEqual(resp.status_code, 302)  # not a success redirect
+        self.assertEqual(resp.status_code, 409)
         db.session.refresh(entry)
         self.assertIsNone(entry.group_id)
         self.assertNotEqual(entry.title, "Should not apply")
+
+    # -- group_id parsing must fail closed on malformed input (Fase 4 fix) --
+
+    def test_new_with_non_numeric_group_id_is_rejected_not_500(self):
+        before = VaultEntry.query.count()
+
+        resp = self._post_new_raw_group_id("abc", shared=True, title="Non Numeric New")
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(VaultEntry.query.count(), before)
+        self.assertIsNone(VaultEntry.query.filter_by(title="Non Numeric New").first())
+
+    def test_new_with_group_id_zero_is_rejected_not_treated_as_no_group(self):
+        before = VaultEntry.query.count()
+
+        resp = self._post_new_raw_group_id("0", shared=True, title="Zero Group New")
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(VaultEntry.query.count(), before)
+        self.assertIsNone(VaultEntry.query.filter_by(title="Zero Group New").first())
+
+    def test_edit_with_non_numeric_group_id_is_rejected_not_500(self):
+        shared_group = self._shared_group()
+        entry = self._make_entry(self.owner.id, shared=True, group_id=shared_group.id,
+                                  title="Original Non Numeric")
+
+        resp = self._post_edit_raw_group_id(entry, "abc", shared=True, title="Should not apply")
+
+        self.assertEqual(resp.status_code, 409)
+        db.session.refresh(entry)
+        self.assertEqual(entry.title, "Original Non Numeric")
+        self.assertEqual(entry.group_id, shared_group.id)
+
+    def test_edit_with_group_id_zero_is_rejected_not_treated_as_no_group(self):
+        shared_group = self._shared_group()
+        entry = self._make_entry(self.owner.id, shared=True, group_id=shared_group.id,
+                                  title="Original Zero")
+
+        resp = self._post_edit_raw_group_id(entry, "0", shared=True, title="Should not apply")
+
+        self.assertEqual(resp.status_code, 409)
+        db.session.refresh(entry)
+        self.assertEqual(entry.title, "Original Zero")
+        self.assertEqual(entry.group_id, shared_group.id)
 
     def test_rejected_edit_changes_no_field_at_all(self):
         """Beyond shared/group_id: a rejected group assignment must not

@@ -10,6 +10,45 @@
 </nav>
 {% endblock %}
 
+{% macro render_group_rows(tree) %}
+  {% set ns = namespace(parent_ids=[]) %}
+  {% for g, depth in tree %}
+    {% if g.parent_id %}{% set ns.parent_ids = ns.parent_ids + [g.parent_id] %}{% endif %}
+  {% endfor %}
+  {% for g, depth in tree %}
+  <div class="d-flex align-items-center group-tree-item"
+       data-gid="{{ g.id }}" data-pid="{{ g.parent_id or '' }}">
+    <span style="width:{{ depth * 1.1 }}rem;flex-shrink:0;"></span>
+    {% if g.id in ns.parent_ids %}
+    <button class="btn btn-link p-0 me-1 text-muted group-toggle"
+            style="width:1.1rem;line-height:1;flex-shrink:0;"
+            title="Plegar/desplegar subgrupos">
+      <i class="bi bi-chevron-down small"></i>
+    </button>
+    {% else %}
+    <span style="width:1.1rem;flex-shrink:0;" class="me-1"></span>
+    {% endif %}
+    <a href="{{ url_for('vault.index', group=g.id) }}"
+       class="list-group-item list-group-item-action py-2 flex-grow-1 border-0
+              {% if selected_group == g.id %}active{% endif %}"
+       style="padding-left:0.5rem;">
+      <i class="bi bi-folder{% if selected_group == g.id %}-fill{% endif %} me-1"></i>
+      {{ g.name }}
+    </a>
+    {% if g.scope == 'personal' or current_user.is_admin %}
+    <form method="POST" action="{{ url_for('vault.group_delete', group_id=g.id) }}"
+          onsubmit="return confirm('¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo.');"
+          class="m-0 me-1">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Eliminar grupo">
+        <i class="bi bi-x"></i>
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+{% endmacro %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="mb-0"><i class="bi bi-safe text-primary me-2"></i>Vault de Credenciales</h2>
@@ -47,7 +86,7 @@
                      placeholder="Nombre del grupo" required maxlength="120">
             </div>
             <div class="mb-2">
-              <select class="form-select form-select-sm" name="scope">
+              <select class="form-select form-select-sm" name="scope" id="groupScopeSelect">
                 <option value="personal" selected>Personal</option>
                 {% if current_user.is_admin %}
                 <option value="shared">Compartido</option>
@@ -55,10 +94,10 @@
               </select>
             </div>
             <div class="mb-2">
-              <select class="form-select form-select-sm" name="parent_id">
+              <select class="form-select form-select-sm" name="parent_id" id="groupParentSelect">
                 <option value="">— Sin padre (raíz) —</option>
-                {% for g, depth in group_tree %}
-                <option value="{{ g.id }}">{{ '  ' * depth }}{{ g.name }}</option>
+                {% for gid, label, scope in parent_choices %}
+                <option value="{{ gid }}" data-scope="{{ scope }}">{{ label }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -72,43 +111,28 @@
            class="list-group-item list-group-item-action py-2 {% if not selected_group %}active{% endif %}">
           <i class="bi bi-collection me-1"></i> Todas
         </a>
-        {# Compute which groups have children so we can show the toggle chevron #}
-        {% set ns = namespace(parent_ids=[]) %}
-        {% for g, depth in group_tree %}
-          {% if g.parent_id %}{% set ns.parent_ids = ns.parent_ids + [g.parent_id] %}{% endif %}
-        {% endfor %}
-        {% for g, depth in group_tree %}
-        <div class="d-flex align-items-center group-tree-item"
-             data-gid="{{ g.id }}" data-pid="{{ g.parent_id or '' }}">
-          <span style="width:{{ depth * 1.1 }}rem;flex-shrink:0;"></span>
-          {% if g.id in ns.parent_ids %}
-          <button class="btn btn-link p-0 me-1 text-muted group-toggle"
-                  style="width:1.1rem;line-height:1;flex-shrink:0;"
-                  title="Plegar/desplegar subgrupos">
-            <i class="bi bi-chevron-down small"></i>
-          </button>
-          {% else %}
-          <span style="width:1.1rem;flex-shrink:0;" class="me-1"></span>
+
+        <div class="list-group-item bg-light small fw-semibold text-muted py-1">Compartidas</div>
+        {{ render_group_rows(shared_tree) }}
+        {% if not shared_tree %}
+        <div class="list-group-item text-muted small py-2">Sin grupos compartidos</div>
+        {% endif %}
+
+        <div class="list-group-item bg-light small fw-semibold text-muted py-1">Personales</div>
+        {% if current_user.is_admin %}
+          {% for owner_id, label, tree in personal_trees %}
+          <div class="list-group-item small fw-semibold py-1 ps-3">{{ label }}</div>
+          {{ render_group_rows(tree) }}
+          {% endfor %}
+          {% if not personal_trees %}
+          <div class="list-group-item text-muted small py-2">Sin grupos personales</div>
           {% endif %}
-          <a href="{{ url_for('vault.index', group=g.id) }}"
-             class="list-group-item list-group-item-action py-2 flex-grow-1 border-0
-                    {% if selected_group == g.id %}active{% endif %}"
-             style="padding-left:0.5rem;">
-            <i class="bi bi-folder{% if selected_group == g.id %}-fill{% endif %} me-1"></i>
-            {{ g.name }}
-          </a>
-          <form method="POST" action="{{ url_for('vault.group_delete', group_id=g.id) }}"
-                onsubmit="return confirm('¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo.');"
-                class="m-0 me-1">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-            <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Eliminar grupo">
-              <i class="bi bi-x"></i>
-            </button>
-          </form>
-        </div>
-        {% endfor %}
-        {% if not group_tree %}
-        <div class="list-group-item text-muted small py-2">Sin grupos creados</div>
+        {% else %}
+          {% if personal_trees and personal_trees[0][2] %}
+            {{ render_group_rows(personal_trees[0][2]) }}
+          {% else %}
+          <div class="list-group-item text-muted small py-2">Sin grupos personales</div>
+          {% endif %}
         {% endif %}
       </div>
     </div>
@@ -427,6 +451,27 @@
   });
 
   updateVisibility();
+})();
+
+(function () {
+  var scopeSel = document.getElementById('groupScopeSelect');
+  var parentSel = document.getElementById('groupParentSelect');
+  if (!scopeSel || !parentSel) return;
+
+  function filterParentOptions() {
+    var scope = scopeSel.value;
+    var currentStillValid = false;
+    Array.prototype.forEach.call(parentSel.options, function (opt) {
+      if (!opt.value) return;
+      var matches = opt.dataset.scope === scope;
+      opt.hidden = !matches;
+      if (opt.selected && matches) currentStillValid = true;
+    });
+    if (!currentStillValid) parentSel.value = '';
+  }
+
+  scopeSel.addEventListener('change', filterParentOptions);
+  filterParentOptions();
 })();
 
 (function () {
