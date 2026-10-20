@@ -2,8 +2,11 @@
 
 ## Purpose
 
-Lets the team document ticket solutions as Markdown articles and find them
-later by text search, client, platform, or tag.
+Lets the team document ticket solutions as Markdown articles, organized
+visually by brand (`/kb` shows a grid of brands; selecting one shows only
+that brand's articles), and find them later by text search or tag within a
+brand. Knowledge Base deliberately does **not** store customer-identifying
+information (no "cliente"/client field exists).
 
 It describes the **current implementation**, not a future design.
 
@@ -26,7 +29,8 @@ app/models/knowledge.py
 Primary templates:
 
 ```text
-app/templates/knowledge_base/list.html
+app/templates/knowledge_base/brands.html
+app/templates/knowledge_base/articles.html
 app/templates/knowledge_base/form.html
 app/templates/knowledge_base/detail.html
 ```
@@ -36,6 +40,7 @@ Relevant migrations:
 ```text
 migrations/versions/38fd8516d488_add_knowledge_base_tables.py
 migrations/versions/36c6bc7ea6fa_add_knowledge_attachment_table.py
+migrations/versions/1b5fd7e825ed_remove_client_from_knowledge_article.py
 ```
 
 ---
@@ -53,18 +58,26 @@ module uses the standard server-side tool guard from day one.
 
 # 2. Models
 
-`KnowledgeArticle`: `title, problem_md, solution_md, client, platform,
-author_id, created_at, updated_at`, plus a many-to-many `tags` relationship
-to `KnowledgeTag` through the `knowledge_article_tag` association table.
+`KnowledgeArticle`: `title, problem_md, solution_md, platform, author_id,
+created_at, updated_at`, plus a many-to-many `tags` relationship to
+`KnowledgeTag` through the `knowledge_article_tag` association table.
 
 Both models are also re-exported from `app/models/__init__.py` (the same
 aggregator used by CSIRT/VirusTotal/Umbrella/Notification/Audit) — this is
 required for Alembic autogenerate to detect them, not just a style choice.
 
-`client` and `platform` are plain indexed strings, not master tables —
-the filter dropdowns and form autocomplete are populated from
-`SELECT DISTINCT` over existing rows. This is a deliberate MVP decision
-(see `docs/technical-debt/current.md`), not an oversight.
+`platform` is the persisted column name (unchanged since the original KB
+migration) and is the brand/"marca" concept the index grid groups
+articles by — labeled "Marca" in the UI. It is a plain indexed string, not
+a master table — the grid's brand list and the form's autocomplete are both
+populated from the existing distinct values in this column. This is a
+deliberate MVP decision (see `docs/technical-debt/current.md` debt #37), not
+an oversight.
+
+There used to be a separate `client` column (customer name). It was removed
+by migration `1b5fd7e825ed_remove_client_from_knowledge_article.py` — a
+product decision that Knowledge Base must not store customer-identifying
+information. Do not reintroduce a "cliente"/client concept in this module.
 
 ---
 
@@ -113,13 +126,28 @@ UI.
 
 ---
 
-# 5. Search, Filters, Pagination
+# 5. Navigation, Search, Filters, Pagination
+
+`/kb` (`index()`) shows a grid of brands (distinct non-empty `platform`
+values) plus a "Sin marca" card for articles with no `platform` set. Each
+card's article count comes from one grouped aggregate query for named
+brands and one count query for the "Sin marca" bucket — two queries total
+regardless of how many brands exist, never one query per card.
+
+Selecting a brand goes to `GET /kb/brand/<platform>` (`brand_articles()`),
+an exact-match article list scoped to that one `platform` value; an
+unrecognized value (no article currently uses it — there is no separate
+Brand table) is a 404. `GET /kb/sin-marca` (`sin_marca()`) is the
+equivalent view for articles with `platform` `NULL` or `""`. Both share
+`_render_brand_articles()`, which applies the same search/tag/pagination
+behavior the old flat list had, just pre-scoped to one brand bucket.
 
 Text search is a `LIKE`-based match (escaped via
 `app.knowledge_base.logic.escape_like`) over `title`, `problem_md`,
-`solution_md`, combined with exact-match filters on `client`, `platform`,
-and `tag`. Results are paginated server-side (`per_page=20`) using
-Flask-SQLAlchemy's built-in `.paginate()`.
+`solution_md`, combined with an exact-match filter on `tag` — both scoped
+to whichever brand bucket is currently open. Results are paginated
+server-side (`per_page=20`) using Flask-SQLAlchemy's built-in
+`.paginate()`.
 
 There is no full-text search engine (SQLite FTS5) in this version — see
 `docs/technical-debt/current.md`.

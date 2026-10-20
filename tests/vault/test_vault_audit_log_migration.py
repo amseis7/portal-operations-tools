@@ -97,7 +97,7 @@ class TestVaultAuditLogMigrationUpgradeHappyPath(unittest.TestCase):
 
                 self.assertTrue(_table_exists(db.engine, "vault_audit_log"))
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 self.assertFalse(_table_exists(db.engine, "vault_audit_log"))
                 self.assertEqual(_alembic_version(db.engine), REVISION_UNDER_TEST)
@@ -208,13 +208,13 @@ class TestVaultAuditLogMigrationRetryAfterFix(unittest.TestCase):
                 _seed_synthetic_audit_row(db.engine, "retry")
 
                 with self.assertRaises(SystemExit):
-                    upgrade()
+                    upgrade(revision=REVISION_UNDER_TEST)
                 self.assertEqual(_alembic_version(db.engine), PREVIOUS_HEAD_REVISION)
 
                 with db.engine.begin() as conn:
                     conn.execute(sa.text("DELETE FROM vault_audit_log"))
 
-                upgrade()
+                upgrade(revision=REVISION_UNDER_TEST)
 
                 self.assertFalse(_table_exists(db.engine, "vault_audit_log"))
                 self.assertEqual(_alembic_version(db.engine), REVISION_UNDER_TEST)

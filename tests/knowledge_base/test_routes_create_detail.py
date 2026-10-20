@@ -22,7 +22,6 @@ class TestCreateAndDetail(PortalTestCase):
                 "title": "Nuevo artículo",
                 "problem_md": "Problema **grave**",
                 "solution_md": "Reiniciar servicio",
-                "client": "Acme",
                 "platform": "Linux",
                 "tags_raw": "linux, servicios",
                 "csrf_token": token,
@@ -39,7 +38,7 @@ class TestCreateAndDetail(PortalTestCase):
         self.assertIsNotNone(audit)
         self.assertEqual(audit.object_name, "Nuevo artículo")
 
-    def test_create_strips_whitespace_from_client_and_platform(self):
+    def test_create_strips_whitespace_from_platform(self):
         token = self._csrf_get("/kb/nuevo")
 
         self.client.post(
@@ -48,7 +47,6 @@ class TestCreateAndDetail(PortalTestCase):
                 "title": "Con espacios",
                 "problem_md": "p",
                 "solution_md": "s",
-                "client": " Acme ",
                 "platform": " Linux ",
                 "csrf_token": token,
             },
@@ -56,12 +54,17 @@ class TestCreateAndDetail(PortalTestCase):
         )
 
         article = KnowledgeArticle.query.filter_by(title="Con espacios").first()
-        self.assertEqual(article.client, "Acme")
         self.assertEqual(article.platform, "Linux")
 
-        # the index route's exact-match filter must actually find it
-        resp = self.client.get("/kb/?client=Acme")
+        # the brand route's exact-match lookup must actually find it
+        resp = self.client.get("/kb/brand/Linux")
         self.assertIn(b"Con espacios", resp.data)
+
+    def test_client_field_not_in_create_form_or_response(self):
+        resp = self.client.get("/kb/nuevo")
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b'name="client"', resp.data)
+        self.assertNotIn("Cliente".encode("utf-8"), resp.data)
 
     def test_create_missing_title_shows_validation_error(self):
         token = self._csrf_get("/kb/nuevo")
@@ -95,3 +98,23 @@ class TestCreateAndDetail(PortalTestCase):
         # what must never survive is the bare, attribute-less injected tag.
         self.assertNotIn(b"<script>", resp.data)
         self.assertIn(b"<strong>ok</strong>", resp.data)
+
+    def test_client_field_not_shown_on_detail_page(self):
+        token = self._csrf_get("/kb/nuevo")
+        self.client.post(
+            "/kb/nuevo",
+            data={
+                "title": "Sin cliente",
+                "problem_md": "p",
+                "solution_md": "s",
+                "platform": "Linux",
+                "csrf_token": token,
+            },
+            follow_redirects=True,
+        )
+        article = KnowledgeArticle.query.filter_by(title="Sin cliente").first()
+
+        resp = self.client.get(f"/kb/{article.id}")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Cliente".encode("utf-8"), resp.data)

@@ -40,7 +40,7 @@ class TestEditDeleteAuthorization(PortalTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(db.session.get(KnowledgeArticle, article.id).title, "Titulo editado")
 
-    def test_edit_strips_whitespace_from_client_and_platform(self):
+    def test_edit_strips_whitespace_from_platform(self):
         self.make_user("autorF", tools=["knowledge_base"])
         self.login("autorF")
         article = self._create_article_as("autorF")
@@ -54,7 +54,6 @@ class TestEditDeleteAuthorization(PortalTestCase):
                 "title": article.title,
                 "problem_md": "p",
                 "solution_md": "s",
-                "client": " Acme ",
                 "platform": " Linux ",
                 "csrf_token": token,
             },
@@ -62,8 +61,18 @@ class TestEditDeleteAuthorization(PortalTestCase):
         )
 
         updated = db.session.get(KnowledgeArticle, article.id)
-        self.assertEqual(updated.client, "Acme")
         self.assertEqual(updated.platform, "Linux")
+
+    def test_client_field_not_in_edit_form(self):
+        self.make_user("autorG", tools=["knowledge_base"])
+        self.login("autorG")
+        article = self._create_article_as("autorG")
+
+        resp = self.client.get(f"/kb/{article.id}/editar")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(b'name="client"', resp.data)
+        self.assertNotIn("Cliente".encode("utf-8"), resp.data)
 
     def test_non_author_non_admin_cannot_edit(self):
         self.make_user("autorB", tools=["knowledge_base"])

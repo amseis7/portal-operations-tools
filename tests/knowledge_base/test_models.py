@@ -11,7 +11,6 @@ class TestKnowledgeModels(PortalTestCase):
             title="Resolver DNS intermitente",
             problem_md="El **DNS** falla a veces.",
             solution_md="Reiniciar el servicio `named`.",
-            client="Acme Corp",
             platform="BIND9",
             author=author,
         )
@@ -25,6 +24,11 @@ class TestKnowledgeModels(PortalTestCase):
         self.assertEqual([t.name for t in fetched.tags], ["dns"])
         self.assertIsNotNone(fetched.created_at)
         self.assertIsNotNone(fetched.updated_at)
+
+    def test_client_field_no_longer_exists(self):
+        """Product decision: KB must not store customer-identifying data."""
+        self.assertFalse(hasattr(KnowledgeArticle, "client"))
+        self.assertNotIn("client", KnowledgeArticle.__table__.columns.keys())
 
     def test_article_requires_title_problem_solution(self):
         from sqlalchemy.exc import IntegrityError

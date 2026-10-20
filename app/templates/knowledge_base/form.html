@@ -28,21 +28,12 @@
             {% for e in form.title.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
           </div>
 
-          <div class="row g-3 mb-3">
-            <div class="col-md-6">
-              {{ form.client.label(class="form-label fw-bold") }}
-              {{ form.client(class="form-control", list="clientList") }}
-              <datalist id="clientList">
-                {% for c in clients %}<option value="{{ c }}">{% endfor %}
-              </datalist>
-            </div>
-            <div class="col-md-6">
-              {{ form.platform.label(class="form-label fw-bold") }}
-              {{ form.platform(class="form-control", list="platformList") }}
-              <datalist id="platformList">
-                {% for p in platforms %}<option value="{{ p }}">{% endfor %}
-              </datalist>
-            </div>
+          <div class="mb-3">
+            {{ form.platform.label(class="form-label fw-bold") }}
+            {{ form.platform(class="form-control", list="platformList") }}
+            <datalist id="platformList">
+              {% for p in platforms %}<option value="{{ p }}">{% endfor %}
+            </datalist>
           </div>
 
           <div class="mb-3">

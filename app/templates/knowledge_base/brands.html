@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Base de Conocimiento{% endblock %}
+
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item active">Base de Conocimiento</li>
+  </ol>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="mb-0"><i class="bi bi-journal-text text-info me-2"></i>Base de Conocimiento</h2>
+  <a href="{{ url_for('knowledge_base.crear') }}" class="btn btn-primary">
+    <i class="bi bi-plus-circle me-1"></i>Nuevo artículo
+  </a>
+</div>
+
+{% if brands or sin_marca_count %}
+<div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3">
+  {% for name, count in brands %}
+  <div class="col">
+    <a href="{{ url_for('knowledge_base.brand_articles', platform=name) }}"
+       class="card shadow-sm h-100 text-decoration-none text-body">
+      <div class="card-body text-center">
+        <i class="bi bi-bookmark-star fs-2 text-primary d-block mb-2"></i>
+        <h5 class="card-title mb-1">{{ name }}</h5>
+        <small class="text-muted">{{ count }} artículo{{ 's' if count != 1 else '' }}</small>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
+  {% if sin_marca_count %}
+  <div class="col">
+    <a href="{{ url_for('knowledge_base.sin_marca') }}"
+       class="card shadow-sm h-100 text-decoration-none text-body">
+      <div class="card-body text-center">
+        <i class="bi bi-bookmark-dash fs-2 text-secondary d-block mb-2"></i>
+        <h5 class="card-title mb-1">Sin marca</h5>
+        <small class="text-muted">{{ sin_marca_count }} artículo{{ 's' if sin_marca_count != 1 else '' }}</small>
+      </div>
+    </a>
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="alert alert-info">Todavía no hay artículos en la Base de Conocimiento.</div>
+{% endif %}
+{% endblock %}

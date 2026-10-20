@@ -1828,7 +1828,7 @@ was deliberately deferred in the MVP, not an oversight.
 
 ---
 
-# 37. Knowledge Base Client/Platform Are Free Text
+# 37. Knowledge Base Brand (platform) Is Free Text
 
 Priority:
 
@@ -1845,13 +1845,20 @@ Data quality
 
 Current behavior:
 
-`client` and `platform` are plain strings with UI autocomplete from
-existing distinct values, not managed master tables. Inconsistent casing or
-near-duplicate values (e.g. "Acme" vs "ACME Corp") are possible and will
-fragment filter results.
+`platform` (the brand/"marca" the `/kb` grid groups articles by — see
+`docs/systems/knowledge_base.md`) is a plain string with UI autocomplete
+from existing distinct values, not a managed master table. Inconsistent
+casing or near-duplicate values (e.g. "Fortinet" vs "FortiNet") are
+possible and will fragment both the grid and filter results.
 
 Expected remediation only if fragmentation becomes a real problem in
 practice — deliberately deferred, per the confirmed MVP scope.
+
+Historical note: a separate `client` (customer name) field used to exist
+alongside `platform`. It was removed entirely (migration
+`1b5fd7e825ed_remove_client_from_knowledge_article.py`) — a product
+decision that Knowledge Base must not store customer-identifying
+information. This is resolved, not deferred; do not reintroduce it.
 
 ---
 

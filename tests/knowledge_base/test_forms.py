@@ -12,13 +12,19 @@ class TestKnowledgeArticleForm(PortalTestCase):
                 "title": "Título",
                 "problem_md": "Problema",
                 "solution_md": "Solución",
-                "client": "Acme",
                 "platform": "BIND9",
                 "tags_raw": "dns, windows",
             },
         ):
             form = KnowledgeArticleForm(meta={"csrf": False})
             self.assertTrue(form.validate())
+
+    def test_client_field_no_longer_exists(self):
+        from app.knowledge_base.forms import KnowledgeArticleForm
+
+        with self.app.test_request_context("/kb/nuevo", method="POST", data={}):
+            form = KnowledgeArticleForm(meta={"csrf": False})
+            self.assertFalse(hasattr(form, "client"))
 
     def test_missing_required_fields_fails(self):
         from app.knowledge_base.forms import KnowledgeArticleForm

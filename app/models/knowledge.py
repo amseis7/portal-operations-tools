@@ -36,7 +36,11 @@ class KnowledgeArticle(db.Model):
     title = db.Column(db.String(200), nullable=False, index=True)
     problem_md = db.Column(db.Text, nullable=False)
     solution_md = db.Column(db.Text, nullable=False)
-    client = db.Column(db.String(120), nullable=True, index=True)
+    # "platform" is the persisted column name (unchanged since the original
+    # KB migration) but is now the brand/"marca" the index grid groups by —
+    # client-identifying data was removed entirely (product decision, see
+    # docs/technical-debt/current.md debt #37 and the migration that dropped
+    # `client`). Do not reintroduce a separate "cliente"/client concept here.
     platform = db.Column(db.String(120), nullable=True, index=True)
     author_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

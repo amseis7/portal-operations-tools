@@ -17,14 +17,36 @@ proteger_blueprint(bp, "knowledge_base")
 @bp.route("/")
 @login_required
 def index():
+    """Brand grid — the KB home no longer shows a flat article list. One
+    grouped aggregate query for named-brand counts, one count query for the
+    "Sin marca" bucket: two queries total regardless of how many brands
+    exist, never one query per card."""
+    brand_rows = (
+        db.session.query(KnowledgeArticle.platform, db.func.count(KnowledgeArticle.id))
+        .filter(KnowledgeArticle.platform.isnot(None), KnowledgeArticle.platform != "")
+        .group_by(KnowledgeArticle.platform)
+        .order_by(KnowledgeArticle.platform)
+        .all()
+    )
+    sin_marca_count = KnowledgeArticle.query.filter(
+        db.or_(KnowledgeArticle.platform.is_(None), KnowledgeArticle.platform == "")
+    ).count()
+
+    return render_template(
+        "knowledge_base/brands.html",
+        brands=brand_rows,
+        sin_marca_count=sin_marca_count,
+    )
+
+
+def _render_brand_articles(base_query, heading, brand=None):
+    """Shared by brand_articles() and sin_marca() — same search/tag/pagination
+    behavior the old flat list had, just pre-scoped to one brand bucket."""
     q = request.args.get("q", "").strip()
-    client = request.args.get("client", "").strip()
-    platform = request.args.get("platform", "").strip()
     tag = request.args.get("tag", "").strip()
     page = request.args.get("page", 1, type=int)
 
-    query = KnowledgeArticle.query
-
+    query = base_query
     if q:
         escaped = escape_like(q)
         pattern = f"%{escaped}%"
@@ -35,10 +57,6 @@ def index():
                 KnowledgeArticle.solution_md.ilike(pattern, escape="\\"),
             )
         )
-    if client:
-        query = query.filter(KnowledgeArticle.client == client)
-    if platform:
-        query = query.filter(KnowledgeArticle.platform == platform)
     if tag:
         query = query.join(KnowledgeArticle.tags).filter(KnowledgeTag.name == tag)
 
@@ -47,16 +65,41 @@ def index():
     )
 
     return render_template(
-        "knowledge_base/list.html",
+        "knowledge_base/articles.html",
         pagination=pagination,
         articles=pagination.items,
         q=q,
-        client=client,
-        platform=platform,
         tag=tag,
-        clients=distinct_values(KnowledgeArticle.client),
-        platforms=distinct_values(KnowledgeArticle.platform),
+        heading=heading,
+        brand=brand,
         tags=KnowledgeTag.query.order_by(KnowledgeTag.name).all(),
+    )
+
+
+@bp.route("/brand/<path:platform>")
+@login_required
+def brand_articles(platform):
+    # No separate Brand table — "does this brand exist" means "at least one
+    # article currently uses this exact platform value". An unknown/typo'd
+    # value is a 404, not an empty-but-valid page.
+    exists = KnowledgeArticle.query.filter(KnowledgeArticle.platform == platform).first()
+    if exists is None:
+        abort(404)
+    return _render_brand_articles(
+        KnowledgeArticle.query.filter(KnowledgeArticle.platform == platform),
+        heading=platform,
+        brand=platform,
+    )
+
+
+@bp.route("/sin-marca")
+@login_required
+def sin_marca():
+    return _render_brand_articles(
+        KnowledgeArticle.query.filter(
+            db.or_(KnowledgeArticle.platform.is_(None), KnowledgeArticle.platform == "")
+        ),
+        heading="Sin marca",
     )
 
 
@@ -81,7 +124,6 @@ def crear():
             title=form.title.data,
             problem_md=form.problem_md.data,
             solution_md=form.solution_md.data,
-            client=(form.client.data or "").strip() or None,
             platform=(form.platform.data or "").strip() or None,
             author_id=current_user.id,
         )
@@ -109,7 +151,6 @@ def crear():
         draft_token=draft_token,
         draft_attachments=draft_attachments,
         article=None,
-        clients=distinct_values(KnowledgeArticle.client),
         platforms=distinct_values(KnowledgeArticle.platform),
     )
 
@@ -146,7 +187,6 @@ def editar(id):
         article.title = form.title.data
         article.problem_md = form.problem_md.data
         article.solution_md = form.solution_md.data
-        article.client = (form.client.data or "").strip() or None
         article.platform = (form.platform.data or "").strip() or None
         sync_tags(article, form.tags_raw.data)
         log_audit("knowledge_base", "edit", "article", article.id, article.title)
@@ -162,7 +202,6 @@ def editar(id):
         form=form,
         heading="Editar artículo",
         article=article,
-        clients=distinct_values(KnowledgeArticle.client),
         platforms=distinct_values(KnowledgeArticle.platform),
     )
 

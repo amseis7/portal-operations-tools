@@ -15,7 +15,7 @@
   <div>
     <h2 class="mb-1">{{ article.title }}</h2>
     <small class="text-muted">
-      {{ article.client or '—' }} · {{ article.platform or '—' }} ·
+      {{ article.platform or 'Sin marca' }} ·
       por {{ article.author.username }} · actualizado {{ article.updated_at.strftime('%Y-%m-%d %H:%M') }}
     </small>
     <div class="mt-1">

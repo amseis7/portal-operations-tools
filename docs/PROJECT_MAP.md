@@ -826,7 +826,8 @@ app/models/knowledge.py
 Templates:
 
 ```text
-app/templates/knowledge_base/list.html
+app/templates/knowledge_base/brands.html
+app/templates/knowledge_base/articles.html
 app/templates/knowledge_base/form.html
 app/templates/knowledge_base/detail.html
 ```
@@ -835,7 +836,10 @@ Responsibilities include:
 
 ```text
 documenting ticket solutions as Markdown articles
-searching/filtering by client, platform, tag
+organized visually by brand: /kb shows a grid of brands, selecting one
+    shows only that brand's articles; no customer-identifying ("cliente")
+    data is stored
+searching/filtering by platform (brand) and tag
 author-or-admin edit, admin-only delete
 file attachments: pasted images + uploaded documents, quarantine-by-
     default (never servable until scan_status == "clean"), per-uploader
@@ -846,6 +850,8 @@ Important routes:
 
 ```text
 /kb/
+/kb/brand/<platform>
+/kb/sin-marca
 /kb/nuevo
 /kb/<id>
 /kb/<id>/editar
