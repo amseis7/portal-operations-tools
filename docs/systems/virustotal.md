@@ -824,6 +824,18 @@ It is not a full rate-limit scheduler.
 
 # 25. Quota Abort Behavior
 
+On HTTP 429, the handler calls `obtener_uso_api(api_key)` to check the real
+daily quota. If that lookup fails (any network failure or non-200 response
+from the quota endpoint — `obtener_uso_api()` returns `None` in that case),
+the handler does **not** fabricate `usado`/`limite` and does **not** raise —
+it logs that the quota could not be verified and falls through to the same
+60-second rate-limit pause and retry used when the quota lookup succeeds
+but reports a non-numeric limit (e.g. `"N/A"`). See
+`docs/technical-debt/current.md` #49 for the historical bug this replaced
+(a `NameError`/`UnboundLocalError` that used to be silently swallowed by
+the surrounding `except Exception`, returning `False` immediately instead
+of pausing and retrying).
+
 If processing raises an exception containing:
 
 ```text

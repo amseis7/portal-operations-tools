@@ -189,10 +189,22 @@ def consultar_virustotal_ioc(ioc_obj, forzar=False, api_key=None):
                     usado = cuota.get('diario_usado', 0)
                     limite = cuota.get('diario_limite', 0)
 
-                if isinstance(limite, int) and usado >= limite:
-                    logger.warning(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
-                    # Lanzamos una excepción específica para detener el bucle en background
-                    raise Exception("VT_QUOTA_EXCEEDED")
+                    if isinstance(limite, int) and usado >= limite:
+                        logger.warning(f"[VT ABORT] Cuota diaria agotada ({usado}/{limite}). Deteniendo análisis.")
+                        # Lanzamos una excepción específica para detener el bucle en background
+                        raise Exception("VT_QUOTA_EXCEEDED")
+                else:
+                    # obtener_uso_api() returns None on any network failure or
+                    # non-200 response — "could not verify the quota" is not
+                    # the same as "quota is 0/0" or "quota is exhausted", so
+                    # usado/limite are never fabricated here. The original 429
+                    # signal is preserved either way: fall through to the same
+                    # rate-limit pause already used when the quota lookup
+                    # succeeds but reports a non-numeric limit (e.g. "N/A").
+                    logger.warning(
+                        f"[VT LIMIT] No se pudo verificar la cuota diaria para {valor_original} "
+                        "(cuota no disponible). Continuando con pausa de rate-limit."
+                    )
 
                 logger.info(f"[VT LIMIT] Pausa de 60s por límite de velocidad (Rate Limit)...")
                 time.sleep(60)

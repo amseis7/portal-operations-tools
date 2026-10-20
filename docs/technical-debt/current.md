@@ -2793,3 +2793,108 @@ gives true mutual exclusion (not just sequential-call evidence) while
 confirming different herramienta_ids never share a lock. Umbrella suite:
 8/8 passing (new suite — this module had no dedicated tests before).
 ```
+
+---
+
+# 49. VirusTotal 429/Quota Handler Could Raise NameError (A-06)
+
+Status:
+
+```text
+RESOLVED
+```
+
+Priority:
+
+```text
+P1
+```
+
+Area:
+
+```text
+VirusTotal
+Error handling
+```
+
+File:
+
+```text
+app/virustotal/logic.py (consultar_virustotal_ioc())
+```
+
+Historical behavior (resolved — kept for context; originally found in
+`AUDITORIA_TECNICA.md` A-06, never previously ported into this ledger):
+
+```text
+On HTTP 429, the handler called obtener_uso_api(api_key) and only assigned
+usado/limite inside `if cuota:`, but then read `isinstance(limite, int) and
+usado >= limite` UNCONDITIONALLY, outside that `if`. obtener_uso_api()
+already returns None on any network failure or non-200 response from the
+quota endpoint (pre-existing, unchanged behavior) — exactly the condition
+most likely to co-occur with VT itself already rate-limiting the caller.
+
+The real observed failure mode (confirmed by temporarily reverting the fix
+and re-running the new tests) was NOT a bare crash: Python 3.11 raises this
+as `UnboundLocalError` (a NameError subclass) with message "cannot access
+local variable 'limite' where it is not associated with a value", which the
+function's own broad `except Exception` catches, logs, and turns into an
+early `return False` — silently abandoning the retry/pause loop on the
+very first 429 instead of pausing 60s and retrying, exactly when that
+retry behavior mattered most. The swallowed exception text was logged
+(`logger.error("Excepción VT: ...")`), not persisted to vt_motores_json by
+this function itself — debt #19 (generic exception text in IoC metadata)
+is a separate, pre-existing path at the background.py caller level and was
+not touched by this fix.
+```
+
+Resolution:
+
+```text
+Moved the `isinstance(limite, int) and usado >= limite` exhaustion check
+inside the `if cuota:` block, so usado/limite are only ever referenced
+where they are guaranteed assigned. Added an explicit `else` branch for
+"quota could not be verified" that does nothing but log — it never
+fabricates usado/limite (no `usado = 0 / limite = 0`), since "could not
+verify the quota" is not the same claim as "quota is 0/0" or "quota is
+exhausted". Both branches fall through to the exact same pre-existing tail
+(log + `time.sleep(60)` + `continue`) that already ran for the "quota
+present but limite is non-numeric (e.g. 'N/A')" case — no new response
+structure or state was invented; the degraded case reuses the safe path
+that already existed for a semantically similar "can't determine
+exhaustion" situation.
+
+Case A (cuota valid) behavior is byte-for-byte unchanged: not-exhausted
+still pauses and retries; exhausted still raises `Exception("VT_QUOTA_EXCEEDED")`
+immediately (no pause) exactly as before. Case B (cuota is None, whether
+from a non-200 response or a network exception inside obtener_uso_api) now
+degrades safely into the same pause-and-retry path instead of crashing.
+The original 429/rate-limit signal is never lost or reinterpreted in
+either branch.
+```
+
+Files changed:
+
+```text
+app/virustotal/logic.py
+tests/virustotal/test_quota_429_handling.py (new)
+```
+
+Evidence:
+
+```text
+tests/virustotal/test_quota_429_handling.py covers: 429 + valid
+not-exhausted quota retries and succeeds (existing behavior preserved);
+429 + valid exhausted quota still raises VT_QUOTA_EXCEEDED immediately, no
+pause (existing behavior preserved); 429 + quota unavailable (None) no
+longer raises NameError and recovers safely on retry; 429 persisting
+across all 3 attempts with quota unavailable throughout returns False
+without crashing (bounded retry loop, not infinite); normal HTTP 200 path
+unaffected; a non-429/200/404 error path unaffected. All of `requests.get`
+(both the main VT call and the quota lookup, via obtener_uso_api) and
+time.sleep are mocked — no real network call in any test. The fix was
+verified against the actual pre-fix code via `git stash` (tests fail with
+the exact original UnboundLocalError/NameError before the fix, pass after)
+rather than merely inspecting the diff. VirusTotal suite: 6/6 passing (new
+suite — this module had no dedicated tests before).
+```
