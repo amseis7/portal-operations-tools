@@ -37,7 +37,7 @@
     </a>
     {% if g.scope == 'personal' or current_user.is_admin %}
     <form method="POST" action="{{ url_for('vault.group_delete', group_id=g.id) }}"
-          onsubmit="return confirm('¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo.');"
+          data-confirm="¿Eliminar grupo «{{ g.name }}»? Las entradas quedarán sin grupo."
           class="m-0 me-1">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
       <button type="submit" class="btn btn-sm btn-link text-danger p-0" title="Eliminar grupo">

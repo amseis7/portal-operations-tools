@@ -2898,3 +2898,154 @@ the exact original UnboundLocalError/NameError before the fix, pass after)
 rather than merely inspecting the diff. VirusTotal suite: 6/6 passing (new
 suite — this module had no dedicated tests before).
 ```
+
+---
+
+# 50. Stored XSS via Dynamic Data Inside Inline confirm()/onsubmit (A-03)
+
+Status:
+
+```text
+RESOLVED
+```
+
+Priority:
+
+```text
+P1
+```
+
+Area:
+
+```text
+Vault
+Auth
+VirusTotal
+CSIRT
+Templates
+```
+
+Files:
+
+```text
+app/templates/vault/index.html
+app/templates/auth/admin_usuarios.html
+app/templates/virustotal/admin_templates.html
+app/templates/csirt/index.html
+app/templates/base.html
+```
+
+Historical behavior (resolved — kept for context; originally found in
+`AUDITORIA_TECNICA.md` A-03, never previously ported into this ledger):
+
+```text
+Four templates shared the same pattern:
+
+    onsubmit="return confirm('...{{ user_controlled_value }}...')"
+
+Jinja's default autoescape correctly HTML-escapes the interpolated value
+(e.g. `'` becomes `&#39;`), but that is the WRONG escaping context here: the
+value sits inside an HTML attribute whose content is itself JavaScript
+source. A browser parses an attribute value as HTML text first (decoding
+`&#39;` back to a literal `'`) and only THEN hands the decoded string to
+the JS engine as the inline event handler's source — so a value containing
+`');<payload>//` closes the confirm() string and executes as real
+JavaScript in the viewer's authenticated session, despite Jinja having
+"escaped" it correctly for an ordinary HTML context.
+
+The four interpolated values and their reachability:
+
+  vault/index.html — VaultGroup.name: reachable by ANY non-admin user with
+      the vault tool (personal groups, debt #8) — the most serious case,
+      since an admin browsing /vault/ sees every owner's personal group
+      tree and could trigger the payload by clicking delete on it,
+      executing attacker JS in an ADMIN session (privilege escalation via
+      stored XSS, not merely self-XSS).
+  auth/admin_usuarios.html — User.username: admin-controlled only (no
+      character restriction on creation, but only an admin creates users).
+  virustotal/admin_templates.html — ExportTemplate.nombre_plataforma:
+      admin-controlled only.
+  csirt/index.html — Alerta.ticket: no character restriction; populated by
+      admin-uploaded historical CSV import or external alert ingestion
+      (csirt/logic.py), so not strictly user-typed but not fully trusted
+      either.
+```
+
+Resolution:
+
+```text
+No manual JS-string escaping was introduced, no `|safe`, no custom escaping
+function. The fix removes the unsafe JS-execution context entirely:
+
+    data-confirm="...{{ value }}..."   (replaces onsubmit="return confirm('...{{ value }}...')")
+
+`data-confirm` is a plain HTML attribute — Jinja's existing, unmodified
+autoescape is already correct and sufficient for this context, since the
+value is only ever read back as inert text via `element.dataset.confirm`,
+never parsed or evaluated as code. One shared delegated listener was added
+once in app/templates/base.html:
+
+    document.addEventListener('submit', function (e) {
+        var msg = e.target.dataset ? e.target.dataset.confirm : null;
+        if (msg && !confirm(msg)) e.preventDefault();
+    });
+
+covering all four templates (and any future form using the same
+convention) with ~10 lines of plain JS — no framework introduced. The
+dynamic object name/ticket is preserved in the confirmation message in all
+four cases (a deliberate choice, confirmed with the user before
+implementing, over a fully static message) — it has real functional value
+(avoiding an admin confirming the deletion of the wrong group/user/
+template/ticket in a list of similarly-named items), and this is no longer
+a tradeoff against security once the value lives in a data attribute
+instead of inline JS.
+
+Form action, method, and CSRF token field were left untouched in all four
+templates — only the confirmation mechanism changed. No backend
+authorization was touched.
+```
+
+Other patterns checked:
+
+```text
+Repo-wide grep for `onsubmit=`/`onclick=` combined with `confirm(` found no
+other call site where Jinja-rendered dynamic data is interpolated directly
+inside inline JS — every other onsubmit/onclick in the templates is either
+a fully static string or a static JS function call. No extension of A-03
+beyond the four known call sites was found or needed.
+```
+
+Files changed:
+
+```text
+app/templates/base.html
+app/templates/vault/index.html
+app/templates/auth/admin_usuarios.html
+app/templates/virustotal/admin_templates.html
+app/templates/csirt/index.html
+tests/vault/test_group_name_xss.py (new)
+tests/auth/test_admin_usuarios_xss.py (new)
+tests/virustotal/test_admin_templates_xss.py (new)
+tests/csirt/test_index_ticket_xss.py (new)
+```
+
+Evidence:
+
+```text
+Payload `');alert(document.cookie);//` used in all four new test files to
+construct a VaultGroup/User/ExportTemplate/Alerta whose name/username/
+nombre_plataforma/ticket is the payload, then render the real page as an
+admin and assert: the structural onsubmit="return confirm(" pattern is
+absent (the actual proof — a raw-payload-substring check alone is vacuous
+here, since Jinja HTML-escapes the quote identically whether or not the
+value sits in a JS-execution context; verified by temporarily reverting
+the templates via `git stash` and confirming exactly that assertion fails
+against the original vulnerable markup, not the raw-substring one);
+data-confirm= is present; CSRF token and the real POST action are both
+still present and unchanged; a normal (non-malicious) name still renders
+correctly in the same page. 8 new tests total, all passing. No `|safe`
+introduced (grep-verified). Affected module suites (vault, auth,
+virustotal, csirt): 272/272 passing — no authorization/CSRF regression.
+```
+suite — this module had no dedicated tests before).
+```

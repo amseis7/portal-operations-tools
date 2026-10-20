@@ -177,6 +177,22 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script>
+        // Shared delegated handler for forms that need a confirmation dialog
+        // before submitting (e.g. deleting something). The message comes
+        // from a data-confirm="..." attribute, never from inline JS built
+        // with string interpolation — a value inside an HTML attribute is
+        // already correctly escaped by Jinja's normal autoescaping, unlike
+        // a value interpolated directly into a JavaScript string literal
+        // inside onsubmit="...". Read as plain text via .dataset, never
+        // evaluated as code.
+        document.addEventListener('submit', function (e) {
+            var msg = e.target.dataset ? e.target.dataset.confirm : null;
+            if (msg && !confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    </script>
 </body>
 
 </html>

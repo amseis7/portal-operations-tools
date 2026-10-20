@@ -104,7 +104,7 @@
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
 
-                                        <form action="{{ url_for('virustotal.eliminar_template', id=t.id) }}" method="POST" onsubmit="return confirm('¿Estás seguro de borrar la plantilla {{ t.nombre_plataforma }}?');">
+                                        <form action="{{ url_for('virustotal.eliminar_template', id=t.id) }}" method="POST" data-confirm="¿Estás seguro de borrar la plantilla {{ t.nombre_plataforma }}?">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                             <button class="btn btn-sm btn-outline-danger border-0" title="Eliminar"><i class="bi bi-trash"></i></button>
                                         </form>

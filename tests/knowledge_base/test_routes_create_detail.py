@@ -94,9 +94,17 @@ class TestCreateAndDetail(PortalTestCase):
         resp = self.client.get(f"/kb/{article.id}")
 
         self.assertEqual(resp.status_code, 200)
-        # The page legitimately includes <script src="...bootstrap...">;
-        # what must never survive is the bare, attribute-less injected tag.
-        self.assertNotIn(b"<script>", resp.data)
+        # The page legitimately includes static <script> tags (the bootstrap
+        # bundle, and base.html's shared data-confirm listener — see A-03 in
+        # docs/technical-debt/current.md) — a bare-tag check alone can no
+        # longer distinguish those from an XSS payload. Check for the exact
+        # injected tag pair instead: bleach strips the tag but keeps its
+        # inner text inert ("alert(1)" surviving as plain text is expected
+        # and harmless — see docs/systems/knowledge_base.md's note on
+        # bleach.clean(strip=True) — only the executable <script> wrapper
+        # must never survive).
+        self.assertNotIn(b"<script>alert(1)</script>", resp.data)
+        self.assertIn(b"alert(1)", resp.data)  # inert text, tag stripped
         self.assertIn(b"<strong>ok</strong>", resp.data)
 
     def test_client_field_not_shown_on_detail_page(self):
