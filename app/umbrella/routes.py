@@ -1,8 +1,9 @@
 import csv
 import logging
+import threading
 from io import StringIO
 
-from flask import flash, jsonify, redirect, render_template, request, url_for, Response
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for, Response
 from flask_login import current_user
 
 from app.extensions import db
@@ -27,6 +28,23 @@ _TEMPLATE_MAP = {
 }
 
 _LABEL_OPTIONS = sorted(VALID_LABELS - {'unreviewed'})
+
+# A-10 duplicate-submission guard: the app runs as a single multi-threaded
+# Cheroot process (server.py), so a plain in-memory lock per herramienta_id
+# fully closes the double-submit race for this architecture — it is not a
+# DB-level guarantee and would stop being sufficient if this ever became a
+# multi-process deployment (that would need a unique constraint + migration
+# instead; not introduced here — see docs/technical-debt/current.md #48).
+# Scoped per herramienta_id (never global) so independent tools/tenants are
+# never blocked by each other's in-flight execution.
+_ACTIVE_JOB_STATUSES = ('pending', 'running')
+_herramienta_locks: dict[int, threading.Lock] = {}
+_herramienta_locks_guard = threading.Lock()
+
+
+def _lock_for_herramienta(herramienta_id: int) -> threading.Lock:
+    with _herramienta_locks_guard:
+        return _herramienta_locks.setdefault(herramienta_id, threading.Lock())
 
 
 # ─── INDEX ──────────────────────────────────────────────────────────────────
@@ -206,6 +224,15 @@ def preview_excel(herramienta_slug):
 
 @bp.route('/herramienta/<herramienta_slug>/ejecutar', methods=['POST'])
 def ejecutar(herramienta_slug):
+    # A-10: only an admin may trigger a real external mutation against Cisco
+    # Umbrella. Not the shared @admin_required (flash + 302 to /dashboard,
+    # used by this module's other admin routes) — this is a POST action
+    # endpoint, not an admin page, so it fails closed with a plain 403 here
+    # instead, matching the same-purpose checks in Vault/Knowledge Base.
+    # Backend is authoritative regardless of what the UI shows.
+    if not current_user.is_admin:
+        abort(403)
+
     herramienta = UmbrellaHerramienta.query.filter_by(slug=herramienta_slug).first_or_404()
     archivo = request.files.get('excel_file')
     label_name = request.form.get('label_name', '').strip()
@@ -234,23 +261,39 @@ def ejecutar(herramienta_slug):
         flash(f'Error al leer el Excel: {exc}', 'danger')
         return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
-    job = UmbrellaJob(
-        herramienta_id=herramienta.id,
-        usuario_id=current_user.id,
-        input_filename=archivo.filename,
-        label_name=label_name,
-        column_name=column_name,
-        dry_run=dry_run,
-        status='running',
-        total=len(app_names),
-    )
-    db.session.add(job)
-    db.session.flush()
-    log_audit('umbrella', 'execute', 'herramienta', herramienta_slug, herramienta.nombre,
-              details=f'label={label_name}, apps={len(app_names)}, dry_run={dry_run}, job_id={job.id}')
-    db.session.commit()
+    # A-10 duplicate-submission guard. The lock only wraps the brief
+    # check-then-insert below — never the slow background PATCH work, which
+    # runs in its own thread after this request returns. Whether a job is
+    # "active" is read from the committed UmbrellaJob.status itself (not
+    # from lock state), so it stays correct across requests/threads.
+    lock = _lock_for_herramienta(herramienta.id)
+    with lock:
+        ya_activo = UmbrellaJob.query.filter(
+            UmbrellaJob.herramienta_id == herramienta.id,
+            UmbrellaJob.status.in_(_ACTIVE_JOB_STATUSES),
+        ).first()
+        if ya_activo is not None:
+            flash('Ya existe una ejecución en curso para esta herramienta.', 'warning')
+            return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))
 
-    lanzar_job_background(app_names, job.id, cid, csecret, label_name, dry_run)
+        job = UmbrellaJob(
+            herramienta_id=herramienta.id,
+            usuario_id=current_user.id,
+            input_filename=archivo.filename,
+            label_name=label_name,
+            column_name=column_name,
+            dry_run=dry_run,
+            status='running',
+            total=len(app_names),
+        )
+        db.session.add(job)
+        db.session.flush()
+        log_audit('umbrella', 'execute', 'herramienta', herramienta_slug, herramienta.nombre,
+                  details=f'label={label_name}, apps={len(app_names)}, dry_run={dry_run}, job_id={job.id}')
+        db.session.commit()
+        job_id = job.id
+
+    lanzar_job_background(app_names, job_id, cid, csecret, label_name, dry_run)
 
     flash(f'Proceso iniciado para {len(app_names)} apps. Los resultados se actualizan automáticamente.', 'info')
     return redirect(url_for('umbrella.ver_herramienta', herramienta_slug=herramienta_slug))

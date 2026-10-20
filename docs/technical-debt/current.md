@@ -2671,3 +2671,125 @@ Markdown content as a replacement for the persisted `kind` column; that
 was evaluated and explicitly rejected (docs/systems/knowledge_base.md
 §8.1's "Attachment kind" subsection) when `kind` was designed.
 ```
+
+---
+
+# 48. Umbrella Execution Route Missing Admin Gate and Duplicate-Submission Guard (A-10)
+
+Status:
+
+```text
+RESOLVED
+```
+
+Priority:
+
+```text
+P1
+```
+
+Area:
+
+```text
+Umbrella
+Authorization
+External API
+```
+
+File:
+
+```text
+app/umbrella/routes.py (ejecutar())
+```
+
+Historical behavior (resolved — kept for context; originally found in
+`AUDITORIA_TECNICA.md` A-10, never previously ported into this ledger):
+
+```text
+POST /umbrella/herramienta/<slug>/ejecutar — the only route that performs a
+real external mutation (Cisco Umbrella PATCH label assignment) — had no
+@admin_required, unlike crear_cliente/editar_cliente/eliminar_cliente/
+eliminar_job in the same module. Any user with the "umbrella" tool could
+trigger a real write against a customer's live tenant. There was also no
+guard against submitting the same execution twice (double-click, browser
+back+resubmit, slow network retry): each POST unconditionally created a new
+UmbrellaJob and launched a new background thread, so two concurrent
+submissions could run two overlapping batches against the same tenant.
+```
+
+Resolution:
+
+```text
+Authorization: ejecutar() now checks `if not current_user.is_admin:
+abort(403)` before anything else. Deliberately NOT the shared
+@admin_required decorator (app/utils.py), which does flash + redirect 302
+to /dashboard for this module's other admin routes — ejecutar() is a POST
+action endpoint, not an admin page, so it fails closed with a plain 403
+instead, matching the same-purpose checks already used in Vault/Knowledge
+Base. This was an explicit, confirmed product decision (not a silent
+choice): the shared decorator's behavior was preserved unchanged for every
+other route in the project.
+
+Duplicate-submission guard: before creating a new UmbrellaJob, ejecutar()
+now checks for an existing UmbrellaJob with the same herramienta_id and
+status in ('pending', 'running') — both states already existed on the
+model; no new status was invented. If one is found, no job is created, no
+background thread is launched, and the user is redirected back with
+"Ya existe una ejecución en curso para esta herramienta." Equivalence is
+scoped to herramienta_id (not cliente_id): each UmbrellaHerramienta is
+already its own independent job-history page in this system's model, so
+two different tools under the same client are treated as independent work,
+never blocked by each other — a global or per-client lock was deliberately
+rejected for this reason.
+
+Concurrency: a plain SELECT-then-INSERT has a real race window between two
+concurrent requests on the same herramienta_id — this app runs as a single
+multi-threaded Cheroot process (server.py, confirmed), not multiple
+processes, so an in-process lock keyed per herramienta_id
+(_lock_for_herramienta() in routes.py) fully closes this race for the
+current deployment: the lock wraps only the brief check-then-insert
+section, never the slow background PATCH work, which runs in its own
+thread after the request returns and after the lock is released. No
+migration or unique constraint was introduced. This is a complete fix for
+today's single-process architecture, not a partial mitigation — but it
+would stop being sufficient if this project were ever deployed as multiple
+separate app processes/workers, which would then need a DB-level unique
+partial index (a real migration) instead. Flagging this explicitly rather
+than assuming it holds forever.
+
+UI: the "Cargar Excel" / execute form in
+app/templates/umbrella/herramienta_app_discovery.html is now only rendered
+for current_user.is_admin, with an informational message for everyone
+else. The job history table (read-only) is unaffected — this is UI
+convenience only; the 403 above is the real boundary regardless of what
+the template renders.
+
+No audit logging was added for a blocked duplicate attempt — only a
+created job is audited (log_audit('umbrella', 'execute', ...), unchanged),
+consistent with existing design; not expanded in this fix.
+```
+
+Files changed:
+
+```text
+app/umbrella/routes.py
+app/templates/umbrella/herramienta_app_discovery.html
+tests/umbrella/test_ejecutar_authorization.py (new)
+```
+
+Evidence:
+
+```text
+tests/umbrella/test_ejecutar_authorization.py covers: anonymous redirected
+to login; authenticated non-admin with the umbrella tool gets 403; admin
+reaches the flow and creates exactly one job; a second submit while the
+first is still active creates no second job and does not call the
+background launcher a second time (mocked — no real network call in any
+test); the correct flash message is shown; a completed job does not block
+a new legitimate execution; two different herramienta rows never block
+each other; CSRF protection remains active (missing token -> 400); and a
+dedicated real-thread concurrency test proves the per-herramienta_id lock
+gives true mutual exclusion (not just sequential-call evidence) while
+confirming different herramienta_ids never share a lock. Umbrella suite:
+8/8 passing (new suite — this module had no dedicated tests before).
+```

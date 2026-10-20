@@ -76,6 +76,9 @@ Administrative operations add:
 @admin_required
 ```
 
+The execution route (`ejecutar()`, §29) is also admin-only, but uses an
+inline `abort(403)` check instead of `@admin_required` — see §29 for why.
+
 Do not introduce a separate Umbrella-specific authorization system unless explicitly required.
 
 ---
@@ -1004,6 +1007,29 @@ Route:
 ```text
 POST /umbrella/herramienta/<herramienta_slug>/ejecutar
 ```
+
+Protection: admin-only (`if not current_user.is_admin: abort(403)`, checked
+first, before anything else) — this is the only route in the project that
+triggers a real external mutation against Cisco Umbrella, so only an
+administrator may trigger it. This is a deliberate inline check, not the
+shared `@admin_required` decorator used by this module's other admin
+routes (that decorator does flash + redirect 302 to `/dashboard`; this is
+a POST action endpoint, not an admin page, so it fails closed with a plain
+403 instead — same pattern as Vault/Knowledge Base action-level checks).
+
+Duplicate-submission guard: before creating a job, the route checks for an
+existing `UmbrellaJob` with the same `herramienta_id` and
+`status in ('pending', 'running')`. If one exists, no job is created, no
+background thread starts, and the user is redirected with a flash
+("Ya existe una ejecución en curso para esta herramienta."). The
+check-then-insert is wrapped in an in-process lock keyed per
+`herramienta_id` (`_lock_for_herramienta()`), which fully closes the
+double-submit race for the current single-process Cheroot deployment —
+see `docs/technical-debt/current.md` #48 for the full concurrency analysis
+and its explicit limitation if this ever became a multi-process
+deployment. The UI form is also hidden for non-admins in
+`herramienta_app_discovery.html`, but that is convenience only — the
+403/guard above are the real boundary.
 
 Inputs:
 
@@ -2567,6 +2593,12 @@ Deleting a client/tool/job continues to respect existing cascades.
 Uploaded Excel contents are not persisted unnecessarily.
 
 Execution remains auditable.
+
+Only an administrator can trigger ejecutar() (the real Cisco Umbrella PATCH).
+
+Only one active (pending/running) job per herramienta_id may exist at a
+time; a second submission while one is active creates no job and starts
+no background thread.
 
 Secrets are never written to logs, audit details, documentation, or exported CSVs.
 ```

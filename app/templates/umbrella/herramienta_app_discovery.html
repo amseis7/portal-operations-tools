@@ -21,6 +21,7 @@
 
     <!-- ── Izquierda: Cargar + Preview + Ejecutar ─── -->
     <div class="col-lg-5">
+        {% if current_user.is_admin %}
         <div class="card shadow-sm">
             <div class="card-header fw-bold"><i class="bi bi-upload"></i> Cargar Excel</div>
             <div class="card-body">
@@ -89,6 +90,11 @@
                 </form>
             </div>
         </div>
+        {% else %}
+        <div class="alert alert-secondary mb-0">
+            <i class="bi bi-lock"></i> Solo un administrador puede ejecutar el etiquetado sobre este tenant.
+        </div>
+        {% endif %}
     </div>
 
     <!-- ── Derecha: Historial ────────────────────── -->
