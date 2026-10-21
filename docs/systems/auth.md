@@ -388,6 +388,30 @@ object_type: usuario
 
 ---
 
+# 8b. Session Cookie Security
+
+Production config (`config.py::Config`) sets:
+
+```text
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+```
+
+`Secure` is safe to require unconditionally because `server.py` (the real
+production entrypoint) now refuses to start without a TLS cert/key — there
+is no HTTP path in production for the cookie to need to tolerate.
+
+`run.py` (plain-HTTP dev entrypoint) uses `DevelopmentConfig(Config)`,
+which overrides only `SESSION_COOKIE_SECURE = False`; `HttpOnly`/`SameSite`
+don't depend on TLS and stay inherited.
+
+`login_user()` is called with no `remember` kwarg — Flask-Login's
+remember-me cookie is not used anywhere in this app, so there is no
+`REMEMBER_COOKIE_*` configuration to set.
+
+---
+
 # 9. Login Redirect Safety
 
 The login route supports a `next` parameter.

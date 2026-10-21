@@ -1100,6 +1100,14 @@ Legacy deployment/build information may exist under:
 legacy/
 ```
 
+`server.py` is the real production entrypoint (Cheroot, single-process
+multi-threaded). It requires `certificado/cert.pem` and `certificado/key.pem`
+to both exist; if either is missing, startup aborts (`resolver_certificados_tls()`)
+before any socket opens. There is no HTTP fallback — production never binds
+a plaintext listener. `run.py` remains a plain-HTTP development entrypoint
+only (`DevelopmentConfig`, `SESSION_COOKIE_SECURE=False`); it is not meant
+to run production-equivalent TLS.
+
 Do not modify runtime or deployment configuration as part of unrelated application work.
 
 When changing deployment behavior, inspect:

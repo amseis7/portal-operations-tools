@@ -88,6 +88,38 @@ def inicializar_sistema():
             sys.exit(1)
 
 
+def resolver_certificados_tls():
+    """Devuelve (cert_path, key_path) solo si ambos archivos TLS existen.
+
+    Producción nunca debe exponer un listener HTTP como fallback: si falta
+    el certificado, la key, o ambos, se aborta el proceso antes de abrir
+    cualquier socket.
+    """
+    cert_path = os.path.join(BASE_DIR, CERT_FILE)
+    key_path = os.path.join(BASE_DIR, KEY_FILE)
+
+    if not (os.path.exists(cert_path) and os.path.exists(key_path)):
+        mensaje = "TLS certificate/key not found; refusing to start production server without HTTPS."
+        _diag(mensaje)
+        print(mensaje, file=sys.stderr)
+        sys.exit(1)
+
+    _diag("SSL habilitado")
+    return cert_path, key_path
+
+
+def construir_servidor(cert_path, key_path):
+    """Construye el WSGIServer con TLS obligatorio.
+
+    Nunca devuelve un servidor sin ssl_adapter configurado: no existe un
+    modo de construcción "sin SSL" en esta función.
+    """
+    server = WSGIServer(('0.0.0.0', PORT), app, numthreads=THREADS)
+    server.socket_timeout = 60  # subir a 60 s para uploads/imports pesados (default: 10 s)
+    server.ssl_adapter = BuiltinSSLAdapter(cert_path, key_path)
+    return server
+
+
 def obtener_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -122,39 +154,19 @@ if __name__ == "__main__":
         ip = obtener_ip()
         _diag(f"IP local: {ip}")
 
-        cert_path = os.path.join(BASE_DIR, CERT_FILE)
-        key_path = os.path.join(BASE_DIR, KEY_FILE)
-
-        print(os.path.exists(cert_path))
-        print(os.path.exists(key_path))
-
-        usar_ssl = False
-        if os.path.exists(cert_path) and os.path.exists(key_path):
-            usar_ssl = True
-            _diag("SSL habilitado")
-        else:
-            _diag("Sin certs SSL, usando HTTP en puerto 8080")
-            PORT = 8080
+        cert_path, key_path = resolver_certificados_tls()
 
         print("------------------------------------------------")
         print(" PORTAL DE OPERACIONES - CSIRT V1.5.0")
         print("------------------------------------------------")
-        print(f" STATUS:  EN LINEA ({'SEGURO HTTPS' if usar_ssl else 'INSEGURO HTTP'})")
-        if usar_ssl:
-            print(f" LOCAL:   https://localhost:{PORT}")
-            print(f" RED:     https://{ip}:{PORT}")
-        else:
-            print(f" LOCAL:   http://localhost:{PORT}")
-            print(f" RED:     http://{ip}:{PORT}")
+        print(" STATUS:  EN LINEA (SEGURO HTTPS)")
+        print(f" LOCAL:   https://localhost:{PORT}")
+        print(f" RED:     https://{ip}:{PORT}")
         print("------------------------------------------------")
         sys.stdout.flush()
 
         _diag(f"Iniciando WSGIServer en 0.0.0.0:{PORT}")
-        server = WSGIServer(('0.0.0.0', PORT), app, numthreads=THREADS)
-        server.socket_timeout = 60  # subir a 60 s para uploads/imports pesados (default: 10 s)
-
-        if usar_ssl:
-            server.ssl_adapter = BuiltinSSLAdapter(cert_path, key_path)
+        server = construir_servidor(cert_path, key_path)
 
         _diag("server.start() ...")
         server.start()

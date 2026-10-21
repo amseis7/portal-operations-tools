@@ -5,12 +5,13 @@ load_dotenv()
 
 from app import create_app, db
 from app.models import User
+from config import DevelopmentConfig
 from flask_migrate import upgrade, stamp
 from sqlalchemy import inspect
 
 logger = logging.getLogger(__name__)
 
-app = create_app()
+app = create_app(config_class=DevelopmentConfig)
 
 
 def inicializar_db():

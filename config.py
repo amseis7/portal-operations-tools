@@ -48,6 +48,15 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SCHEDULER_API_ENABLED = True
 
+    # Session cookie hardening (A-04). Secure requires the connection to
+    # actually be HTTPS — server.py now refuses to start production without
+    # a TLS cert/key, so this is safe to require unconditionally here.
+    # run.py (plain-HTTP dev server) overrides SECURE via DevelopmentConfig
+    # below instead of weakening this default.
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+
     # --- Knowledge Base attachments ---
     KB_ATTACHMENTS_DIR = os.path.join(_instance_path, 'kb_attachments')
     KB_ATTACHMENT_MAX_SIZE_BYTES = int(os.environ.get('KB_ATTACHMENT_MAX_SIZE_BYTES', 10 * 1024 * 1024))   # 10 MB/file
@@ -66,3 +75,11 @@ class Config:
     # Local development only — validate_scanner_config() refuses to start if
     # KB_SCANNER=dev_allow is set without this also being explicitly true.
     KB_ALLOW_INSECURE_DEV_SCANNER = os.environ.get('KB_ALLOW_INSECURE_DEV_SCANNER', 'false').strip().lower() == 'true'
+
+
+class DevelopmentConfig(Config):
+    """Used only by run.py, which serves plain HTTP on 127.0.0.1. A browser
+    never sends a Secure cookie back over HTTP, so SESSION_COOKIE_SECURE=True
+    (the production default above) would silently break login in dev.
+    HTTPONLY/SAMESITE don't depend on TLS, so they stay inherited as-is."""
+    SESSION_COOKIE_SECURE = False

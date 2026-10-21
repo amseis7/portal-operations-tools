@@ -3193,4 +3193,142 @@ values and rejects the bypass payloads {valor.__class__}, {valor[0]},
 {valor!r}, {valor:>20}. VirusTotal suite: 27/27 passing (6 from A-06 +
 19 from this fix + 2 from A-03's admin_templates XSS test).
 ```
+
+---
+
+# 52. Production HTTPS Fallback to Plain HTTP + Unhardened Session Cookie (A-04)
+
+Status:
+
+```text
+RESOLVED
+```
+
+Priority:
+
+```text
+P1
+```
+
+Area:
+
+```text
+Deployment/runtime (server.py)
+Session security (config.py)
+```
+
+Files:
+
+```text
+server.py (resolver_certificados_tls(), construir_servidor())
+config.py (Config.SESSION_COOKIE_*, DevelopmentConfig)
+run.py (create_app(config_class=DevelopmentConfig))
+```
+
+Historical behavior (resolved — kept for context; originally found in
+`AUDITORIA_TECNICA.md` A-04, never previously ported into this ledger):
+
+```text
+server.py's __main__ block checked for certificado/cert.pem and
+certificado/key.pem; if either was missing, it silently set PORT=8080 and
+started a cheroot WSGIServer with no ssl_adapter -- i.e. production could
+end up serving plaintext HTTP with no hard failure, no operator warning
+beyond a console line. No reverse proxy / TLS-terminating layer is
+demonstrated anywhere in this repo (grep for ProxyFix matches only a doc
+mention, never actual code), so there was no fallback TLS guarantee either.
+
+Separately, config.py set no SESSION_COOKIE_SECURE, SESSION_COOKIE_HTTPONLY,
+or SESSION_COOKIE_SAMESITE -- Flask's defaults applied (Secure=False,
+HttpOnly=True, SameSite=None). Combined with the HTTP fallback above, the
+session cookie could travel in clear text on the local network.
+
+Confirmed during this fix: Flask-Login's login_user() is called with no
+`remember` kwarg anywhere in the app (app/auth/routes.py:163) -- the
+REMEMBER_COOKIE_* family is not in use and needed no configuration.
+```
+
+Resolution:
+
+```text
+server.py: the cert/key existence check and the WSGIServer construction
+were extracted into two small functions so the new behavior is directly
+unit-testable without opening a real socket or starting a real app:
+
+  resolver_certificados_tls() -- returns (cert_path, key_path) ONLY if
+    both files exist. If cert is missing, key is missing, or both are
+    missing, it logs a non-secret-revealing message ("TLS certificate/key
+    not found; refusing to start production server without HTTPS.") and
+    calls sys.exit(1) BEFORE any socket is touched.
+
+  construir_servidor(cert_path, key_path) -- builds the WSGIServer with
+    ssl_adapter always set. There is no code path in this function that
+    returns a server without TLS configured; the old `usar_ssl` boolean
+    and its `else: PORT = 8080` branch were removed entirely, not just
+    made conditional.
+
+config.py: Config (the production default used by server.py and by
+run.py unless overridden) now sets:
+
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+
+SameSite=Lax was chosen after confirming the app has no cross-site
+redirect flow that would need SameSite=None (no OAuth authorization-code
+redirect through the user's browser -- Umbrella's OAuth is a server-to-
+server client-credentials grant; no external auth callback route exists
+in app/auth/).
+
+A minimal DevelopmentConfig(Config) subclass overrides ONLY
+SESSION_COOKIE_SECURE = False, because run.py's dev server serves plain
+HTTP on 127.0.0.1 and a browser never returns a Secure cookie over HTTP --
+leaving SESSION_COOKIE_SECURE=True there would silently break local login.
+HttpOnly/SameSite don't depend on TLS and stay inherited as-is. run.py now
+calls create_app(config_class=DevelopmentConfig) instead of create_app().
+This reuses create_app()'s existing config_class parameter (already
+exercised by the test suite's TestConfig) -- no new configuration
+architecture was introduced.
+
+server.py / production path is unaffected by DevelopmentConfig: it still
+uses the plain Config default, so SESSION_COOKIE_SECURE stays True there,
+consistent with TLS now being mandatory on that entrypoint.
+```
+
+Files changed:
+
+```text
+server.py
+config.py
+run.py
+tests/test_server_tls.py (new)
+tests/test_session_cookie_security.py (new)
+```
+
+Evidence:
+
+```text
+tests/test_server_tls.py (6 tests): both cert+key present returns the
+paths without exiting; both missing aborts (SystemExit); cert-only aborts;
+key-only aborts; construir_servidor() always sets ssl_adapter (mocked
+WSGIServer/BuiltinSSLAdapter, no real socket ever opened); a source-level
+regression guard asserts "usar_ssl" and "8080" no longer appear in
+server.py at all. Verified red->green via `git stash push -- server.py
+config.py run.py`: all 6 failed against pre-fix code (AttributeError for
+the two new functions; the regression-guard assertion itself failed by
+finding the old fallback text) before the stash was popped and the fix
+restored.
+
+tests/test_session_cookie_security.py (5 tests): Config.SESSION_COOKIE_
+SECURE/HTTPONLY/SAMESITE assert True/True/"Lax" directly; DevelopmentConfig
+asserts SECURE=False with HTTPONLY/SAMESITE unchanged; an end-to-end login
+test (dedicated app instance, isolated from the shared suite's TestConfig)
+inspects the real Set-Cookie header of an authenticated login response and
+confirms it literally contains "Secure", "HttpOnly", and "SameSite=Lax".
+Verified red->green the same way: ImportError (DevelopmentConfig did not
+exist) against pre-fix config.py.
+
+Full project suite: 468 existing tests + 11 new tests, all passing (see
+validation run logged for this fix).
+```
+```
 ```
