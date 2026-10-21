@@ -1664,6 +1664,18 @@ supported hashes
 template variables
 ```
 
+`row_template`'s placeholder grammar is validated by the single canonical
+`validate_export_row_template()` in `app/virustotal/logic.py` — parsed with
+`string.Formatter().parse()` (the real str.format() grammar, not a regex).
+Only a bare, known field name from `VARIABLES_PERMITIDAS` is allowed per
+replacement field: no attribute access (`{x.attr}`), no item/index access
+(`{x[0]}`), no conversion (`{x!r}`), no format spec (`{x:spec}`). Escaped
+braces (`{{`/`}}`) are unaffected. The same function is called again at
+render/export time (`generar_exportacion_multiformato()`, once per template
+before any `.format()` call) so a `row_template` already persisted before
+this validation existed cannot bypass it — an invalid one is skipped
+entirely rather than executed. See `docs/technical-debt/current.md` #51.
+
 Allowed extensions:
 
 ```text

@@ -1,4 +1,5 @@
 import requests
+import string
 import time
 import logging
 import base64
@@ -14,6 +15,79 @@ from app.extensions import db
 from app.models import Ioc, VtIoc, Alerta, ExportTemplate, VtTicket
 
 logger = logging.getLogger(__name__)
+
+# A-02: the single canonical definition of "which ExportTemplate.row_template
+# placeholders are legitimate" and "what counts as a safe one" — used by both
+# the create/edit form validator (routes.py) and the render/export path in
+# this module, so there is exactly one place that can ever diverge from the
+# real str.format() grammar. These are the exact variables the export loop
+# below actually substitutes (see generar_exportacion_multiformato()); all 4
+# templates currently persisted in the database use only bare {name}
+# placeholders from this set — no attribute/item access, no conversion, no
+# format spec, confirmed by direct inspection before this fix.
+VARIABLES_PERMITIDAS = {
+    'valor', 'tipo', 'tipo_real', 'ticket', 'filename',
+    'md5', 'sha1', 'sha256', 'positives', 'total', 'estado_motor'
+}
+
+_FIELD_NAME_PREVIEW_MAX = 50  # bound untrusted text echoed in error messages
+
+
+class TemplateValidationError(Exception):
+    """row_template contains something str.format() would interpret as
+    attribute/item access, a conversion, or a format spec — none of which
+    any legitimate template needs today (see VARIABLES_PERMITIDAS)."""
+    pass
+
+
+def validate_export_row_template(row_template: str, allowed_fields=VARIABLES_PERMITIDAS) -> None:
+    """Parse row_template with the stdlib format-string grammar
+    (string.Formatter().parse(), the same grammar str.format() itself uses —
+    not a hand-rolled regex) and allow ONLY bare, known field names:
+    {ioc}, never {ioc.attr}, {ioc[0]}, {ioc!r}, or {ioc:spec}. Escaped
+    braces ({{ / }}) are literal text to this parser and are never treated
+    as a field — preserved exactly as str.format() already handles them.
+
+    Raises TemplateValidationError (never propagates a raw parser
+    exception) on the first violation found. Never raises on a template
+    that only uses bare names from allowed_fields.
+    """
+    try:
+        parsed_fields = list(string.Formatter().parse(row_template))
+    except ValueError:
+        raise TemplateValidationError("La plantilla contiene una sintaxis de formato inválida.")
+
+    for _literal_text, field_name, format_spec, conversion in parsed_fields:
+        if field_name is None:
+            continue  # trailing/literal-only text, no replacement field here
+
+        preview = field_name[:_FIELD_NAME_PREVIEW_MAX]
+
+        # A valid Python identifier cannot contain "." or "[" — this is what
+        # actually rejects attribute traversal ({x.attr}) and item/index
+        # access ({x[0]}, {x[key]}) without scanning for those characters by
+        # hand. It also rejects empty/numeric implicit-positional fields
+        # ({}, {0}), which this export has never used or needed.
+        if not field_name.isidentifier():
+            raise TemplateValidationError(
+                f"La plantilla contiene un placeholder no permitido: {{{preview}}}"
+            )
+        if field_name not in allowed_fields:
+            raise TemplateValidationError(
+                f"La plantilla contiene un placeholder no reconocido: {{{preview}}}"
+            )
+        if conversion is not None:
+            raise TemplateValidationError(
+                f"La plantilla usa una conversión no permitida en: {{{preview}!{conversion}}}"
+            )
+        if format_spec:
+            # Also catches a nested replacement field inside the format
+            # spec (e.g. {valor:{otro}}) — Formatter.parse() does not
+            # recursively expand it, it is simply a non-empty format_spec
+            # string here, which this check already rejects outright.
+            raise TemplateValidationError(
+                f"La plantilla usa un format-spec no permitido en: {{{preview}:...}}"
+            )
 
 def detectar_tipo_hash(valor):
     valor = valor.strip().lower()
@@ -372,7 +446,20 @@ def generar_exportacion_multiformato(id_origen, lista_ids_templates, origen='cas
         for template_id in lista_ids_templates:
             template = ExportTemplate.query.get(template_id)
             if not template: continue
-            
+
+            # A-02: re-validate on every use, not just at save time — a
+            # row_template persisted before this fix (or written directly to
+            # the database) could still contain attribute/item-access syntax
+            # the old create/edit validator never caught. Validated once per
+            # template here, before the per-IoC loop below ever calls
+            # .format() on it — never execute attribute/item traversal, and
+            # never emit a file for a template whose syntax is unsafe.
+            try:
+                validate_export_row_template(template.row_template, VARIABLES_PERMITIDAS)
+            except TemplateValidationError as exc:
+                logger.error(f"Plantilla '{template.nombre_plataforma}' inválida, omitida del export: {exc}")
+                continue
+
             config_hashes = (template.supported_hashes or "md5,sha1,sha256").lower()
             tipos_permitidos = [t.strip() for t in config_hashes.split(',')]
             

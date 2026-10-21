@@ -9,7 +9,10 @@ from app.models import VtTicket, VtIoc, ExportTemplate, Alerta, Ioc # <--- Impor
 from app.utils import admin_required, proteger_blueprint
 from app.models.audit import log_audit
 from app.virustotal import bp
-from app.virustotal.logic import generar_exportacion_multiformato, procesar_importacion_csirt
+from app.virustotal.logic import (
+    generar_exportacion_multiformato, procesar_importacion_csirt,
+    validate_export_row_template, TemplateValidationError, VARIABLES_PERMITIDAS,
+)
 from markupsafe import Markup, escape
 import re
 import logging
@@ -18,10 +21,6 @@ logger = logging.getLogger(__name__)
 
 proteger_blueprint(bp, 'virustotal')
 
-VARIABLES_PERMITIDAS = {
-    'valor', 'tipo', 'tipo_real', 'ticket', 'filename',
-    'md5', 'sha1', 'sha256', 'positives', 'total', 'estado_motor'
-}
 EXTENSIONES_PERMITIDAS = {'csv', 'txt', 'xml', 'json'}
 
 def validar_plantilla(form):
@@ -41,13 +40,10 @@ def validar_plantilla(form):
     if not row:
         errores.append("La plantilla de fila es obligatoria.")
     else:
-        usadas = set(re.findall(r'\{(\w+)\}', row))
-        invalidas = usadas - VARIABLES_PERMITIDAS
-        if invalidas:
-            errores.append(
-                f"Variables no reconocidas: {', '.join(sorted(invalidas))}. "
-                f"Válidas: {', '.join(sorted(VARIABLES_PERMITIDAS))}"
-            )
+        try:
+            validate_export_row_template(row, VARIABLES_PERMITIDAS)
+        except TemplateValidationError as exc:
+            errores.append(str(exc))
     if hashes:
         for h in hashes.split(','):
             if h.strip() not in ('md5', 'sha1', 'sha256'):

@@ -3047,5 +3047,150 @@ correctly in the same page. 8 new tests total, all passing. No `|safe`
 introduced (grep-verified). Affected module suites (vault, auth,
 virustotal, csirt): 272/272 passing — no authorization/CSRF regression.
 ```
-suite — this module had no dedicated tests before).
+
+---
+
+# 51. ExportTemplate.row_template Format-String Validator Bypass (A-02)
+
+Status:
+
+```text
+RESOLVED
+```
+
+Priority:
+
+```text
+P1
+```
+
+Area:
+
+```text
+VirusTotal
+Input validation
+```
+
+Files:
+
+```text
+app/virustotal/logic.py (validate_export_row_template(), VARIABLES_PERMITIDAS, generar_exportacion_multiformato())
+app/virustotal/routes.py (validar_plantilla())
+```
+
+Historical behavior (resolved — kept for context; originally found in
+`AUDITORIA_TECNICA.md` A-02, never previously ported into this ledger):
+
+```text
+Validation (routes.py) used a naive regex: `set(re.findall(r'\{(\w+)\}', row))`
+compared against VARIABLES_PERMITIDAS. This regex only recognizes bare
+`{word}` placeholders — it does not interpret the actual str.format() field
+grammar. `{valor.__class__}` or `{valor[0]}` produce a regex match of just
+`valor` (stops at `.`/`[`), so the "unrecognized variable" check never
+fires, even though str.format(**variables) at render/export time (logic.py,
+`template.row_template.format(**variables)`) DOES interpret those as real
+attribute/item access.
+
+The historical claim that this let an admin exfiltrate SECRET_KEY/VAULT_KEY
+was investigated and could NOT be reproduced: the `variables` dict passed
+to .format() contains only plain str/int values (ioc.valor, counts, etc.),
+and str.format()'s mini-language cannot call methods — only traverse
+attributes/items — so a gadget chain reaching process globals was not
+demonstrated. The bypass itself was real and worth closing regardless: it
+left a dangerous gap between "what the validator believes it allows" and
+"what str.format() actually interprets."
+
+Direct inspection of the 4 ExportTemplate rows persisted in the local dev
+database (config data, not secrets) confirmed every one uses only bare
+{name} placeholders from VARIABLES_PERMITIDAS — no attribute/item access,
+conversion, format spec, or escaped braces in actual use today.
+```
+
+Resolution:
+
+```text
+A single canonical function, validate_export_row_template() in logic.py
+(the module where .format() is actually called — single source of truth,
+no duplicate regex in the form path vs the render path), parses
+row_template with `string.Formatter().parse()` — the same grammar
+str.format() itself uses, not a hand-rolled regex — and allows ONLY a bare,
+known field name per replacement field:
+
+    field_name.isidentifier()      -- rejects {x.attr} and {x[0]}/{x[key]}
+                                       (a valid Python identifier cannot
+                                       contain "." or "[") and rejects
+                                       empty/numeric implicit-positional
+                                       fields ({}, {0})
+    field_name in VARIABLES_PERMITIDAS  -- rejects any name outside the
+                                       real, current export contract
+    conversion is None              -- rejects {x!r}/{x!s}/{x!a}: not a
+                                       functional requirement today
+    not format_spec                 -- rejects {x:spec}, which also
+                                       naturally rejects a nested
+                                       replacement field inside the spec
+                                       ({x:{y}}), since Formatter.parse()
+                                       returns a non-empty format_spec
+                                       string for that case without
+                                       recursing into it
+
+Escaped braces ({{ / }}) need no special handling — Formatter.parse()
+already treats them as literal text (field_name=None for that segment),
+not a replacement field, so they pass through unaffected, preserving
+existing str.format() semantics without weakening the allowlist.
+
+Both call sites now share this one function:
+  - validar_plantilla() (routes.py, create AND edit) calls it instead of
+    the old regex, appending str(TemplateValidationError) to the existing
+    `errores` list — no new error-handling path, no traceback to the user.
+  - generar_exportacion_multiformato() (logic.py) calls it ONCE per
+    template_id, before the per-IoC loop that calls .format() — this
+    closes the real gap the audit flagged: a row_template persisted
+    BEFORE this fix (or inserted directly into the database, bypassing
+    the form entirely) is re-validated at every export, not just trusted
+    because "the form wouldn't let this happen now". An invalid legacy
+    template is skipped entirely (no zip entry for it, `continue` to the
+    next template_id) — attribute/item access is never evaluated, because
+    validation (pure string parsing) runs and raises BEFORE .format() is
+    ever called on that template's row_template.
+
+Error messages are safe: field names are truncated to 50 characters before
+being echoed back, so a deliberately huge malformed template cannot bloat
+a flash message or a log line. No `|safe`, no manual character-by-character
+escaping, no eval, no f-string construction from untrusted input, no
+blacklist of `__class__`/`__dict__`/etc. — the grammar is parsed once with
+the stdlib and only the explicitly allowed shape is accepted.
+```
+
+Files changed:
+
+```text
+app/virustotal/logic.py
+app/virustotal/routes.py
+tests/virustotal/test_export_template_validation.py (new)
+```
+
+Evidence:
+
+```text
+tests/virustotal/test_export_template_validation.py (19 tests) covers: every
+individual allowed placeholder accepted; multiple allowed placeholders
+together; escaped braces preserved; unknown placeholder rejected; attribute
+traversal and chained attribute traversal rejected; item/index access and
+string-key access rejected; conversion (!r) rejected; format spec rejected;
+nested replacement field inside a format spec rejected; malformed/unbalanced
+brace syntax raises a controlled error (never a raw parser crash); a long
+malformed field name is truncated in the error message; the create route
+does not persist an invalid template (and still persists a valid one); the
+edit route does not persist an invalid replacement over an existing valid
+template; a row_template inserted directly into the database (bypassing the
+form, simulating a pre-fix legacy row) is skipped at export time with zero
+zip entries and no attribute traversal ever evaluated; a legacy invalid
+template mixed with a legacy valid one still exports only the valid one
+correctly; and a normal template produces the exact expected output row,
+unchanged. Manually verified (ad hoc script, not committed) that the
+validator correctly accepts all 4 real database templates' row_template
+values and rejects the bypass payloads {valor.__class__}, {valor[0]},
+{valor!r}, {valor:>20}. VirusTotal suite: 27/27 passing (6 from A-06 +
+19 from this fix + 2 from A-03's admin_templates XSS test).
+```
 ```
