@@ -36,6 +36,7 @@ Thumbs.db
 build/
 dist/
 *.spec
+!Portal-Operations-Tools.spec
 
 # Temporary files
 *.tmp
@@ -47,7 +48,6 @@ dist/
 certificado/
 certificado.py
 migrar DB modificada.txt
-Portal-Operations-Tools.spec
 Docker
 agency-agents/
 .opencode/
