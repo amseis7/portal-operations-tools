@@ -31,8 +31,20 @@ class TestMarkdownToolbarPresence(PortalTestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(html.count('id="kb-markdown-toolbar"'), 1)
         self.assertIn('data-markdown-targets="problem_md,solution_md"', html)
-        self.assertIn("Editando: Problema", html)
+        self.assertIn('id="kb-md-current-field-value"', html)
+        self.assertIn(">Problema<", html)
         self.assertIn("kb-markdown-toolbar.js", html)
+
+    def test_heading_levels_1_to_3_are_direct_buttons(self):
+        html = self.client.get("/kb/nuevo").get_data(as_text=True)
+        for level in (1, 2, 3):
+            self.assertIn(f'data-md-action="heading" data-md-level="{level}"', html)
+
+    def test_heading_levels_4_to_6_available_in_dropdown(self):
+        html = self.client.get("/kb/nuevo").get_data(as_text=True)
+        self.assertIn("Más títulos", html)
+        for level in (4, 5, 6):
+            self.assertIn(f'data-md-action="heading" data-md-level="{level}"', html)
 
     def test_edit_form_has_single_toolbar_for_both_fields(self):
         article = self._create_article()

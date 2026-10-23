@@ -238,31 +238,62 @@ button:focus-visible,
 /* ---------------------------------------------------------
    KNOWLEDGE BASE - Markdown authoring toolbar
    --------------------------------------------------------- */
-.kb-markdown-toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 1rem;
-}
 .kb-md-current-field {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--bs-secondary-color);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 .kb-md-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--bs-border-color-translucent);
+}
+.kb-md-group:last-child {
+    padding-bottom: 0;
+    margin-bottom: 0;
+    border-bottom: none;
 }
 .kb-md-group-label {
     font-size: 0.72rem;
+    font-weight: 600;
     text-transform: uppercase;
     color: var(--bs-secondary-color);
-    margin-bottom: 0.15rem;
-    width: 100%;
+    margin-bottom: 0.5rem;
+}
+.kb-md-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.kb-md-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
 }
 .kb-md-btn {
     line-height: 1;
+    min-height: 2.25rem;
+}
+.kb-md-btn-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+}
+.kb-md-btn-wide {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+}
+@media (max-width: 420px) {
+    .kb-md-grid-2 {
+        grid-template-columns: 1fr;
+    }
 }
 @media (min-width: 992px) {
     .kb-markdown-toolbar {

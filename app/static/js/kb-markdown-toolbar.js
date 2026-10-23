@@ -148,13 +148,13 @@
     const targets = toolbar.dataset.markdownTargets.split(',')
       .map(function (id) { return document.getElementById(id); })
       .filter(Boolean);
-    const indicator = document.getElementById('kb-md-current-field');
+    const indicator = document.getElementById('kb-md-current-field-value');
     let currentTarget = targets[0] || null;
 
     targets.forEach(function (ta) {
       ta.addEventListener('focus', function () {
         currentTarget = ta;
-        if (indicator) indicator.textContent = 'Editando: ' + (LABELS[ta.id] || ta.id);
+        if (indicator) indicator.textContent = LABELS[ta.id] || ta.id;
       });
     });
 
