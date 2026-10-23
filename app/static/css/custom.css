@@ -234,3 +234,39 @@ button:focus-visible,
         box-shadow: none !important;
     }
 }
+
+/* ---------------------------------------------------------
+   KNOWLEDGE BASE - Markdown authoring toolbar
+   --------------------------------------------------------- */
+.kb-markdown-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+}
+.kb-md-current-field {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+}
+.kb-md-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+.kb-md-group-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+    margin-bottom: 0.15rem;
+    width: 100%;
+}
+.kb-md-btn {
+    line-height: 1;
+}
+@media (min-width: 992px) {
+    .kb-markdown-toolbar {
+        position: sticky;
+        top: 1rem;
+    }
+}

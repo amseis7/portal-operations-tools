@@ -11,8 +11,8 @@
 {% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-10 col-lg-8">
+<div class="row">
+  <div class="col-lg-8">
     <h2 class="mb-3"><i class="bi bi-journal-plus me-2"></i>{{ heading }}</h2>
     <div class="card shadow-sm">
       <div class="card-body">
@@ -95,8 +95,77 @@
       </div>
     </div>
   </div>
+
+  <div class="col-lg-4">
+    <div id="kb-markdown-toolbar" class="kb-markdown-toolbar card shadow-sm mt-lg-5"
+         data-markdown-toolbar
+         data-markdown-targets="{{ form.problem_md.id }},{{ form.solution_md.id }}">
+      <div class="card-body">
+        <div id="kb-md-current-field" class="kb-md-current-field mb-2">Editando: Problema</div>
+
+        <div class="kb-md-group">
+          <div class="kb-md-group-label">Títulos</div>
+          {% for level in range(1, 7) %}
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="heading" data-md-level="{{ level }}" title="Encabezado H{{ level }}" aria-label="Encabezado H{{ level }}">
+            <i class="bi bi-type-h{{ level }}"></i>
+          </button>
+          {% endfor %}
+        </div>
+
+        <div class="kb-md-group">
+          <div class="kb-md-group-label">Texto</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="bold" title="Negrita" aria-label="Negrita">
+            <i class="bi bi-type-bold"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="italic" title="Cursiva" aria-label="Cursiva">
+            <i class="bi bi-type-italic"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="bold-italic" title="Negrita y cursiva" aria-label="Negrita y cursiva">
+            <i class="bi bi-type-bold"></i><i class="bi bi-type-italic"></i>
+          </button>
+        </div>
+
+        <div class="kb-md-group">
+          <div class="kb-md-group-label">Estructura</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="list-bullet" title="Lista con viñetas" aria-label="Lista con viñetas">
+            <i class="bi bi-list-ul"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="list-number" title="Lista numerada" aria-label="Lista numerada">
+            <i class="bi bi-list-ol"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="quote" title="Cita" aria-label="Cita">
+            <i class="bi bi-quote"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="hr" title="Separador horizontal" aria-label="Separador horizontal">
+            <i class="bi bi-hr"></i>
+          </button>
+        </div>
+
+        <div class="kb-md-group">
+          <div class="kb-md-group-label">Código</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="code-inline" title="Código en línea" aria-label="Código en línea">
+            <i class="bi bi-code"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="code-block" title="Bloque de código" aria-label="Bloque de código">
+            <i class="bi bi-code-square"></i>
+          </button>
+        </div>
+
+        <div class="kb-md-group">
+          <div class="kb-md-group-label">Enlaces/Otros</div>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="link" title="Enlace" aria-label="Enlace">
+            <i class="bi bi-link-45deg"></i>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kb-md-btn" data-md-action="table" title="Tabla" aria-label="Tabla">
+            <i class="bi bi-table"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/kb-markdown-toolbar.js') }}"></script>
 <script>
 (function () {
   const UPLOAD_URL = {{ (url_for('knowledge_base.attachment_upload', article_id=article.id) if article else url_for('knowledge_base.attachment_draft_upload'))|tojson }};

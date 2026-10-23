@@ -103,6 +103,26 @@ but technically still present as text. The security boundary is "no tag
 survives", not "no substring of the payload survives anywhere in the
 rendered output".
 
+## 3.1 Markdown Authoring Toolbar
+
+`app/static/js/kb-markdown-toolbar.js` is a client-side editing helper
+rendered once per create/edit form (`form.html`), in a sticky right-hand
+column. It tracks whichever of `problem_md`/`solution_md` last had focus
+(defaulting to `problem_md`) and applies formatting directly to that
+textarea's `value` via `selectionStart`/`selectionEnd`/`setSelectionRange`
+— it never produces or touches HTML, and it has no effect on what gets
+stored or rendered.
+
+The toolbar's button set (`heading` H1–H6, bold, italic, bold+italic,
+bullet/numbered list, quote, horizontal rule, inline code, fenced code
+block, link, table) is a deliberate subset of what `render_markdown()`
+actually renders: no strikethrough and no free-form image button, because
+the `markdown` extensions loaded (`tables`, `fenced_code`, `nl2br`) and the
+bleach allowlist don't support the former and only allow `img[src]` for the
+exact `/kb/attachments/<id>/view` pattern a user cannot hand-type. If the
+enabled extensions or the bleach allowlist change, this button set must be
+revisited to match.
+
 ---
 
 # 4. Authorization Model
