@@ -1,131 +1,141 @@
 {% extends "base.html" %}
 
+{% block breadcrumb %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active">Administración de Usuarios</li>
+    </ol>
+</nav>
+{% endblock %}
+
 {% block content %}
-<div class="container">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Administración de Usuarios</h2>
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
+<div class="page-header mb-4">
+    <div>
+        <h2 class="page-header-title"><i class="bi bi-person-gear me-2"></i>Administración de Usuarios</h2>
+    </div>
+    <div class="page-header-actions">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCrearUsuario">
             <i class="bi bi-person-plus"></i> Nuevo Usuario
         </button>
     </div>
+</div>
 
-    <div class="card shadow-sm">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0 align-middle">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Usuario</th>
-                            <th>Nombre Completo</th>
-                            <th>Email</th>           
-                            <th>Rol</th>
-                            <th class="text-center">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for u in usuarios %}
-                        <tr>
-                            <td><strong>{{ u.username }}</strong></td>
-                            <td>{{ u.nombre_completo or '-' }}</td>
-                            <td>{{ u.email or '-' }}</td>
-                            <td>
-                                {% if u.is_admin %}
-                                    <span class="badge bg-danger">Admin</span>
-                                {% else %}
-                                    <span class="badge bg-secondary">Analista</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-center">
-                                <div class="d-flex justify-content-center gap-2">
-                                    {% if u.id != current_user.id %}
-                                    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditar{{ u.id }}">
-                                        <i class="bi bi-pencil-square"></i> Editar
+<div class="card shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Nombre Completo</th>
+                        <th>Email</th>
+                        <th>Rol</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in usuarios %}
+                    <tr>
+                        <td><strong>{{ u.username }}</strong></td>
+                        <td>{{ u.nombre_completo or '-' }}</td>
+                        <td>{{ u.email or '-' }}</td>
+                        <td>
+                            {% if u.is_admin %}
+                                <span class="badge bg-danger">Admin</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Analista</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex justify-content-center gap-2">
+                                {% if u.id != current_user.id %}
+                                <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditar{{ u.id }}">
+                                    <i class="bi bi-pencil-square"></i> Editar
+                                </button>
+
+                                <form action="{{ url_for('auth.eliminar_usuario', user_id=u.id) }}" method="POST" data-confirm="¿Eliminar a {{ u.username }}?">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-outline-danger">
+                                        <i class="bi bi-trash"></i> Eliminar
                                     </button>
+                                </form>
+                                {% else %}
+                                    <span class="text-muted small my-auto">(Tú)</span>
+                                {% endif %}
+                            </div>
 
-                                    <form action="{{ url_for('auth.eliminar_usuario', user_id=u.id) }}" method="POST" data-confirm="¿Eliminar a {{ u.username }}?">
-                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                        <button type="submit" class="btn btn-outline-danger">
-                                            <i class="bi bi-trash"></i> Eliminar
-                                        </button>
-                                    </form>
-                                    {% else %}
-                                        <span class="text-muted small my-auto">(Tú)</span>
-                                    {% endif %}
-                                </div>
-
-                                <div class="modal fade text-start" id="modalEditar{{ u.id }}" tabindex="-1">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
-                                            <div class="modal-header bg-primary text-white">
-                                                <h5 class="modal-title">Editar Usuario: {{ u.username }}</h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                                            </div>
-                                            <form action="{{ url_for('auth.editar_usuarios', user_id=u.id) }}" method="POST">
-                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                                                <div class="modal-body">
-                                                    
-                                                    <div class="mb-3">
-                                                        <label class="form-label fw-bold">Nombre Completo</label>
-                                                        <input type="text" name="nombre_completo" class="form-control" value="{{ u.nombre_completo or '' }}" required>
-                                                    </div>
-
-                                                    <div class="row mb-3">
-                                                        <div class="col-6">
-                                                            <label class="form-label">Usuario (Login)</label>
-                                                            <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <label class="form-label">Nueva Contraseña</label>
-                                                            <input type="password" name="password" class="form-control" placeholder="(Sin cambios)">
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="mb-3">
-                                                        <label class="form-label">Email</label>
-                                                        <input type="email" name="email" class="form-control" value="{{ u.email or '' }}">
-                                                    </div>
-                                                    
-                                                    <div class="mb-3 p-2 bg-light border rounded">
-                                                        <div class="form-check">
-                                                            <input type="checkbox" class="form-check-input" id="is_admin_{{ u.id }}" name="is_admin" {% if u.is_admin %}checked{% endif %}>
-                                                            <label class="form-check-label fw-bold" for="is_admin_{{ u.id }}">
-                                                                Es Administrador
-                                                            </label>
-                                                        </div>
-                                                    </div>
-
-                                                    <div class="mb-3">
-                                                        <label class="form-label fw-bold">Herramientas</label>
-                                                        <div class="card p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
-                                                            {% for key, info in lista_herramientas.items() %}
-                                                                <div class="form-check form-switch mb-2">
-                                                                    <input class="form-check-input" type="checkbox" name="tools" value="{{ key }}"
-                                                                            id="edit_check_{{ key }}_{{ u.id }}"
-                                                                            {% if key in tools_por_usuario.get(u.id, []) %}checked{% endif %}>
-                                                                    
-                                                                    <label class="form-check-label" for="edit_check_{{ key }}_{{ u.id }}">
-                                                                        <i class="bi {{ info.icono }}"></i> {{ info.titulo }}
-                                                                    </label>
-                                                                </div>
-                                                            {% endfor %}
-                                                        </div>
-                                                    </div>
-                                                    
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
-                                                </div>
-                                            </form>
+                            <div class="modal fade text-start" id="modalEditar{{ u.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header bg-primary text-white">
+                                            <h5 class="modal-title">Editar Usuario: {{ u.username }}</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                                         </div>
+                                        <form action="{{ url_for('auth.editar_usuarios', user_id=u.id) }}" method="POST">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <div class="modal-body">
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Nombre Completo</label>
+                                                    <input type="text" name="nombre_completo" class="form-control" value="{{ u.nombre_completo or '' }}" required>
+                                                </div>
+
+                                                <div class="row mb-3">
+                                                    <div class="col-6">
+                                                        <label class="form-label">Usuario (Login)</label>
+                                                        <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label">Nueva Contraseña</label>
+                                                        <input type="password" name="password" class="form-control" placeholder="(Sin cambios)">
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label">Email</label>
+                                                    <input type="email" name="email" class="form-control" value="{{ u.email or '' }}">
+                                                </div>
+
+                                                <div class="mb-3 p-2 bg-light border rounded">
+                                                    <div class="form-check">
+                                                        <input type="checkbox" class="form-check-input" id="is_admin_{{ u.id }}" name="is_admin" {% if u.is_admin %}checked{% endif %}>
+                                                        <label class="form-check-label fw-bold" for="is_admin_{{ u.id }}">
+                                                            Es Administrador
+                                                        </label>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label class="form-label fw-bold">Herramientas</label>
+                                                    <div class="card p-3 bg-light" style="max-height: 200px; overflow-y: auto;">
+                                                        {% for key, info in lista_herramientas.items() %}
+                                                            <div class="form-check form-switch mb-2">
+                                                                <input class="form-check-input" type="checkbox" name="tools" value="{{ key }}"
+                                                                        id="edit_check_{{ key }}_{{ u.id }}"
+                                                                        {% if key in tools_por_usuario.get(u.id, []) %}checked{% endif %}>
+
+                                                                <label class="form-check-label" for="edit_check_{{ key }}_{{ u.id }}">
+                                                                    <i class="bi {{ info.icono }}"></i> {{ info.titulo }}
+                                                                </label>
+                                                            </div>
+                                                        {% endfor %}
+                                                    </div>
+                                                </div>
+
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

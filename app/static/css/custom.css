@@ -13,6 +13,41 @@
     --portal-shadow-lift:  0 6px 20px rgba(0, 0, 0, 0.15);
 }
 
+/* ---------------------------------------------------------
+   LAYOUT - Shared page container
+   --------------------------------------------------------- */
+.app-page {
+    max-width: 1440px;
+}
+
+/* ---------------------------------------------------------
+   PAGE HEADERS - Icon + title + optional description,
+   actions aligned to the right. Applied directly in templates
+   (no macro — only a handful of pages use it so far).
+   --------------------------------------------------------- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.page-header-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+.page-header-desc {
+    color: var(--bs-secondary-color);
+    font-size: 0.925rem;
+    margin-bottom: 0;
+}
+.page-header-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
 .font-monospace,
 code {
     font-family: 'Fira Code', 'Courier New', monospace !important;
